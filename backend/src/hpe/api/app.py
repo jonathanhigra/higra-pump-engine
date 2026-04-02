@@ -13,6 +13,7 @@ from hpe.api.routes.report import router as report_router
 from hpe.api.routes.ws_optimize import router as ws_optimize_router
 from hpe.api.routes.surrogate import router as surrogate_router
 from hpe.api.routes.inverse_design import router as inverse_design_router
+from hpe.api.routes.optimize_ext import router as optimize_ext_router
 from hpe.api.auth import router as auth_router
 
 app = FastAPI(
@@ -42,6 +43,7 @@ app.include_router(projects_router)
 app.include_router(report_router)
 app.include_router(ws_optimize_router)
 app.include_router(surrogate_router)
+app.include_router(optimize_ext_router)
 
 
 @app.get("/health")

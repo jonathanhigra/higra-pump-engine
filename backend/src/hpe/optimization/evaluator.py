@@ -46,11 +46,19 @@ def evaluate_design(
     Returns:
         EvaluationResult with objectives and feasibility.
     """
-    # 1. Extract design variables
-    beta2 = design_vector[0]
-    d2_factor = design_vector[1]
-    b2_factor = design_vector[2]
-    blade_count = int(round(design_vector[3]))
+    # 1. Extract design variables (support 4-variable default and 7-variable expanded/extended)
+    var_names = [v.name for v in problem.variables]
+
+    def _get(name: str, default: float) -> float:
+        return design_vector[var_names.index(name)] if name in var_names else default
+
+    beta2 = _get("beta2", 25.0)
+    d2_factor = _get("d2_factor", 1.0)
+    b2_factor = _get("b2_factor", 1.0)
+    blade_count = int(round(_get("blade_count", 6)))
+    nc = _get("nc", 1.0)        # inlet loading correction factor
+    nd = _get("nd", 1.0)        # outlet loading correction factor
+    d1_d2_override = _get("d1_d2", -1.0)  # negative → use derived ratio
 
     # 2. Run baseline sizing
     op = OperatingPoint(
@@ -65,7 +73,10 @@ def evaluate_design(
         return _infeasible("Sizing failed")
 
     # 3. Apply design modifications to sizing result
-    modified = _modify_sizing(baseline, beta2, d2_factor, b2_factor, blade_count, op)
+    modified = _modify_sizing(
+        baseline, beta2, d2_factor, b2_factor, blade_count, op,
+        nc=nc, nd=nd, d1_d2_override=d1_d2_override,
+    )
     if modified is None:
         return _infeasible("Modified sizing produced invalid geometry")
 
@@ -85,11 +96,16 @@ def evaluate_design(
     # 6. Check constraints
     violations = _check_constraints(modified, problem, q_design)
 
-    # 7. Build objectives
+    # 7. Build objectives — include extended objectives when attributes are present
+    profile_loss_total = getattr(modified, "profile_loss_total", 0.0)
+    pmin_pa = getattr(modified, "pmin_pa", 101325.0)
+
     objectives = {
         "efficiency": perf.total_efficiency,
         "npsh_r": perf.npsh_required,
         "robustness": robustness,
+        "profile_loss_total": profile_loss_total,
+        "pmin_pa": pmin_pa,
     }
 
     return EvaluationResult(
@@ -107,8 +123,19 @@ def _modify_sizing(
     b2_factor: float,
     blade_count: int,
     op: OperatingPoint,
+    *,
+    nc: float = 1.0,
+    nd: float = 1.0,
+    d1_d2_override: float = -1.0,
 ) -> Optional[SizingResult]:
-    """Create a modified SizingResult with the given design variables."""
+    """Create a modified SizingResult with the given design variables.
+
+    Args:
+        nc: Inlet loading correction factor (scales cm1 relative to baseline).
+        nd: Outlet loading correction factor (scales cu2 relative to baseline).
+        d1_d2_override: If > 0, use this value as D1/D2 ratio instead of deriving
+                        it from the baseline.
+    """
     import copy
 
     modified = copy.deepcopy(baseline)
@@ -119,9 +146,11 @@ def _modify_sizing(
     modified.impeller_b2 = baseline.impeller_b2 * b2_factor
     modified.blade_count = blade_count
 
-    # Recompute derived quantities
-    # D1 scales with D2
-    d1_d2_ratio = baseline.impeller_d1 / baseline.impeller_d2
+    # Recompute derived quantities — D1 either from override ratio or derived
+    if d1_d2_override > 0.0:
+        d1_d2_ratio = d1_d2_override
+    else:
+        d1_d2_ratio = baseline.impeller_d1 / baseline.impeller_d2
     modified.impeller_d1 = modified.impeller_d2 * d1_d2_ratio
 
     # Recompute u2 and velocity triangles
@@ -139,21 +168,22 @@ def _modify_sizing(
     from hpe.sizing.velocity_triangles import calc_wiesner_slip_factor
     slip = calc_wiesner_slip_factor(beta2, blade_count)
 
-    # cu2 with slip
+    # cu2 with slip and nd loading correction
     beta2_rad = math.radians(beta2)
     if abs(math.tan(beta2_rad)) < 1e-10:
         return None
     cu2_blade = u2 - cm2 / math.tan(beta2_rad)
-    cu2 = slip * cu2_blade
+    cu2 = slip * cu2_blade * nd  # nd scales the whirl component
 
     # Euler head
     h_euler = u2 * cu2 / G  # Assuming cu1 = 0
 
-    # Inlet
+    # Inlet — nc scales the meridional (axial) velocity at inlet
     b1 = modified.impeller_b2 * (modified.impeller_d2 / modified.impeller_d1) * 0.85
     b1 = max(b1, modified.impeller_b2)
     a_in = math.pi * modified.impeller_d1 * b1 * 0.90
-    cm1 = op.flow_rate / a_in if a_in > 0 else 0
+    cm1_raw = op.flow_rate / a_in if a_in > 0 else 0
+    cm1 = cm1_raw * nc  # nc adjusts the inlet loading
     beta1 = math.degrees(math.atan2(cm1, u1)) if u1 > 0 else 20.0
 
     modified.beta1 = beta1

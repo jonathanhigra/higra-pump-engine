@@ -76,41 +76,41 @@ def _meridional_curves(
     r1: float, r1_hub: float, r2: float,
     b1: float, b2: float, n_chord: int,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Generate realistic meridional hub/shroud curves for centrifugal impeller.
+    """Meridional curves for centrifugal impeller.
 
-    Hub: transitions from axial inlet (r=r1_hub, z=z_total) to radial outlet
-         (r=r2, z=0) along a quarter-circle arc.
-    Shroud: parallels the hub, offset outward by the passage width b(t).
+    Hub: quarter-circle arc from axial inlet to radial outlet.
+         r: r1_hub → r2,  z: z_axial → 0
+    Shroud: parallel to hub, offset by passage width b(t).
 
-    The axial length is sized proportional to (r2-r1) to give a realistic
-    L/D ratio (~0.6-0.8) consistent with Gülich §3.3.
+    The axial length L = 0.6*(r2-r1) gives a realistic flat-disc shape
+    (Gülich: typical L/D2 ≈ 0.3-0.4 for centrifugal pumps).
     """
-    z_total = 0.72 * (r2 - r1)   # meridional length ≈ 0.72*(r2-r1)
+    # Axial length: proportional to (r2-r1), capped for flat disc shape
+    z_axial = 0.55 * (r2 - r1)
+
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
-        # Quarter-circle arc: (sin, cos) → goes from axial to radial smoothly
-        arc = math.pi / 2 * t
+        arc = math.pi / 2 * t   # 0 → π/2
         sin_a = math.sin(arc)
         cos_a = math.cos(arc)
 
-        # Hub: from (r1_hub, z_total) → (r2, 0)
+        # Hub arc: (r1_hub, z_axial) → (r2, 0)
         r_h = r1_hub + (r2 - r1_hub) * sin_a
-        z_h = z_total * cos_a
+        z_h = z_axial * (1.0 - sin_a)
 
-        # Shroud: from (r1, z_total + b1) → (r2, b2) — tracks hub + passage width
-        r_s = r1 + (r2 - r1) * sin_a
-        b_t = b1 + t * (b2 - b1)   # passage width tapers from b1 to b2
+        # Passage width tapers b1 → b2
+        b_t = b1 + t * (b2 - b1)
 
-        # Shroud offset perpendicular to meridional direction
-        # For a quarter-circle, the outward normal is (cos_a, sin_a) in (r, z)
-        r_sh = r_s + b_t * cos_a
-        z_sh = z_h + b_t * sin_a
+        # Shroud: offset outward along the passage (perpendicular to hub arc)
+        # Normal direction at arc position: (cos_a in r, sin_a in z)
+        r_s = r_h + b_t * cos_a
+        z_s = z_h + b_t * sin_a
 
         hub_rz.append((r_h, z_h))
-        shroud_rz.append((r_sh, z_sh))
+        shroud_rz.append((r_s, z_s))
 
     return hub_rz, shroud_rz
 
@@ -119,25 +119,22 @@ def _hub_with_shaft(
     hub_rz: list[tuple[float, float]],
     r1_hub: float,
 ) -> list[tuple[float, float]]:
-    """Extend hub profile with a shaft stub for visual completeness.
-
-    Adds a small shaft cylinder at the inlet end of the hub, from
-    shaft radius (≈ 0.4*r1_hub) inward, then the hub disc at outlet.
-    Returns an extended list of (r, z) points for the revolution surface.
-    """
+    """Add shaft stub and hub back-disc for visual completeness."""
     if not hub_rz:
         return hub_rz
-    r_shaft = r1_hub * 0.40
+    r_shaft = r1_hub * 0.35
     r_in, z_in = hub_rz[0]
     r_out, z_out = hub_rz[-1]
 
-    # Shaft stub at inlet: horizontal segment from r_shaft to r_in
-    shaft = [(r_shaft, z_in + 0.3 * (hub_rz[-1][1] - z_in)), (r_in, z_in)]
+    # Shaft cylinder at inlet: from shaft radius to r_in, at z_in
+    shaft_top = (r_shaft, z_in + (z_out - z_in) * 0.15)
+    shaft_bot = (r_in, z_in)
 
-    # Hub disc at outlet: flat from r_out back to r_shaft
-    disc = [(r_out, z_out), (r_shaft, z_out)]
+    # Hub back disc at outlet: from r_out back to shaft radius, at z_out
+    disc_outer = (r_out, z_out)
+    disc_inner = (r_shaft, z_out)
 
-    return shaft + hub_rz + disc[1:]
+    return [shaft_top, shaft_bot] + hub_rz + [disc_outer, disc_inner]
 
 
 # ---------------------------------------------------------------------------

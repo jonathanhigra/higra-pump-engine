@@ -127,21 +127,20 @@ function buildRevolutionGeo(profile: BladePoint[], segs = 128): THREE.BufferGeom
 }
 
 /** Hub back-disc: flat annular disc at the outlet z-plane */
-function buildHubDiscGeo(hubProfile: BladePoint[], segs = 128): THREE.BufferGeometry {
+function buildHubDiscGeo(hubProfile: BladePoint[], segs = 96): THREE.BufferGeometry {
   if (hubProfile.length < 2) return new THREE.BufferGeometry()
-  // The hub profile goes from inlet (small r, large z) to outlet (large r, z~0)
-  // Build a flat disc at the outlet end (last point) — from shaft radius to r2
+  // Last point = outlet (r=r2, z~0)
   const outlet = hubProfile[hubProfile.length - 1]
+  // First point = shaft (r=r_shaft, z=z_shaft)
   const shaft = hubProfile[0]
   const z = outlet.z
-  const r_outer = outlet.x
-  const r_inner = shaft.x * 0.4  // shaft radius estimate
+  const r_outer = outlet.x   // in mm already
+  const r_inner = Math.min(shaft.x, r_outer * 0.25)
 
   const pos: number[] = []
   for (let j = 0; j < segs; j++) {
     const a0 = (j / segs) * Math.PI * 2
     const a1 = ((j + 1) / segs) * Math.PI * 2
-    // Annular triangle pair
     pos.push(r_inner * Math.cos(a0), r_inner * Math.sin(a0), z,
              r_outer * Math.cos(a0), r_outer * Math.sin(a0), z,
              r_inner * Math.cos(a1), r_inner * Math.sin(a1), z)
@@ -173,7 +172,6 @@ void pressureColor
 const PS_COLOR = '#1e90ff'      // pressure side — vivid blue
 const SS_COLOR = '#c026d3'      // suction side — fuchsia/magenta
 const HUB_COLOR = '#374151'     // hub — dark steel
-const SHROUD_COLOR = '#1f2937'
 const SPLITTER_COLOR = '#06b6d4' // splitter PS — teal/cyan
 
 // ─── ClipController ───────────────────────────────────────────────────────────
@@ -313,14 +311,6 @@ function HubMesh({ profile }: { profile: BladePoint[] }) {
   )
 }
 
-function ShroudMesh({ profile }: { profile: BladePoint[] }) {
-  const geo = useMemo(() => buildRevolutionGeo(profile, 96), [profile])
-  return (
-    <mesh geometry={geo}>
-      <meshStandardMaterial color={SHROUD_COLOR} metalness={0.5} roughness={0.5} transparent opacity={0.18} side={THREE.DoubleSide} depthWrite={false} />
-    </mesh>
-  )
-}
 
 function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; paused?: boolean; rpm?: number }) {
   const ref = useRef<THREE.Group>(null)
@@ -595,7 +585,7 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[1.8, 1.4, 1.2]} fov={45} />
+      <PerspectiveCamera makeDefault position={[2.2, 1.6, 2.0]} fov={40} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={0.5} maxDistance={8} />
       <SceneLights />
       <ClipController clipZ={clipZ} />
@@ -603,7 +593,6 @@ function Scene({
       <RotatingGroup paused={paused} rpm={rpm}>
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
-          <ShroudMesh profile={data.shroud_profile} />
           {data.blade_surfaces.map((surf, i) => (
             <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
               onSelect={onSelectBlade} isSelected={selectedBlade === i} />

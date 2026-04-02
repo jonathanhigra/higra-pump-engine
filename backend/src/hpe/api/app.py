@@ -16,6 +16,7 @@ from hpe.api.routes.inverse_design import router as inverse_design_router
 from hpe.api.routes.optimize_ext import router as optimize_ext_router
 from hpe.api.routes.io_routes import router as io_router
 from hpe.api.auth import router as auth_router
+from hpe.api.routes.design_db_routes import router as design_db_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -46,6 +47,7 @@ app.include_router(ws_optimize_router)
 app.include_router(surrogate_router)
 app.include_router(optimize_ext_router)
 app.include_router(io_router)
+app.include_router(design_db_router)
 
 
 @app.get("/health")

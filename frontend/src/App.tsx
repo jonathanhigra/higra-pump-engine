@@ -8,6 +8,7 @@ import VelocityTriangle from './components/VelocityTriangle'
 import LossBreakdownChart from './components/LossBreakdownChart'
 import StressView from './components/StressView'
 import ImpellerViewer from './components/ImpellerViewer'
+import DesignComparison from './components/DesignComparison'
 
 export interface SizingResult {
   specific_speed_nq: number
@@ -36,7 +37,7 @@ export interface CurvePoint {
 }
 
 type Page = 'login' | 'projects' | 'design'
-type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
+type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -91,6 +92,7 @@ export default function App() {
     { key: 'velocity', label: 'Velocity' },
     { key: 'losses', label: 'Losses' },
     { key: 'stress', label: 'Stress' },
+    { key: 'compare', label: 'Compare' },
   ]
 
   if (page === 'login') {
@@ -183,6 +185,7 @@ export default function App() {
               {tab === 'velocity' && <VelocityTriangle triangles={sizing.velocity_triangles} />}
               {tab === 'losses' && <LossBreakdownChart losses={losses} />}
               {tab === 'stress' && <StressView stress={stress} />}
+              {tab === 'compare' && <DesignComparison />}
             </>
           )}
 

@@ -571,6 +571,93 @@ def solve_volute_endpoint(req: VolSolveRequest) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# G1 — Structured .geo export endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/geometry/export/geo")
+def export_geo_endpoint(flow_rate: float, head: float, rpm: float, unit: str = "m") -> dict:
+    """Export blade in structured .geo format (BladeGen / TurboGrid).
+
+    Runs 1D sizing to derive impeller geometry, then produces (X, R, theta)
+    coordinate tables for both pressure and suction surfaces at n_span=5
+    spanwise positions and n_chord=21 chordwise stations.
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm: Rotational speed [RPM].
+        unit: Output unit for coordinates, "m" or "mm".
+
+    Returns:
+        Dict with 'ps', 'ss' (.geo file contents), 'format', 'n_span', 'n_chord'.
+    """
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing.meanline import run_sizing
+    from hpe.geometry.runner.export import export_geo_both_surfaces
+
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    s = run_sizing(op)
+    return export_geo_both_surfaces(
+        d2=s.impeller_d2,
+        d1=s.impeller_d1,
+        b2=s.impeller_b2,
+        beta1=s.beta1,
+        beta2=s.beta2,
+        blade_count=s.blade_count,
+        unit=unit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# G2 — BladeGen .inf + .curve export endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/geometry/export/bladegen")
+def export_bladegen_endpoint(flow_rate: float, head: float, rpm: float) -> dict:
+    """Export blade in ANSYS BladeGen .inf + .curve format.
+
+    Runs 1D sizing to derive impeller geometry, then produces:
+    - An .inf file with machine type, rotation axis, and span definitions.
+    - A .curve file with (m', theta_deg) blade wrap coordinates per span.
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm: Rotational speed [RPM].
+
+    Returns:
+        Dict with 'inf' (.inf file content), 'curve' (.curve file content),
+        and 'format' = "bladegen".
+    """
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing.meanline import run_sizing
+    from hpe.geometry.runner.export import export_bladegen_curve, export_bladegen_inf
+
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    s = run_sizing(op)
+    return {
+        "inf": export_bladegen_inf(
+            d2=s.impeller_d2,
+            d1=s.impeller_d1,
+            b2=s.impeller_b2,
+            beta1=s.beta1,
+            beta2=s.beta2,
+            blade_count=s.blade_count,
+            rpm=rpm,
+        ),
+        "curve": export_bladegen_curve(
+            d2=s.impeller_d2,
+            d1=s.impeller_d1,
+            b2=s.impeller_b2,
+            beta1=s.beta1,
+            beta2=s.beta2,
+            blade_count=s.blade_count,
+        ),
+        "format": "bladegen",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Export endpoint (unchanged)
 # ---------------------------------------------------------------------------
 

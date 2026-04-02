@@ -322,8 +322,136 @@ function SceneLights() {
   )
 }
 
+// ─── Particle system ──────────────────────────────────────────────────────────
+
+const N_PARTICLES = 120
+const N_LANES = 6  // spanwise lanes
+
+interface Particle {
+  laneR: number       // radial lane fraction 0=hub 1=shroud
+  phase: number       // 0-1 phase offset along path
+  speed: number       // relative speed multiplier
+  bladeOffset: number // which blade passage (0 to bladeCount-1)
+}
+
+function ParticleSystem({
+  data,
+  active,
+  paused,
+}: {
+  data: ImpellerData
+  active: boolean
+  paused?: boolean
+}) {
+  const pointsRef = useRef<THREE.Points>(null)
+
+  // Pre-compute particle descriptors once
+  const particles = useMemo<Particle[]>(() => {
+    const arr: Particle[] = []
+    const bc = data.blade_count || 5
+    for (let i = 0; i < N_PARTICLES; i++) {
+      arr.push({
+        laneR: ((i % N_LANES) + 0.5) / N_LANES,
+        phase: i / N_PARTICLES,
+        speed: 0.6 + (i % 7) * 0.07,
+        bladeOffset: i % bc,
+      })
+    }
+    return arr
+  }, [data.blade_count])
+
+  // Build geometry and color attribute
+  const { geo, posAttr, colorAttr } = useMemo(() => {
+    const pos = new Float32Array(N_PARTICLES * 3)
+    const col = new Float32Array(N_PARTICLES * 3)
+    const geo = new THREE.BufferGeometry()
+    const posAttr = new THREE.BufferAttribute(pos, 3)
+    const colorAttr = new THREE.BufferAttribute(col, 3)
+    geo.setAttribute('position', posAttr)
+    geo.setAttribute('color', colorAttr)
+    return { geo, posAttr, colorAttr }
+  }, [])
+
+  // Normalisation scale — same as Scene uses
+  const scale = useMemo(() => {
+    const r2_mm = (data.d2 * 500) || 1
+    return 1.8 / r2_mm
+  }, [data.d2])
+
+  // Get meridional path point: fraction t ∈ [0,1], spanR ∈ [0,1]
+  const getPoint = (t: number, spanR: number, thetaOffset: number): [number, number, number] => {
+    const hub = data.hub_profile
+    const shr = data.shroud_profile
+    if (!hub.length || !shr.length) return [0, 0, 0]
+
+    const idx = Math.min(Math.floor(t * (hub.length - 1)), hub.length - 2)
+    const frac = t * (hub.length - 1) - idx
+
+    const hx = (hub[idx].x + frac * (hub[idx + 1].x - hub[idx].x)) * scale
+    const hz = (hub[idx].z + frac * (hub[idx + 1].z - hub[idx].z)) * scale
+    const sx = (shr[idx].x + frac * (shr[idx + 1].x - shr[idx].x)) * scale
+    const sz = (shr[idx].z + frac * (shr[idx + 1].z - shr[idx].z)) * scale
+
+    const r = hx + spanR * (sx - hx)
+    const z = hz + spanR * (sz - hz)
+
+    // Add swirl: theta increases from 0 at inlet to ~wrap_angle at outlet
+    const swirl = t * (data.actual_wrap_angle ?? 90) * Math.PI / 180
+    const theta = thetaOffset + swirl
+
+    return [r * Math.cos(theta), r * Math.sin(theta), z]
+  }
+
+  const clockRef = useRef(0)
+
+  useFrame((_, delta) => {
+    if (!active || paused || !pointsRef.current) return
+    clockRef.current += delta
+
+    const bc = data.blade_count || 5
+    const pitchAngle = (Math.PI * 2) / bc
+
+    for (let i = 0; i < N_PARTICLES; i++) {
+      const p = particles[i]
+      // Animate phase 0→1
+      const t = (p.phase + clockRef.current * p.speed * 0.18) % 1.0
+      const thetaBase = p.bladeOffset * pitchAngle + pitchAngle * 0.5
+      const [x, y, z] = getPoint(t, p.laneR, thetaBase)
+
+      posAttr.setXYZ(i, x, y, z)
+
+      // Color: blue at inlet → cyan → white at outlet
+      const fade = Math.sin(t * Math.PI)  // fade in/out
+      const r = 0.1 + t * 0.8
+      const g = 0.5 + t * 0.4
+      const b = 1.0 - t * 0.3
+      colorAttr.setXYZ(i, r * fade, g * fade, b * fade)
+    }
+
+    posAttr.needsUpdate = true
+    colorAttr.needsUpdate = true
+  })
+
+  if (!active) return null
+
+  return (
+    <points ref={pointsRef} geometry={geo}>
+      <pointsMaterial
+        vertexColors
+        size={3.5}
+        sizeAttenuation={false}
+        transparent
+        opacity={0.85}
+        depthWrite={false}
+      />
+    </points>
+  )
+}
+
+// ─── Scene ────────────────────────────────────────────────────────────────────
+
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, showColormap,
+  data, paused, rpm, showSplitters, clipZ, showColormap, showParticles,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -331,6 +459,7 @@ function Scene({
   showSplitters?: boolean
   clipZ: number | null
   showColormap: boolean
+  showParticles: boolean
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -356,6 +485,8 @@ function Scene({
         </group>
       </RotatingGroup>
 
+      <ParticleSystem data={data} active={showParticles} paused={paused} />
+
       {/* Floor grid */}
       <gridHelper args={[6, 24, '#1a2a3a', '#141e27']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
     </>
@@ -375,6 +506,7 @@ export default function ImpellerViewer({
   const [showSplitters, setShowSplitters] = useState(false)
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
+  const [showParticles, setShowParticles] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -434,7 +566,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -474,6 +606,7 @@ export default function ImpellerViewer({
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+          <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <button
             onClick={() => setClipZ(c => c === null ? 0 : null)}
             style={{
@@ -567,6 +700,7 @@ export default function ImpellerViewer({
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+          <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
 
           {/* Clip plane slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

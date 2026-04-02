@@ -37,6 +37,8 @@ class GeometryRequest(BaseModel):
     t_shroud: Optional[float] = Field(None, description="Blade thickness at shroud [m] (#12). Default = 0.6*blade_thickness")
     lean_angle: float = Field(0.0, description="Blade lean angle [deg] (#14). Tangential stacking offset hub→shroud")
     sweep_angle: float = Field(0.0, description="Blade sweep angle [deg] (#14). Axial stacking offset hub→shroud")
+    add_splitters: bool = Field(False, description="Add splitter blades at half pitch")
+    splitter_start: float = Field(0.40, ge=0.25, le=0.65, description="Meridional start fraction for splitters")
 
 
 class BladePoint3D(BaseModel):
@@ -48,10 +50,15 @@ class BladePoint3D(BaseModel):
 class BladeSurface(BaseModel):
     ps: List[List[BladePoint3D]]
     ss: List[List[BladePoint3D]]
+    ps_pressure: List[List[float]] = []   # normalized pressure 0→1 per vertex
+    ss_pressure: List[List[float]] = []   # normalized pressure 0→1 per vertex
 
 
 class ImpellerGeometry(BaseModel):
     blade_surfaces: List[BladeSurface]
+    splitter_surfaces: List[BladeSurface] = []  # half-length blades interleaved
+    splitter_count: int = 0
+    splitter_start_fraction: float = 0.0
     hub_profile: List[BladePoint3D]
     shroud_profile: List[BladePoint3D]
     blade_count: int
@@ -137,23 +144,23 @@ def _hub_with_shaft(
 # Thickness distribution (#11)
 # ---------------------------------------------------------------------------
 
-def _thickness_at(t: float, t_max: float, le_r: float, te_r: float) -> float:
-    """Smooth thickness distribution with non-zero LE/TE (#11).
+def _naca_thickness_at(t_norm: float, t_max: float, le_r: float, te_r: float) -> float:
+    """NACA 4-digit symmetric thickness at normalized chord station t (0→1).
 
-    Uses a raised cosine blended with a parabolic central profile:
-        thick(t) = le_r + (te_r - le_r)*t + t_max * sin(pi*t) * (1 - 0.5*le_r/t_max - 0.5*te_r/t_max)
-    Clamped to [0, t_max].
+    Formula (closed TE variant):
+        y(t) = 5*t_max*(0.2969*√t - 0.1260*t - 0.3516*t² + 0.2843*t³ - 0.1036*t⁴)
+
+    Blended with LE/TE rounding via le_r and te_r minimum thickness floor.
     """
     if t_max <= 0:
         return 0.0
-    le = min(le_r, t_max)
-    te = min(te_r, t_max)
-    # Linear edge baseline
-    edge = le + (te - le) * t
-    # Parabolic bump in the middle
-    bump = t_max * math.sin(math.pi * max(t, 1e-4))
-    # Weight down the bump near edges so it does not exceed t_max
-    return min(t_max, edge + bump * max(0.0, 1.0 - le / t_max - te / t_max))
+    t = max(1e-8, t_norm)
+    # NACA 4-digit
+    y = 5.0 * (0.2969 * t**0.5 - 0.1260 * t - 0.3516 * t**2 + 0.2843 * t**3 - 0.1036 * t**4)
+    naca_thick = t_max * max(0.0, y)
+    # Floor: ensure LE/TE have minimum rounding thickness
+    floor = le_r + (te_r - le_r) * t_norm
+    return max(floor, naca_thick)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +276,7 @@ def _build_blade_surface(
             t_norm = i / (n_chord - 1)
 
             # Thickness at this chord station (#11)
-            thick = _thickness_at(t_norm, t_max, le_radius, te_radius)
+            thick = _naca_thickness_at(t_norm, t_max, le_radius, te_radius)
             d_theta = thick / (2.0 * r) if r > 1e-10 else 0.0
 
             # Lean + sweep stacking (#14)
@@ -290,7 +297,29 @@ def _build_blade_surface(
         ps_surface.append(ps_row)
         ss_surface.append(ss_row)
 
-    return BladeSurface(ps=ps_surface, ss=ss_surface)
+    # Simple pressure distribution model:
+    # PS (pressure side): pressure decreases from LE to throat, then recovers
+    # SS (suction side): pressure drops sharply at LE, minimum at throat
+    n_chord = len(ps_surface[0]) if ps_surface else 0
+    ps_pressure: list[list[float]] = []
+    ss_pressure: list[list[float]] = []
+    for k in range(n_span):
+        ps_row_p: list[float] = []
+        ss_row_p: list[float] = []
+        for i in range(n_chord):
+            t = i / max(1, n_chord - 1)
+            # PS: high at LE, dips at mid (0.6), recovers at TE
+            ps_p = 0.7 + 0.3 * (1 - 4 * (t - 0.3) ** 2) if 0 < t < 0.6 else 0.5 + 0.4 * t
+            ps_p = max(0.1, min(1.0, ps_p))
+            # SS: lowest pressure near throat (t~0.3), builds up toward TE
+            ss_p = 0.15 + 0.7 * t + 0.15 * t ** 2
+            ss_p = max(0.05, min(0.95, ss_p))
+            ps_row_p.append(round(ps_p, 3))
+            ss_row_p.append(round(ss_p, 3))
+        ps_pressure.append(ps_row_p)
+        ss_pressure.append(ss_row_p)
+
+    return BladeSurface(ps=ps_surface, ss=ss_surface, ps_pressure=ps_pressure, ss_pressure=ss_pressure)
 
 
 def _compute_wrap_angle(
@@ -349,7 +378,7 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    blade_thickness = max(0.002, min(0.008, d2 * BLADE_THICKNESS_RATIO))
+    blade_thickness = max(0.003, min(0.012, d2 * BLADE_THICKNESS_RATIO * 1.3))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)
@@ -366,8 +395,8 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
         beta2_rad = _adjust_beta2_for_wrap(hub_rz, shroud_rz, beta1_rad, beta2_rad, target_rad)
 
     # Resolve advanced thickness (#11, #12)
-    le_r = req.le_radius if req.le_radius is not None else blade_thickness / 4.0
-    te_r = req.te_radius if req.te_radius is not None else blade_thickness / 6.0
+    le_r = req.le_radius if req.le_radius is not None else blade_thickness * 0.35
+    te_r = req.te_radius if req.te_radius is not None else blade_thickness * 0.20
     t_hub = req.t_hub
     t_shroud = req.t_shroud
 
@@ -396,8 +425,50 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
 
     actual_wrap = _compute_wrap_angle(hub_rz, shroud_rz, beta1_rad, beta2_rad)
 
+    splitter_surfaces: list[BladeSurface] = []
+    splitter_start_frac = req.splitter_start
+
+    if req.add_splitters:
+        half_pitch = math.pi / sizing.blade_count  # half pitch offset
+        # Splitter starts at splitter_start_frac of meridional chord
+        start_idx = max(0, int(splitter_start_frac * n_chord))
+
+        # Build truncated meridional for splitter (starts at start_idx)
+        hub_rz_split = hub_rz[start_idx:]
+        shroud_rz_split = shroud_rz[start_idx:]
+
+        # Adjust beta1_rad for splitter (use midpoint beta since it starts mid-chord)
+        t_start = start_idx / (n_chord - 1)
+        beta_split_rad = beta1_rad + t_start * (beta2_rad - beta1_rad)
+
+        # Slightly thinner blades
+        split_thickness = blade_thickness * 0.85
+        split_le = le_r * 0.8
+        split_te = te_r
+
+        for b in range(sizing.blade_count):
+            ang_off = b * (2.0 * math.pi / sizing.blade_count) + half_pitch
+            surf = _build_blade_surface(
+                hub_rz_split, shroud_rz_split,
+                beta_split_rad, beta2_rad,
+                split_thickness,
+                angular_offset=ang_off,
+                n_span=n_span,
+                blade_profile=req.blade_profile,
+                le_radius=split_le,
+                te_radius=split_te,
+                t_hub=req.t_hub,
+                t_shroud=req.t_shroud,
+                lean_rad=lean_rad,
+                sweep_m=sweep_m,
+            )
+            splitter_surfaces.append(surf)
+
     return ImpellerGeometry(
         blade_surfaces=blade_surfaces,
+        splitter_surfaces=splitter_surfaces,
+        splitter_count=len(splitter_surfaces),
+        splitter_start_fraction=req.splitter_start if req.add_splitters else 0.0,
         hub_profile=_revolution_profile(hub_rz_visual),
         shroud_profile=_revolution_profile(shroud_rz),
         blade_count=sizing.blade_count,

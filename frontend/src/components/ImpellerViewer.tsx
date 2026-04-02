@@ -9,6 +9,9 @@ interface BladePoint { x: number; y: number; z: number }
 interface BladeSurface { ps: BladePoint[][]; ss: BladePoint[][] }
 interface ImpellerData {
   blade_surfaces: BladeSurface[]
+  splitter_surfaces?: BladeSurface[]
+  splitter_count?: number
+  splitter_start_fraction?: number
   hub_profile: BladePoint[]
   shroud_profile: BladePoint[]
   hub_disc?: BladePoint[]       // optional back-plate ring
@@ -108,10 +111,11 @@ function buildHubDiscGeo(hubProfile: BladePoint[], segs = 128): THREE.BufferGeom
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-const PS_COLOR = '#1e90ff'    // pressure side — vivid blue
-const SS_COLOR = '#c026d3'    // suction side — fuchsia/magenta
-const HUB_COLOR = '#374151'   // hub — dark steel
+const PS_COLOR = '#1e90ff'      // pressure side — vivid blue
+const SS_COLOR = '#c026d3'      // suction side — fuchsia/magenta
+const HUB_COLOR = '#374151'     // hub — dark steel
 const SHROUD_COLOR = '#1f2937'
+const SPLITTER_COLOR = '#06b6d4' // splitter PS — teal/cyan
 
 // ─── Scene components ─────────────────────────────────────────────────────────
 
@@ -135,6 +139,21 @@ function BladeSurfaceMesh({ surface, idx }: { surface: BladeSurface; idx: number
           metalness={0.55}
           roughness={0.28}
         />
+      </mesh>
+    </>
+  )
+}
+
+function SplitterSurfaceMesh({ surface }: { surface: BladeSurface }) {
+  const psGeo = useMemo(() => buildQuadGeo(surface.ps), [surface])
+  const ssGeo = useMemo(() => buildQuadGeo(surface.ss), [surface])
+  return (
+    <>
+      <mesh geometry={psGeo} castShadow>
+        <meshStandardMaterial color={SPLITTER_COLOR} side={THREE.DoubleSide} metalness={0.50} roughness={0.32} />
+      </mesh>
+      <mesh geometry={ssGeo} castShadow>
+        <meshStandardMaterial color="#0891b2" side={THREE.DoubleSide} metalness={0.50} roughness={0.32} />
       </mesh>
     </>
   )
@@ -190,7 +209,7 @@ function SceneLights() {
   )
 }
 
-function Scene({ data, paused, rpm }: { data: ImpellerData; paused?: boolean; rpm?: number }) {
+function Scene({ data, paused, rpm, showSplitters }: { data: ImpellerData; paused?: boolean; rpm?: number; showSplitters?: boolean }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
   const scale = 1.8 / r2_mm
@@ -207,6 +226,9 @@ function Scene({ data, paused, rpm }: { data: ImpellerData; paused?: boolean; rp
           <ShroudMesh profile={data.shroud_profile} />
           {data.blade_surfaces.map((surf, i) => (
             <BladeSurfaceMesh key={i} surface={surf} idx={i} />
+          ))}
+          {showSplitters && data.splitter_surfaces?.map((surf, i) => (
+            <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} />
           ))}
         </group>
       </RotatingGroup>
@@ -228,6 +250,7 @@ export default function ImpellerViewer({
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(false)
   const [wireframe, setWireframe] = useState(false)
+  const [showSplitters, setShowSplitters] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -248,13 +271,15 @@ export default function ImpellerViewer({
         rpm,
         n_blade_points: 60,   // increased from 40
         n_span_points: 16,    // increased from 8
+        add_splitters: showSplitters,
+        splitter_start: 0.4,
       }),
     })
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json() })
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [flowRate, head, rpm])
+  }, [flowRate, head, rpm, showSplitters])
 
   const handleExport = async (format: string) => {
     try {
@@ -285,7 +310,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
-      <Scene data={data} paused={paused} rpm={rpm} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -306,6 +331,11 @@ export default function ImpellerViewer({
           <LegendItem color={PS_COLOR} label="LP (pressão)" />
           <LegendItem color={SS_COLOR} label="LS (sucção)" />
           <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
+          {showSplitters && <LegendItem color={SPLITTER_COLOR} label="Splitters" />}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}>
+            <input type="checkbox" checked={showSplitters} onChange={e => setShowSplitters(e.target.checked)} style={{ cursor: 'pointer' }} />
+            Splitters
+          </label>
         </div>
         <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#090d12' }}>
           {canvasEl}
@@ -337,6 +367,7 @@ export default function ImpellerViewer({
           <LegendItem color={PS_COLOR} label="LP" />
           <LegendItem color={SS_COLOR} label="LS" />
           <LegendItem color={HUB_COLOR} label="Hub" />
+          {showSplitters && <LegendItem color={SPLITTER_COLOR} label="Splitters" />}
           {data && (
             <>
               <span style={{ color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 12 }}>
@@ -347,6 +378,10 @@ export default function ImpellerViewer({
                 <span style={{ color: 'var(--text-muted)' }}>Wrap {data.actual_wrap_angle.toFixed(0)}°</span>}
             </>
           )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', borderLeft: '1px solid var(--border-primary)', paddingLeft: 12 }}>
+            <input type="checkbox" checked={showSplitters} onChange={e => setShowSplitters(e.target.checked)} style={{ cursor: 'pointer' }} />
+            <span style={{ color: 'var(--text-muted)' }}>Splitters</span>
+          </label>
         </div>
       </div>
 

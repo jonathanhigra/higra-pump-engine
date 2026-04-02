@@ -69,6 +69,8 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
   const [advancedMode, setAdvancedMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savedId, setSavedId] = useState<string | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('hpe_token')
@@ -101,6 +103,25 @@ export default function App() {
     setPage('design')
   }
 
+  const handleSaveDesign = async () => {
+    if (!sizing || !currentProject) return
+    setSaving(true)
+    try {
+      const body = {
+        sizing_result: sizing as any,
+        operating_point: { flow_rate: opPoint.flowRate / 3600, head: opPoint.head, rpm: opPoint.rpm },
+        curve_points: curves.map(c => ({
+          flow_rate: c.flow_rate, head: c.head, efficiency: c.efficiency,
+          power: c.power, npsh_required: c.npsh_required, is_unstable: c.is_unstable ?? false,
+        })),
+      }
+      const r = await fetch(`/api/v1/projects/${currentProject.id}/designs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (r.ok) { const d = await r.json(); setSavedId(d.id) }
+    } finally { setSaving(false) }
+  }
+
   // Full sizing run — used by both SizingForm and 3D viewer floating form
   const handleRunSizing = async (q: number, h: number, n: number) => {
     setLoading(true)
@@ -117,6 +138,7 @@ export default function App() {
       setLosses(lossData)
       setStress(stressData)
       setOpPoint({ flowRate: q, head: h, rpm: n })
+      setSavedId(null)
     } finally {
       setLoading(false)
     }
@@ -170,6 +192,22 @@ export default function App() {
               <span>eta: <b>{(sizing.estimated_efficiency * 100).toFixed(1)}%</b></span>
             </div>
           )}
+          {sizing && currentProject && (
+            <button
+              type="button"
+              onClick={handleSaveDesign}
+              disabled={saving || !!savedId}
+              style={{
+                fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: saving || savedId ? 'default' : 'pointer',
+                border: `1px solid ${savedId ? 'var(--accent-success)' : 'var(--border-primary)'}`,
+                background: savedId ? 'rgba(76,175,80,0.12)' : 'transparent',
+                color: savedId ? 'var(--accent-success)' : 'var(--text-muted)',
+                fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
+              }}
+            >
+              {saving ? t.saving : savedId ? `✓ ${t.designSaved}` : t.saveDesign}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAdvancedMode(v => !v)}
@@ -207,6 +245,7 @@ export default function App() {
               setSizing(result); setCurves(curvePoints)
               setLosses(lossData); setStress(stressData)
               if (op) setOpPoint(op)
+              setSavedId(null)
             }}
             loading={loading}
             setLoading={setLoading}

@@ -36,15 +36,26 @@ def create_project(name: str, machine_type: str = "centrifugal_pump",
 def list_projects(user_id: str | None = None, limit: int = 50) -> list[dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:
+            sql = """
+                SELECT p.*, COUNT(d.id) AS n_sizing_results
+                FROM projects p
+                LEFT JOIN designs d ON d.project_id = p.id
+                {where}
+                GROUP BY p.id
+                ORDER BY p.updated_at DESC
+                LIMIT %s
+            """
             if user_id:
-                cur.execute(
-                    "SELECT * FROM projects WHERE user_id=%s ORDER BY updated_at DESC LIMIT %s",
-                    (user_id, limit),
-                )
+                cur.execute(sql.format(where="WHERE p.user_id=%s"), (user_id, limit))
             else:
-                cur.execute("SELECT * FROM projects ORDER BY updated_at DESC LIMIT %s", (limit,))
+                cur.execute(sql.format(where=""), (limit,))
             cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                d["n_sizing_results"] = int(d.get("n_sizing_results") or 0)
+                rows.append(d)
+            return rows
 
 
 def get_project(project_id: str) -> dict | None:

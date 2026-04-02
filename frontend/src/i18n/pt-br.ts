@@ -189,6 +189,12 @@ const t = {
   assistSummary: (nq: string, d2: string, eta: string, z: number, npsh: string, pwr: string) =>
     `Resumo: Nq=${nq}, D2=${d2}mm, eta=${eta}%, ${z} pas, NPSHr=${npsh}m, Potencia=${pwr}kW. Pergunte sobre rendimento, cavitacao, dimensoes ou melhorias.`,
 
+  // Save design
+  saveDesign: 'Salvar no Projeto',
+  saving: 'Salvando...',
+  designSaved: 'Design salvo!',
+  saveNoProject: 'Selecione um projeto para salvar',
+
   // Errors
   somethingWentWrong: 'Algo deu errado',
   unexpectedError: 'Ocorreu um erro inesperado',

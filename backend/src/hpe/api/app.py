@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from hpe.api.routes.sizing import router as sizing_router
 from hpe.api.routes.analysis import router as analysis_router
-from hpe.api.routes.projects import router as projects_router
 from hpe.api.routes.geometry import router as geometry_router
 from hpe.api.routes.report import router as report_router
 from hpe.api.routes.ws_optimize import router as ws_optimize_router
@@ -54,7 +53,6 @@ app.include_router(sizing_router)
 app.include_router(analysis_router)
 app.include_router(geometry_router)
 app.include_router(inverse_design_router)
-app.include_router(projects_router)
 app.include_router(report_router)
 app.include_router(ws_optimize_router)
 app.include_router(surrogate_router)

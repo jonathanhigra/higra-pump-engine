@@ -1,11 +1,14 @@
-"""Geometry API routes — blade coordinates for 3D visualization."""
+"""Geometry API routes — 3D visualization and CAD export."""
 
 from __future__ import annotations
 
 import math
+import tempfile
+from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/v1", tags=["geometry"])
@@ -125,4 +128,66 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
         d2=d2,
         d1=d1,
         b2=b2,
+    )
+
+
+class ExportRequest(BaseModel):
+    flow_rate: float = Field(..., gt=0)
+    head: float = Field(..., gt=0)
+    rpm: float = Field(..., gt=0)
+    format: str = Field("step", description="Export format: step, stl, or iges")
+
+
+@router.post("/geometry/export")
+def export_geometry(req: ExportRequest):
+    """Export impeller geometry as STEP, STL, or IGES file.
+
+    Requires cadquery to be installed. Returns a downloadable file.
+    """
+    try:
+        from hpe.core.models import OperatingPoint
+        from hpe.geometry.models import RunnerGeometryParams
+        from hpe.geometry.runner.impeller import generate_runner
+        from hpe.geometry.runner.export import export_runner
+        from hpe.core.enums import GeometryFormat
+        from hpe.sizing.meanline import run_sizing
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="CadQuery not installed. Install with: pip install cadquery",
+        )
+
+    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+    sizing = run_sizing(op)
+    params = RunnerGeometryParams.from_sizing_result(sizing)
+
+    runner = generate_runner(params)
+
+    fmt_map = {
+        "step": GeometryFormat.STEP,
+        "stl": GeometryFormat.STL,
+        "iges": GeometryFormat.IGES,
+    }
+    fmt = fmt_map.get(req.format.lower())
+    if fmt is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {req.format}")
+
+    ext_map = {"step": ".step", "stl": ".stl", "iges": ".iges"}
+    ext = ext_map[req.format.lower()]
+
+    tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+    tmp.close()
+
+    export_runner(runner, tmp.name, fmt=fmt)
+
+    media_types = {
+        "step": "application/step",
+        "stl": "application/sla",
+        "iges": "application/iges",
+    }
+
+    return FileResponse(
+        path=tmp.name,
+        filename=f"impeller_Q{req.flow_rate:.4f}_H{req.head:.1f}{ext}",
+        media_type=media_types.get(req.format.lower(), "application/octet-stream"),
     )

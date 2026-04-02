@@ -5,6 +5,7 @@ Usage:
     hpe sizing --flow 0.05 --head 30 --rpm 1750 --export pump.step
     hpe curves --flow 0.05 --head 30 --rpm 1750 --output curves.csv
     hpe analyze --flow 0.05 --head 30 --rpm 1750
+    hpe cfd --flow 0.05 --head 30 --rpm 1750 --output ./case_pump
 """
 
 from __future__ import annotations
@@ -38,6 +39,13 @@ def main() -> None:
     sp_analyze = subparsers.add_parser("analyze", help="Run stability analysis")
     _add_operating_point_args(sp_analyze)
 
+    # --- cfd ---
+    sp_cfd = subparsers.add_parser("cfd", help="Generate OpenFOAM CFD case")
+    _add_operating_point_args(sp_cfd)
+    sp_cfd.add_argument("--output", "-o", type=str, required=True, help="Output directory")
+    sp_cfd.add_argument("--procs", type=int, default=4, help="Number of processors")
+    sp_cfd.add_argument("--run", action="store_true", help="Attempt to run OpenFOAM")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -50,6 +58,8 @@ def main() -> None:
         _cmd_curves(args)
     elif args.command == "analyze":
         _cmd_analyze(args)
+    elif args.command == "cfd":
+        _cmd_cfd(args)
 
 
 def _add_operating_point_args(parser: argparse.ArgumentParser) -> None:
@@ -198,6 +208,51 @@ def _cmd_analyze(args: argparse.Namespace) -> None:
         print("  Warnings")
         for w in analysis.warnings:
             print(f"    ! {w}")
+
+    print()
+
+
+def _cmd_cfd(args: argparse.Namespace) -> None:
+    from hpe.pipeline import run_cfd_pipeline
+    from hpe.sizing import run_sizing
+
+    op = _make_operating_point(args)
+    sizing = run_sizing(op)
+
+    print("=" * 60)
+    print("  HIGRA PUMP ENGINE — CFD Case Generation")
+    print("=" * 60)
+    print()
+    print(f"  Input: Q={op.flow_rate*3600:.1f} m3/h, H={op.head:.1f} m, n={op.rpm:.0f} rpm")
+    print(f"  Output: {args.output}")
+    print()
+
+    result = run_cfd_pipeline(
+        sizing, args.output,
+        run_solver=args.run,
+        n_procs=args.procs,
+    )
+
+    print(f"  Case directory: {result.case_dir}")
+    if result.step_file:
+        print(f"  STEP file: {result.step_file}")
+    print(f"  OpenFOAM available: {'Yes' if result.openfoam_available else 'No'}")
+
+    if result.ran_simulation:
+        print(f"  Simulation: Completed")
+        if result.performance:
+            print(f"  Head: {result.performance.head:.1f} m")
+            print(f"  Efficiency: {result.performance.total_efficiency:.1%}")
+            print(f"  Power: {result.performance.power/1000:.1f} kW")
+    else:
+        print(f"  Simulation: Not executed")
+        print(f"  Run manually: cd {result.case_dir} && ./run.sh")
+
+    if result.errors:
+        print()
+        print("  Notes")
+        for e in result.errors:
+            print(f"    - {e}")
 
     print()
 

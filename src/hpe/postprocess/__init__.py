@@ -1,16 +1,16 @@
 """HPE Post-processing — Automated metric extraction from CFD simulations.
 
-Metrics extracted automatically:
-- Hydraulic, volumetric, and total efficiency
-- Head and H-Q curve
-- Shaft torque and power
-- Pressure and velocity fields (3D visualization)
-- Cavitation indicators (vapor volume, min Cp)
-- Pressure pulsations in the volute
-- Radial and axial forces on the rotor
-
-Skills required:
-- ParaView (pvpython) for data extraction
-- VTK data manipulation
-- Performance curve generation
+Usage:
+    from hpe.postprocess.openfoam_parser import parse_solver_log, parse_forces
+    from hpe.postprocess.metrics import calc_performance_from_cfd
 """
+
+from hpe.postprocess.metrics import CFDMetrics, calc_performance_from_cfd
+from hpe.postprocess.openfoam_parser import parse_forces, parse_solver_log
+
+__all__ = [
+    "parse_solver_log",
+    "parse_forces",
+    "calc_performance_from_cfd",
+    "CFDMetrics",
+]

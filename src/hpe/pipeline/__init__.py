@@ -1,15 +1,12 @@
 """HPE Pipeline — Bidirectional CAE integration pipeline.
 
-Inspired by ADT TURBOdesign Suite CAE integration. Automates the
-full flow from geometry generation to CFD results without manual intervention.
+Orchestrates: Geometry → Mesh → Solver → Post-processing → Database.
 
-Automated flow:
-1. Geometry -> Mesh: Export STEP -> snappyHexMesh / cfMesh
-2. Mesh -> Solver: BC configuration, numerical schemes, turbulence
-3. Solver -> Execution: Queue submission (local or cloud)
-4. Execution -> Post: Field extraction, surface integrals, metrics
-5. Post -> Dashboard: Result visualization, comparison, report
-6. Dashboard -> AI: Data feeds surrogate models and history
-
-Differential vs ADT: HPE uses open-source solvers — zero software licensing cost.
+Usage:
+    from hpe.pipeline import run_cfd_pipeline
+    result = run_cfd_pipeline(sizing, "./output/pump_case")
 """
+
+from hpe.pipeline.cfd_pipeline import run_cfd_pipeline
+
+__all__ = ["run_cfd_pipeline"]

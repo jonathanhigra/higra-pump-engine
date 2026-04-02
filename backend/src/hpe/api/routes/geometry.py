@@ -824,3 +824,88 @@ def export_geometry(req: ExportRequest):
         filename=f"impeller_Q{req.flow_rate:.4f}_H{req.head:.1f}{ext_map[req.format.lower()]}",
         media_type=media_types.get(req.format.lower(), "application/octet-stream"),
     )
+
+
+class GltfExportRequest(BaseModel):
+    flow_rate: float = Field(..., gt=0)
+    head: float = Field(..., gt=0)
+    rpm: float = Field(..., gt=0)
+    format: str = Field("gltf", description="gltf")
+
+
+@router.post("/geometry/export/gltf")
+def export_gltf(req: GltfExportRequest) -> dict:
+    """Export impeller geometry as glTF 2.0 JSON (embedded buffers).
+
+    Returns a minimal glTF structure with one mesh per blade surface (PS/SS),
+    encoded as base64 binary buffers. Compatible with Three.js GLTFLoader,
+    Blender, and model viewers.
+    """
+    import base64
+    import json
+    import struct
+
+    from hpe.core.models import OperatingPoint
+
+    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+
+    geo_req = GeometryRequest(
+        flow_rate=req.flow_rate,
+        head=req.head,
+        rpm=req.rpm,
+        n_blade_points=40,
+        n_span_points=12,
+    )
+    impeller = get_impeller_geometry(geo_req)
+
+    all_positions: list[float] = []
+    mesh_primitives: list[dict] = []
+    buffer_views: list[dict] = []
+    accessors: list[dict] = []
+    byte_offset = 0
+
+    for surf in impeller.blade_surfaces:
+        for grid in [surf.ps, surf.ss]:
+            verts: list[float] = []
+            for row in grid:
+                for pt in row:
+                    verts.extend([pt.x / 1000.0, pt.y / 1000.0, pt.z / 1000.0])  # mm → m
+            n_verts = len(verts) // 3
+            byte_len = n_verts * 3 * 4  # float32
+            all_positions.extend(verts)
+
+            buffer_views.append({
+                "buffer": 0,
+                "byteOffset": byte_offset,
+                "byteLength": byte_len,
+                "target": 34962,  # ARRAY_BUFFER
+            })
+            accessors.append({
+                "bufferView": len(buffer_views) - 1,
+                "componentType": 5126,  # FLOAT
+                "count": n_verts,
+                "type": "VEC3",
+                "min": [min(verts[j::3]) for j in range(3)],
+                "max": [max(verts[j::3]) for j in range(3)],
+            })
+            mesh_primitives.append({
+                "attributes": {"POSITION": len(accessors) - 1},
+                "mode": 4,  # TRIANGLES
+            })
+            byte_offset += byte_len
+
+    raw = struct.pack(f"{len(all_positions)}f", *all_positions)
+    b64 = base64.b64encode(raw).decode()
+
+    gltf = {
+        "asset": {"version": "2.0", "generator": "HPE v1.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0}],
+        "meshes": [{"name": "impeller", "primitives": mesh_primitives}],
+        "bufferViews": buffer_views,
+        "accessors": accessors,
+        "buffers": [{"byteLength": byte_offset, "uri": f"data:application/octet-stream;base64,{b64}"}],
+    }
+
+    return {"gltf": json.dumps(gltf, separators=(",", ":")), "filename": "impeller.gltf"}

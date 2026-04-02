@@ -198,7 +198,17 @@ function ClipController({ clipZ }: { clipZ: number | null }) {
 
 // ─── Scene components ─────────────────────────────────────────────────────────
 
-function BladeSurfaceMesh({ surface, idx, showColormap }: { surface: BladeSurface; idx: number; showColormap: boolean }) {
+function BladeSurfaceMesh({
+  surface, idx, showColormap, onSelect, isSelected,
+}: {
+  surface: BladeSurface
+  idx: number
+  showColormap: boolean
+  onSelect: (idx: number) => void
+  isSelected: boolean
+}) {
+  const [hovered, setHovered] = useState(false)
+
   const psGeo = useMemo(
     () => showColormap && surface.ps_pressure
       ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
@@ -211,21 +221,37 @@ function BladeSurfaceMesh({ surface, idx, showColormap }: { surface: BladeSurfac
       : buildQuadGeo(surface.ss),
     [surface, showColormap],
   )
+
+  const highlight = isSelected || hovered
+  const psColor = showColormap ? '#ffffff' : (highlight ? '#60c8ff' : PS_COLOR)
+  const ssColor = showColormap ? '#ffffff' : (highlight ? '#e040ff' : SS_COLOR)
+  const emissive = isSelected ? '#003355' : hovered ? '#001a2a' : '#000000'
+
   return (
     <>
-      <mesh geometry={psGeo} castShadow>
+      <mesh geometry={psGeo} castShadow
+        onClick={(e) => { e.stopPropagation(); onSelect(idx) }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true) }}
+        onPointerOut={() => setHovered(false)}
+      >
         <meshStandardMaterial
           vertexColors={showColormap}
-          color={showColormap ? '#ffffff' : PS_COLOR}
+          color={psColor}
+          emissive={emissive}
           side={THREE.DoubleSide}
           metalness={0.55}
           roughness={0.28}
         />
       </mesh>
-      <mesh geometry={ssGeo} castShadow>
+      <mesh geometry={ssGeo} castShadow
+        onClick={(e) => { e.stopPropagation(); onSelect(idx) }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true) }}
+        onPointerOut={() => setHovered(false)}
+      >
         <meshStandardMaterial
           vertexColors={showColormap}
-          color={showColormap ? '#ffffff' : SS_COLOR}
+          color={ssColor}
+          emissive={emissive}
           side={THREE.DoubleSide}
           metalness={0.55}
           roughness={0.28}
@@ -550,6 +576,7 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
 
 function Scene({
   data, paused, rpm, showSplitters, clipZ, showColormap, showParticles, showVolute,
+  selectedBlade, onSelectBlade,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -559,6 +586,8 @@ function Scene({
   showColormap: boolean
   showParticles: boolean
   showVolute: boolean
+  selectedBlade: number | null
+  onSelectBlade: (idx: number) => void
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -576,7 +605,8 @@ function Scene({
           <HubMesh profile={data.hub_profile} />
           <ShroudMesh profile={data.shroud_profile} />
           {data.blade_surfaces.map((surf, i) => (
-            <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap} />
+            <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
+              onSelect={onSelectBlade} isSelected={selectedBlade === i} />
           ))}
           {showSplitters && data.splitter_surfaces?.map((surf, i) => (
             <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} showColormap={showColormap} />
@@ -613,6 +643,7 @@ export default function ImpellerViewer({
   const [showColormap, setShowColormap] = useState(false)
   const [showParticles, setShowParticles] = useState(false)
   const [showVolute, setShowVolute] = useState(false)
+  const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -658,6 +689,22 @@ export default function ImpellerViewer({
     } catch (e: any) { alert(`Falha: ${e.message}`) }
   }
 
+  const handleGltfExport = async () => {
+    try {
+      const res = await fetch('/api/v1/geometry/export/gltf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flow_rate: flowRate / 3600, head, rpm, format: 'gltf' }),
+      })
+      if (!res.ok) { alert(`Erro ${res.status}`); return }
+      const { gltf, filename } = await res.json()
+      const blob = new Blob([gltf], { type: 'model/gltf+json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = filename ?? 'impeller.gltf'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(`Falha glTF: ${e.message}`) }
+  }
+
   const handleFloatingRun = (e: React.FormEvent) => {
     e.preventDefault()
     const q = parseFloat(fQ), h = parseFloat(fH), n = parseFloat(fN)
@@ -672,7 +719,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} showVolute={showVolute} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -705,8 +752,16 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#090d12' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#090d12', position: 'relative' }}>
           {canvasEl}
+          {data && selectedBlade !== null && (
+            <BladeInfoPanel
+              bladeIdx={selectedBlade}
+              bladeCount={data.blade_count}
+              sizing={sizing}
+              onClose={() => setSelectedBlade(null)}
+            />
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
@@ -731,6 +786,9 @@ export default function ImpellerViewer({
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
             </button>
           ))}
+          <button onClick={handleGltfExport} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>
+            glTF
+          </button>
         </div>
       </div>
     )
@@ -742,6 +800,15 @@ export default function ImpellerViewer({
       <div style={{ width: '100%', height: '100%', background: '#090d12' }}>
         {canvasEl}
       </div>
+
+      {data && selectedBlade !== null && (
+        <BladeInfoPanel
+          bladeIdx={selectedBlade}
+          bladeCount={data.blade_count}
+          sizing={sizing}
+          onClose={() => setSelectedBlade(null)}
+        />
+      )}
 
       {/* TOP-LEFT: Legend bar */}
       <div className="viewer-overlay viewer-overlay-tl">
@@ -769,6 +836,8 @@ export default function ImpellerViewer({
               <span style={{ color: 'var(--text-muted)' }}>D2 {(data.d2 * 1000).toFixed(0)} mm</span>
               {data.actual_wrap_angle != null &&
                 <span style={{ color: 'var(--text-muted)' }}>Wrap {data.actual_wrap_angle.toFixed(0)}°</span>}
+              {selectedBlade === null &&
+                <span style={{ color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 12 }}>· Clique em uma pá</span>}
             </>
           )}
         </div>
@@ -839,8 +908,62 @@ export default function ImpellerViewer({
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
             </button>
           ))}
+          <button onClick={handleGltfExport} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>
+            glTF
+          </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Blade info panel ────────────────────────────────────────────
+
+function BladeInfoPanel({
+  bladeIdx,
+  bladeCount,
+  sizing,
+  onClose,
+}: {
+  bladeIdx: number
+  bladeCount: number
+  sizing?: SizingResult | null
+  onClose: () => void
+}) {
+  const pitchDeg = 360 / bladeCount
+  const bladeDeg = (bladeIdx * pitchDeg).toFixed(1)
+
+  return (
+    <div style={{
+      position: 'absolute', top: 16, right: 16,
+      background: 'rgba(10,15,20,0.92)',
+      border: '1px solid rgba(0,160,223,0.4)',
+      borderRadius: 8, padding: '12px 16px', minWidth: 180,
+      backdropFilter: 'blur(12px)',
+      zIndex: 10,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 12 }}>
+          Pá {bladeIdx + 1} / {bladeCount}
+        </span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <tbody>
+          {([
+            ['Ângulo posição', `${bladeDeg}°`],
+            ['β1 (entrada)', sizing ? `${sizing.beta1?.toFixed(1)}°` : '—'],
+            ['β2 (saída)', sizing ? `${sizing.beta2?.toFixed(1)}°` : '—'],
+            ['Razão De Haller', sizing ? ((sizing as any).diffusion_ratio ?? '—').toFixed?.(3) ?? '—' : '—'],
+            ['Passo angular', `${pitchDeg.toFixed(1)}°`],
+          ] as [string, string][]).map(([label, val]) => (
+            <tr key={label}>
+              <td style={{ color: 'var(--text-muted)', paddingBottom: 4, paddingRight: 10 }}>{label}</td>
+              <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{val}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

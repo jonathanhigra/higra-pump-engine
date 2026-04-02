@@ -25,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from hpe.api.middleware import RateLimitMiddleware, MultitenancyMiddleware
+app.add_middleware(RateLimitMiddleware, requests_per_minute=120)
+app.add_middleware(MultitenancyMiddleware)
+
 app.include_router(auth_router)
 app.include_router(sizing_router)
 app.include_router(analysis_router)

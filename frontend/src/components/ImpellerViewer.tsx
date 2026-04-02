@@ -4,6 +4,7 @@ import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei
 import * as THREE from 'three'
 import t from '../i18n/pt-br'
 import type { SizingResult } from '../App'
+import MeridionalPanel from './MeridionalPanel'
 
 interface BladePoint { x: number; y: number; z: number }
 interface BladeSurface { ps: BladePoint[][]; ss: BladePoint[][] }
@@ -251,6 +252,7 @@ export default function ImpellerViewer({
   const [paused, setPaused] = useState(false)
   const [wireframe, setWireframe] = useState(false)
   const [showSplitters, setShowSplitters] = useState(false)
+  const [showMeridional, setShowMeridional] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -342,6 +344,12 @@ export default function ImpellerViewer({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
+          {data && (
+            <ControlButton
+              label={showMeridional ? '■ Seção 2D' : '◻ Seção 2D'}
+              onClick={() => setShowMeridional(v => !v)}
+            />
+          )}
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
           {['STEP', 'STL'].map(fmt => (
             <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
@@ -349,6 +357,19 @@ export default function ImpellerViewer({
             </button>
           ))}
         </div>
+        {showMeridional && data && (
+          <div style={{ marginTop: 10 }}>
+            <MeridionalPanel
+              hubProfile={data.hub_profile}
+              shroudProfile={data.shroud_profile}
+              d2={data.d2}
+              d1={data.d1}
+              b2={data.b2}
+              wrapAngle={data.actual_wrap_angle}
+              compact={true}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -407,6 +428,42 @@ export default function ImpellerViewer({
               <MetaRow label="η total" value={`${(sizing.estimated_efficiency * 100).toFixed(1)}%`} />
               <MetaRow label="NPSHr" value={`${sizing.estimated_npsh_r.toFixed(1)} m`} />
               <MetaRow label="Potência" value={`${(sizing.estimated_power / 1000).toFixed(1)} kW`} />
+            </div>
+          )}
+
+          {/* Meridional section toggle */}
+          {data && (
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+              <button
+                onClick={() => setShowMeridional(v => !v)}
+                style={{
+                  width: '100%',
+                  background: showMeridional ? 'rgba(0,160,223,0.15)' : 'none',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  color: showMeridional ? 'var(--accent)' : 'var(--text-secondary)',
+                  padding: '5px 8px',
+                  fontSize: 11,
+                  textAlign: 'left' as const,
+                }}
+              >
+                {showMeridional ? '■' : '◻'} Meridional
+              </button>
+            </div>
+          )}
+
+          {showMeridional && data && (
+            <div style={{ marginTop: 10 }}>
+              <MeridionalPanel
+                hubProfile={data.hub_profile}
+                shroudProfile={data.shroud_profile}
+                d2={data.d2}
+                d1={data.d1}
+                b2={data.b2}
+                wrapAngle={data.actual_wrap_angle}
+                compact={false}
+              />
             </div>
           )}
         </div>

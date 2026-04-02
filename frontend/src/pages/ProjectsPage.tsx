@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import t from '../i18n/pt-br'
 
 interface Project {
-  id: string
-  name: string
-  description: string | null
-  machine_type: string
-  created_at: string
-  n_sizing_results: number
+  id: string; name: string; description: string | null
+  machine_type: string; created_at: string; n_sizing_results: number
 }
 
 interface Props {
@@ -25,88 +22,63 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const loadProjects = async () => {
-    try {
-      const res = await fetch('/api/v1/projects', { headers })
-      if (res.ok) setProjects(await res.json())
-    } catch { /* ignore */ }
+    try { const r = await fetch('/api/v1/projects', { headers }); if (r.ok) setProjects(await r.json()) } catch {}
   }
-
   useEffect(() => { loadProjects() }, [])
 
   const createProject = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
-    setLoading(true)
-
+    e.preventDefault(); if (!name.trim()) return; setLoading(true)
     try {
-      const res = await fetch('/api/v1/projects', {
-        method: 'POST', headers,
-        body: JSON.stringify({ name, description: description || undefined }),
-      })
-      if (res.ok) {
-        setName('')
-        setDescription('')
-        setShowCreate(false)
-        loadProjects()
-      }
+      const r = await fetch('/api/v1/projects', { method: 'POST', headers, body: JSON.stringify({ name, description: description || undefined }) })
+      if (r.ok) { setName(''); setDescription(''); setShowCreate(false); loadProjects() }
     } finally { setLoading(false) }
   }
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto', padding: 24 }}>
+    <div style={{ maxWidth: 700 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ color: '#2E8B57', margin: 0 }}>Projects</h2>
+        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: 20 }}>{t.projects}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowCreate(!showCreate)} style={{
-            padding: '8px 16px', background: '#2E8B57', color: '#fff', border: 'none',
-            borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-          }}>
-            + New Project
+          <button onClick={() => setShowCreate(!showCreate)} className="btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
+            {t.newProject}
           </button>
           <button onClick={() => onSelectProject(null)} style={{
-            padding: '8px 16px', background: '#eee', color: '#333', border: 'none',
-            borderRadius: 6, cursor: 'pointer', fontSize: 13,
+            padding: '8px 16px', background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border-primary)', borderRadius: 6, cursor: 'pointer', fontSize: 13,
           }}>
-            Quick Design
+            {t.quickDesign}
           </button>
         </div>
       </div>
 
       {showCreate && (
-        <form onSubmit={createProject} style={{ background: '#f8f9fa', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-          <input type="text" placeholder="Project name" value={name} onChange={e => setName(e.target.value)} required
-            style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, marginBottom: 8, boxSizing: 'border-box' }} />
-          <input type="text" placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)}
-            style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, marginBottom: 8, boxSizing: 'border-box' }} />
-          <button type="submit" disabled={loading} style={{
-            padding: '8px 20px', background: '#2E8B57', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
-          }}>
-            {loading ? 'Creating...' : 'Create'}
+        <form onSubmit={createProject} className="card" style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input className="input" placeholder={t.projectName} value={name} onChange={e => setName(e.target.value)} required />
+          <input className="input" placeholder={t.descriptionOptional} value={description} onChange={e => setDescription(e.target.value)} />
+          <button type="submit" className="btn-primary" disabled={loading} style={{ alignSelf: 'flex-start', padding: '8px 20px', fontSize: 13 }}>
+            {loading ? t.creating : t.create}
           </button>
         </form>
       )}
 
       {projects.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#bbb' }}>
-          <p>No projects yet. Create one or use Quick Design.</p>
-        </div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t.noProjectsYet}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {projects.map(p => (
-            <div key={p.id} onClick={() => onSelectProject(p)} style={{
-              padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8',
-              cursor: 'pointer', transition: 'box-shadow 0.15s',
+            <div key={p.id} onClick={() => onSelectProject(p)} className="card" style={{
+              cursor: 'pointer', transition: 'border-color 0.15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)')}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--card-border)')}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{p.name}</h3>
-                  {p.description && <p style={{ margin: 0, fontSize: 12, color: '#888' }}>{p.description}</p>}
+                  <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)' }}>{p.name}</h3>
+                  {p.description && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{p.description}</p>}
                 </div>
-                <div style={{ textAlign: 'right', fontSize: 12, color: '#999' }}>
-                  <div>{p.n_sizing_results} designs</div>
+                <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div>{p.n_sizing_results} {t.designs}</div>
                   <div>{p.machine_type.replace('_', ' ')}</div>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import t from '../i18n/pt-br'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 
 interface Props {
@@ -14,72 +15,46 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
+    e.preventDefault(); setLoading(true); setError(null)
     try {
       const q = parseFloat(flowRate) / 3600
       const h = parseFloat(head)
       const n = parseFloat(rpm)
-
       const [sizing, curvesData, lossData, stressData] = await Promise.all([
         runSizing(q, h, n),
         getCurves(q, h, n).catch(() => ({ points: [] })),
         getLossBreakdown(q, h, n).catch(() => null),
         runStressAnalysis(q, h, n).catch(() => null),
       ])
-
       onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: parseFloat(flowRate), head: h, rpm: n })
-    } catch (err: any) {
-      setError(err.message || 'Request failed')
-    } finally {
-      setLoading(false)
-    }
+    } catch (err: any) { setError(err.message || 'Erro') } finally { setLoading(false) }
   }
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 10px', border: '1px solid #d0d0d0',
-    borderRadius: 4, fontSize: 14, boxSizing: 'border-box',
-    outline: 'none', transition: 'border-color 0.15s',
-  }
-
-  const labelStyle: React.CSSProperties = { display: 'block', marginBottom: 14 }
-  const spanStyle: React.CSSProperties = { fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }
 
   return (
-    <form onSubmit={handleSubmit} style={{ background: '#f8f9fa', padding: 20, borderRadius: 8, border: '1px solid #e8e8e8' }}>
-      <h3 style={{ marginTop: 0, color: '#2E8B57', fontSize: 15, marginBottom: 18 }}>Operating Point</h3>
+    <form onSubmit={handleSubmit} className="card" style={{ padding: 20 }}>
+      <h3 style={{ marginTop: 0, color: 'var(--accent)', fontSize: 14, marginBottom: 16 }}>{t.operatingPoint}</h3>
 
-      <label style={labelStyle}>
-        <span style={spanStyle}>Flow Rate Q [m3/h]</span>
-        <input type="number" step="1" value={flowRate} onChange={e => setFlowRate(e.target.value)} style={inputStyle} />
+      <label style={{ display: 'block', marginBottom: 14 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.flowRate}</span>
+        <input className="input" type="number" step="1" value={flowRate} onChange={e => setFlowRate(e.target.value)} />
       </label>
 
-      <label style={labelStyle}>
-        <span style={spanStyle}>Head H [m]</span>
-        <input type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} style={inputStyle} />
+      <label style={{ display: 'block', marginBottom: 14 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.head}</span>
+        <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} />
       </label>
 
-      <label style={labelStyle}>
-        <span style={spanStyle}>Speed n [rpm]</span>
-        <input type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} style={inputStyle} />
+      <label style={{ display: 'block', marginBottom: 14 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.speed}</span>
+        <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} />
       </label>
 
-      <button
-        type="submit"
-        disabled={loading}
-        style={{
-          width: '100%', padding: '10px 20px', background: loading ? '#999' : '#2E8B57', color: '#fff',
-          border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 600,
-          cursor: loading ? 'wait' : 'pointer', transition: 'background 0.15s',
-        }}
-      >
-        {loading ? 'Computing...' : 'Run Sizing'}
+      <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+        {loading ? t.computing : t.runSizing}
       </button>
 
       {error && (
-        <div style={{ marginTop: 10, padding: 8, background: '#fde8e8', borderRadius: 4, color: '#c0392b', fontSize: 12 }}>
+        <div style={{ marginTop: 10, padding: 8, background: 'rgba(239,68,68,0.15)', borderRadius: 4, color: 'var(--accent-danger)', fontSize: 12 }}>
           {error}
         </div>
       )}

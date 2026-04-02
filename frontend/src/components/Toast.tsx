@@ -12,10 +12,10 @@ interface Props {
 }
 
 const COLORS = {
-  success: { bg: '#e8f5e9', border: '#4CAF50', text: '#2E7D32' },
-  error: { bg: '#fde8e8', border: '#F44336', text: '#C62828' },
-  warning: { bg: '#fff3e0', border: '#FF9800', text: '#E65100' },
-  info: { bg: '#e3f2fd', border: '#2196F3', text: '#1565C0' },
+  success: { bg: 'rgba(76,175,80,0.12)', border: '#4CAF50', text: '#4CAF50' },
+  error: { bg: 'rgba(239,68,68,0.12)', border: '#ef4444', text: '#ef4444' },
+  warning: { bg: 'rgba(255,213,79,0.12)', border: '#FFD54F', text: '#FFD54F' },
+  info: { bg: 'rgba(33,150,243,0.12)', border: '#2196F3', text: '#2196F3' },
 }
 
 export default function Toast({ messages, onDismiss }: Props) {
@@ -39,7 +39,7 @@ function ToastItem({ message, onDismiss }: { message: ToastMessage; onDismiss: (
   return (
     <div style={{
       padding: '10px 16px', background: c.bg, border: `1px solid ${c.border}`,
-      borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       display: 'flex', alignItems: 'center', gap: 10, maxWidth: 360,
       animation: 'slideIn 0.2s ease-out',
     }}>

@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
+import t from '../i18n/pt-br'
 
 interface Props {
   children: ReactNode
@@ -28,21 +29,19 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return this.props.fallback || (
         <div style={{
-          padding: 24, margin: 16, background: '#fde8e8', borderRadius: 8,
-          border: '1px solid #f5c6cb',
+          padding: 24, margin: 16, background: 'rgba(239,68,68,0.1)', borderRadius: 8,
+          border: '1px solid var(--accent-danger)',
         }}>
-          <h3 style={{ color: '#c0392b', margin: '0 0 8px' }}>Something went wrong</h3>
-          <p style={{ fontSize: 13, color: '#666', margin: '0 0 12px' }}>
-            {this.state.error?.message || 'An unexpected error occurred'}
+          <h3 style={{ color: 'var(--accent-danger)', margin: '0 0 8px' }}>{t.somethingWentWrong}</h3>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+            {this.state.error?.message || t.unexpectedError}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: '6px 16px', background: '#c0392b', color: '#fff',
-              border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13,
-            }}
+            className="btn-primary"
+            style={{ padding: '6px 16px', fontSize: 13 }}
           >
-            Try Again
+            {t.tryAgain}
           </button>
         </div>
       )

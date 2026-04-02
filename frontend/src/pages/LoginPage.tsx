@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import t from '../i18n/pt-br'
 
 interface Props {
   onLogin: (user: any, token: string) => void
@@ -15,83 +16,54 @@ export default function LoginPage({ onLogin }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setError(null)
-
+    setLoading(true); setError(null)
     try {
       const endpoint = isRegister ? '/api/v1/auth/register' : '/api/v1/auth/login'
-      const body = isRegister
-        ? { email, password, name, company: company || undefined }
-        : { email, password }
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.detail || `Error ${res.status}`)
-      }
-
+      const body = isRegister ? { email, password, name, company: company || undefined } : { email, password }
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || `Erro ${res.status}`) }
       const data = await res.json()
       localStorage.setItem('hpe_token', data.access_token)
       onLogin(data.user, data.access_token)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '10px 12px', border: '1px solid #d0d0d0',
-    borderRadius: 6, fontSize: 14, boxSizing: 'border-box', outline: 'none',
+    } catch (err: any) { setError(err.message) } finally { setLoading(false) }
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f6f8', fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div style={{ width: 380, background: '#fff', borderRadius: 12, padding: 32, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+      <div style={{ width: 380, background: 'var(--bg-elevated)', borderRadius: 12, padding: 32, border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-md)' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <h1 style={{ color: '#2E8B57', fontSize: 22, margin: '0 0 4px' }}>Higra Pump Engine</h1>
-          <p style={{ color: '#999', fontSize: 13, margin: 0 }}>{isRegister ? 'Create your account' : 'Sign in to your account'}</p>
+          <h1 style={{ color: 'var(--accent)', fontSize: 22, margin: '0 0 4px' }}>{t.appName}</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>{isRegister ? t.createAccount : t.signIn}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           {isRegister && (
             <>
               <label style={{ display: 'block', marginBottom: 12 }}>
-                <span style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Name</span>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} style={inputStyle} required />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.name}</span>
+                <input className="input" type="text" value={name} onChange={e => setName(e.target.value)} required />
               </label>
               <label style={{ display: 'block', marginBottom: 12 }}>
-                <span style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Company</span>
-                <input type="text" value={company} onChange={e => setCompany(e.target.value)} style={inputStyle} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.company}</span>
+                <input className="input" type="text" value={company} onChange={e => setCompany(e.target.value)} />
               </label>
             </>
           )}
-
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Email</span>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} required />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.email}</span>
+            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
           </label>
-
           <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Password</span>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} required minLength={6} />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.password}</span>
+            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
           </label>
 
-          <button type="submit" disabled={loading} style={{
-            width: '100%', padding: 12, background: loading ? '#999' : '#2E8B57', color: '#fff',
-            border: 'none', borderRadius: 6, fontSize: 15, fontWeight: 600,
-            cursor: loading ? 'wait' : 'pointer',
-          }}>
-            {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}
+          <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+            {loading ? t.pleaseWait : isRegister ? t.createAccountBtn : t.signInBtn}
           </button>
 
           {error && (
-            <div style={{ marginTop: 12, padding: 8, background: '#fde8e8', borderRadius: 4, color: '#c0392b', fontSize: 12, textAlign: 'center' }}>
+            <div style={{ marginTop: 12, padding: 8, background: 'rgba(239,68,68,0.15)', borderRadius: 4, color: 'var(--accent-danger)', fontSize: 12, textAlign: 'center' }}>
               {error}
             </div>
           )}
@@ -99,17 +71,16 @@ export default function LoginPage({ onLogin }: Props) {
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button onClick={() => { setIsRegister(!isRegister); setError(null) }} style={{
-            background: 'none', border: 'none', color: '#2E8B57', cursor: 'pointer', fontSize: 13,
+            background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13,
           }}>
-            {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+            {isRegister ? t.alreadyHaveAccount : t.noAccount}
           </button>
         </div>
-
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <button onClick={() => onLogin({ name: 'Dev User', email: 'dev@higra.com.br' }, '')} style={{
-            background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 12,
+            background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12,
           }}>
-            Skip login (dev mode)
+            {t.skipLogin}
           </button>
         </div>
       </div>

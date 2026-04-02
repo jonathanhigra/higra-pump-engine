@@ -102,5 +102,5 @@ spawnProcess("frontend", "npx", ["vite"], FRONTEND_DIR, GREEN, {});
 
 console.log(`
 ${CYAN}[backend]${RESET}  http://localhost:8000
-${GREEN}[frontend]${RESET} http://localhost:5173
+${GREEN}[frontend]${RESET} http://localhost:3000
 `);

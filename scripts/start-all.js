@@ -10,8 +10,9 @@
  *   npm run start:all
  */
 
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const ROOT = path.resolve(__dirname, "..");
 const BACKEND_DIR = path.join(ROOT, "backend");
@@ -20,17 +21,19 @@ const FRONTEND_DIR = path.join(ROOT, "frontend");
 // ANSI colors for log prefixes
 const CYAN = "\x1b[36m";
 const GREEN = "\x1b[32m";
+const YELLOW = "\x1b[33m";
 const RESET = "\x1b[0m";
 
 const children = [];
 
-function spawnProcess(name, command, args, cwd, color) {
+function spawnProcess(name, command, args, cwd, color, env) {
   console.log(`${color}[${name}]${RESET} Starting: ${command} ${args.join(" ")}`);
 
   const child = spawn(command, args, {
     cwd,
     stdio: ["inherit", "pipe", "pipe"],
     shell: true,
+    env: { ...process.env, ...env },
   });
 
   child.stdout.on("data", (data) => {
@@ -71,17 +74,31 @@ function cleanup() {
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
 
+// --- Ensure frontend dependencies are installed ---
+const nodeModules = path.join(FRONTEND_DIR, "node_modules");
+if (!fs.existsSync(nodeModules)) {
+  console.log(`${YELLOW}[setup]${RESET} Installing frontend dependencies...`);
+  execSync("npm install", { cwd: FRONTEND_DIR, stdio: "inherit" });
+}
+
 // --- Start Backend ---
+// Add backend/src to PYTHONPATH so uvicorn can find the hpe package
+const srcDir = path.join(BACKEND_DIR, "src");
+const currentPythonPath = process.env.PYTHONPATH || "";
+const pythonPath = currentPythonPath ? `${srcDir};${currentPythonPath}` : srcDir;
+
 spawnProcess(
   "backend",
   "python",
   ["-m", "uvicorn", "hpe.api.app:app", "--reload", "--port", "8000"],
   BACKEND_DIR,
-  CYAN
+  CYAN,
+  { PYTHONPATH: pythonPath }
 );
 
 // --- Start Frontend ---
-spawnProcess("frontend", "npm", ["run", "dev"], FRONTEND_DIR, GREEN);
+// Use npx to ensure vite is found from local node_modules
+spawnProcess("frontend", "npx", ["vite"], FRONTEND_DIR, GREEN, {});
 
 console.log(`
 ${CYAN}[backend]${RESET}  http://localhost:8000

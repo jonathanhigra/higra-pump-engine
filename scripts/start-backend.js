@@ -10,6 +10,9 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const BACKEND_DIR = path.join(__dirname, "..", "backend");
+const srcDir = path.join(BACKEND_DIR, "src");
+const currentPythonPath = process.env.PYTHONPATH || "";
+const pythonPath = currentPythonPath ? `${srcDir};${currentPythonPath}` : srcDir;
 
 const child = spawn(
   "python",
@@ -18,6 +21,7 @@ const child = spawn(
     cwd: BACKEND_DIR,
     stdio: "inherit",
     shell: true,
+    env: { ...process.env, PYTHONPATH: pythonPath },
   }
 );
 

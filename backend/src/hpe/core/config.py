@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     output_dir: Path = Path("output")
     templates_dir: Path = Path("data/templates")
 
-    model_config = {"env_prefix": "HPE_", "env_file": ".env"}
+    model_config = {"env_prefix": "HPE_", "env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

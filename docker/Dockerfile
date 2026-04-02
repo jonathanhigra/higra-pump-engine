@@ -6,11 +6,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[all]" || pip install --no-cache-dir .
-
+COPY pyproject.toml README.md ./
 COPY src/ src/
-COPY configs/ configs/
+COPY data/ data/
+
+RUN pip install --no-cache-dir . 2>/dev/null || \
+    pip install --no-cache-dir numpy scipy pydantic pydantic-settings \
+    fastapi uvicorn sqlalchemy alembic celery redis minio structlog \
+    deap optuna scikit-learn
 
 EXPOSE 8000
 

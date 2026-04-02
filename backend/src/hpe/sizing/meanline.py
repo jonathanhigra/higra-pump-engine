@@ -242,6 +242,9 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
         impeller_type=impeller_type,
     )
 
+    # A7: Basic volute sizing
+    volute_sizing = _size_volute_basic(imp, op, eta_h)
+
     result = SizingResult(
         specific_speed_ns=ns,
         specific_speed_nq=nq,
@@ -261,6 +264,7 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
         diffusion_ratio=diffusion_ratio,
         throat_area=throat_area,
         spanwise_blade_angles=spanwise_angles,
+        volute_sizing=volute_sizing,
         velocity_triangles=vt_result.as_dict(),
         meridional_profile=mp_result.as_dict(),
         warnings=warnings,
@@ -287,6 +291,32 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
     )
 
     return result
+
+
+def _size_volute_basic(imp, op, eta_h: float) -> dict:
+    """Basic volute sizing per Gülich (2014) §7.3.
+
+    Args:
+        imp: Impeller sizing result (needs d2, b2, u2).
+        op: OperatingPoint (needs flow_rate).
+        eta_h: Hydraulic efficiency (unused directly, kept for signature parity).
+
+    Returns:
+        Dict with cutwater_radius_m, throat_area_m2, sizing_parameter,
+        throat_velocity_ms.
+    """
+    r2 = imp.d2 / 2.0
+    u2 = imp.u2  # peripheral velocity at outlet [m/s]
+    c3_ref = 0.15 * u2  # throat velocity reference (Gülich)
+    a_throat = op.flow_rate / c3_ref if c3_ref > 0 else 0.0
+    r_cutwater = r2 * 1.05  # typical cutwater radius ratio
+    sizing_param = 1.2  # recommended by Gülich
+    return {
+        "cutwater_radius_m": round(r_cutwater, 4),
+        "throat_area_m2": round(a_throat, 6),
+        "sizing_parameter": sizing_param,
+        "throat_velocity_ms": round(c3_ref, 2),
+    }
 
 
 def _validate_machine_type(machine_type: MachineType, nq: float, warnings: list[str]) -> None:

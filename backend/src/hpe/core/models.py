@@ -168,6 +168,8 @@ class SizingResult:
     throat_area: float = 0.0
     # B6: spanwise blade angles at hub/mid/shroud LE
     spanwise_blade_angles: dict[str, Any] = field(default_factory=dict)
+    # A7: Basic volute sizing dict (cutwater, throat area, sizing parameter)
+    volute_sizing: dict[str, Any] = field(default_factory=dict)
     # Legacy dict fields for API compatibility
     velocity_triangles: dict[str, Any] = field(default_factory=dict)
     meridional_profile: dict[str, Any] = field(default_factory=dict)

@@ -345,6 +345,142 @@ def _add_outlet_extension(
     return hub + [ext_hub], shroud + [ext_shroud]
 
 
+# ---------------------------------------------------------------------------
+# Public Bezier helpers (A3)
+# ---------------------------------------------------------------------------
+
+def bezier_curve(
+    control_points: list[tuple[float, float]],
+    n_points: int = 50,
+) -> list[tuple[float, float]]:
+    """Evaluate a cubic Bezier curve from a list of 4 control points.
+
+    Args:
+        control_points: Exactly 4 (r, z) tuples: [CP0, CP1, CP2, CP3].
+        n_points: Number of output points.
+
+    Returns:
+        List of (r, z) tuples evaluated at uniform parameter t ∈ [0, 1].
+
+    Raises:
+        ValueError: If control_points does not have exactly 4 entries.
+    """
+    if len(control_points) != 4:
+        raise ValueError(
+            f"bezier_curve requires exactly 4 control points, got {len(control_points)}."
+        )
+    cp = BezierControlPoints(
+        p0=control_points[0],
+        p1=control_points[1],
+        p2=control_points[2],
+        p3=control_points[3],
+    )
+    return _eval_cubic_bezier(cp, n_points)
+
+
+@dataclass
+class BezierMeridional:
+    """Full meridional channel defined by two cubic Bezier curves.
+
+    Matches ADT TURBOdesign1 MRI-style parameterisation with explicit
+    leading-edge curvature control and trailing-edge inclination.
+
+    Attributes:
+        hub_cp:   4 control points for the hub curve [(r,z), ...].
+                  CP0 = inlet, CP1 = near-inlet handle, CP2 = near-outlet
+                  handle, CP3 = outlet.
+        shroud_cp: 4 control points for the shroud curve (same ordering).
+        le_curvature_coeff: Leading-edge curvature coefficient, analogous
+            to ADT's ADVANCED IMPELLER LEADING EDGE CURVATURE COEFFICIENT.
+            Controls how much the inner control point (CP1) is offset
+            axially to impose inlet curvature. Range ≈ 0.01–0.15.
+            Default 0.05 (neutral).
+        te_inclination: Trailing-edge inclination angle [deg].  A non-zero
+            value tilts the outlet tangent of both curves by adjusting CP2
+            before evaluation.  Positive = hub tilts outward (more radial
+            TE), negative = more axial TE.  Default 0.0 (tangent follows
+            natural Bezier).
+        n_points: Number of discretisation points per curve. Default 50.
+    """
+
+    hub_cp: list[tuple[float, float]]      # 4 control points for hub
+    shroud_cp: list[tuple[float, float]]   # 4 control points for shroud
+    le_curvature_coeff: float = 0.05       # ADT LE curvature coefficient
+    te_inclination: float = 0.0            # Trailing-edge inclination [deg]
+    n_points: int = 50
+
+    def _apply_le_curvature(
+        self,
+        cp: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        """Offset CP1 axially to impose leading-edge curvature.
+
+        The axial (z) offset on CP1 is proportional to `le_curvature_coeff`
+        and the z-span from CP0 to CP3.
+        """
+        if abs(self.le_curvature_coeff) < 1e-9:
+            return cp
+        z_span = abs(cp[3][1] - cp[0][1])
+        dz = self.le_curvature_coeff * z_span
+        # Positive coeff → push CP1 further downstream (axially) to
+        # tighten the curvature at the leading edge.
+        r1, z1 = cp[1]
+        return [cp[0], (r1, z1 + dz), cp[2], cp[3]]
+
+    def _apply_te_inclination(
+        self,
+        cp: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        """Tilt CP2 by te_inclination degrees to control TE tangent direction.
+
+        The CP2→CP3 vector is rotated by the inclination angle in the (r,z)
+        plane.  This mimics ADT's trailing-edge inclination control.
+        """
+        if abs(self.te_inclination) < 1e-9:
+            return cp
+        angle_rad = math.radians(self.te_inclination)
+        r3, z3 = cp[3]
+        r2, z2 = cp[2]
+        # Vector from CP3 toward CP2 (reverse tangent at outlet)
+        dr = r2 - r3
+        dz = z2 - z3
+        length = math.hypot(dr, dz)
+        if length < 1e-12:
+            return cp
+        # Rotate by angle
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        dr_rot = dr * cos_a - dz * sin_a
+        dz_rot = dr * sin_a + dz * cos_a
+        new_r2 = r3 + dr_rot * (length / math.hypot(dr_rot, dz_rot + 1e-30))
+        new_z2 = z3 + dz_rot * (length / math.hypot(dr_rot, dz_rot + 1e-30))
+        return [cp[0], cp[1], (new_r2, new_z2), cp[3]]
+
+    def _prepare_cp(
+        self,
+        cp: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        """Apply LE curvature and TE inclination modifications."""
+        cp = self._apply_le_curvature(list(cp))
+        cp = self._apply_te_inclination(cp)
+        return cp
+
+    def hub_curve(self) -> list[tuple[float, float]]:
+        """Return discretised hub curve after applying all modifications."""
+        return bezier_curve(self._prepare_cp(self.hub_cp), self.n_points)
+
+    def shroud_curve(self) -> list[tuple[float, float]]:
+        """Return discretised shroud curve after applying all modifications."""
+        return bezier_curve(self._prepare_cp(self.shroud_cp), self.n_points)
+
+    def to_meridional_channel(self) -> MeridionalChannel:
+        """Convert to a MeridionalChannel for downstream use."""
+        return MeridionalChannel(
+            hub_points=self.hub_curve(),
+            shroud_points=self.shroud_curve(),
+        )
+
+
 def _compute_curvature(
     points: list[tuple[float, float]],
 ) -> list[float]:

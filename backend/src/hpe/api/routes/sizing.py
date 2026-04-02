@@ -348,6 +348,61 @@ def sizing_throat(flow_rate: float, head: float, rpm: float) -> dict:
     }
 
 
+@router.get("/sizing/reference_geometry")
+def reference_geometry_endpoint(nq: float | None = None) -> dict:
+    """Return reference pump geometry from the empirical literature database (A6).
+
+    If `nq` is provided, returns the single best-matching entry for that
+    specific speed (Nq metric).  Otherwise returns the full database.
+    """
+    from hpe.sizing.geometry_database import get_reference_geometry, get_all_references
+
+    if nq is not None:
+        ref = get_reference_geometry(nq)
+        if ref is None:
+            raise HTTPException(status_code=404, detail=f"No reference geometry found for Nq={nq}.")
+        return {
+            "source": ref.source,
+            "nq_min": ref.nq_range[0],
+            "nq_max": ref.nq_range[1],
+            "d1_d2": ref.d1_d2,
+            "b2_d2": ref.b2_d2,
+            "beta2_deg": ref.beta2_deg,
+            "blade_count": ref.blade_count,
+            "psi": ref.psi,
+            "eta_best": ref.eta_best,
+            "notes": ref.notes,
+        }
+    return {"references": get_all_references()}
+
+
+@router.post("/sizing/inducer")
+def inducer_endpoint(
+    flow_rate: float,
+    rpm: float,
+    npsh_available: float = 5.0,
+    d_impeller: float = 0.0,
+) -> dict:
+    """Size an axial inducer for improved NPSH."""
+    from hpe.sizing.inducer import size_inducer
+    ind = size_inducer(
+        flow_rate=flow_rate,
+        rpm=rpm,
+        npsh_available=npsh_available,
+        d_impeller=d_impeller,
+    )
+    return {
+        "d_tip_mm": round(ind.d_tip * 1000, 1),
+        "d_hub_mm": round(ind.d_hub * 1000, 1),
+        "hub_ratio": round(ind.hub_ratio, 3),
+        "blade_count": ind.blade_count,
+        "helix_angle_deg": round(ind.helix_angle, 1),
+        "length_mm": round(ind.length * 1000, 1),
+        "npsh_improvement_m": round(ind.npsh_improvement, 2),
+        "sigma_i": round(ind.sigma_i, 4),
+    }
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 def optimize_endpoint(req: OptimizeRequest) -> OptimizeResponse:
     """Run multi-objective optimization."""

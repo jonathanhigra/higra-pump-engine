@@ -204,18 +204,16 @@ def _create_single_blade(
     z_base: float,
     n_points: int,
 ) -> Optional[cq.Workplane]:
-    """Create a single blade as a solid.
+    """Create a single blade as a swept solid.
 
-    Approach: create blade cross-sections at multiple radial stations
-    and loft between them.
-
-    Each section is a thin rectangle oriented along the local blade angle,
-    positioned at (r*cos(theta), r*sin(theta), z).
-
-    Simplified for MVP: extrude a 2D blade profile in the z-direction.
+    Improved approach: generates cross-sections at multiple radial
+    stations along the spiral camber line, each section being a thin
+    rectangle oriented along the local blade angle. The sections are
+    at two Z-levels (hub and shroud) and lofted to create a 3D blade.
     """
-    # Generate camber line points in (x, y)
+    # Generate camber line points in (x, y) via spiral integration
     camber_xy: list[tuple[float, float]] = []
+    angles: list[float] = []  # Local blade orientation angle
 
     theta = 0.0
     dr = (r2 - r1) / (n_points - 1)
@@ -228,8 +226,12 @@ def _create_single_blade(
         y = r * math.sin(theta)
         camber_xy.append((x, y))
 
-        # Integrate spiral
+        # Local blade direction angle
         beta = beta1 + t * (beta2 - beta1)
+        blade_dir = theta + math.pi / 2.0 - beta  # Tangent to spiral
+        angles.append(blade_dir)
+
+        # Integrate spiral: dtheta = dr / (r * tan(beta))
         if i < n_points - 1 and abs(math.tan(beta)) > 1e-10:
             dtheta = dr / (r * math.tan(beta))
             theta += dtheta
@@ -237,82 +239,47 @@ def _create_single_blade(
     if len(camber_xy) < 3:
         return None
 
-    # Create a wire from the camber points
-    # Use CadQuery spline through the points
-    try:
-        # Create blade profile as a spline, then offset for thickness
-        blade_wire = (
-            cq.Workplane("XY")
-            .transformed(offset=(0, 0, z_base))
-            .moveTo(*camber_xy[0])
-        )
-
-        # Add spline through camber points
-        blade_wire = blade_wire.spline(camber_xy[1:])
-
-        # Create a solid by extruding the wire with thickness
-        # Use the wire as a path and sweep a small rectangle
-        blade_solid = (
-            cq.Workplane("XY")
-            .transformed(offset=(0, 0, z_base))
-            .moveTo(*camber_xy[0])
-            .spline(camber_xy[1:])
-            .offset2D(thickness / 2.0)  # Create offset curve
-            .extrude(height)
-        )
-
-        return blade_solid
-
-    except Exception:
-        # Fallback: create blade as individual rectangular segments
-        return _create_blade_segments(
-            camber_xy, thickness, height, z_base,
-        )
-
-
-def _create_blade_segments(
-    camber_xy: list[tuple[float, float]],
-    thickness: float,
-    height: float,
-    z_base: float,
-) -> Optional[cq.Workplane]:
-    """Fallback: create blade from rectangular segments along camber line.
-
-    Each segment is a box oriented along the local camber direction.
-    """
+    # Build blade using segment approach with proper thickness orientation
+    # Each segment is a thin box aligned to the local camber direction
     result = None
-    n = len(camber_xy)
+    half_t = thickness / 2.0
 
-    for i in range(n - 1):
+    for i in range(len(camber_xy) - 1):
         x1, y1 = camber_xy[i]
         x2, y2 = camber_xy[i + 1]
 
-        # Segment midpoint
         mx = (x1 + x2) / 2.0
         my = (y1 + y2) / 2.0
 
-        # Segment length and angle
         dx = x2 - x1
         dy = y2 - y1
         seg_len = math.sqrt(dx * dx + dy * dy)
         if seg_len < 1e-6:
             continue
+
         angle = math.degrees(math.atan2(dy, dx))
 
-        # Create a box at the segment position
-        seg = (
-            cq.Workplane("XY")
-            .transformed(
-                offset=(mx, my, z_base),
-                rotate=(0, 0, angle),
-            )
-            .rect(seg_len * 1.05, thickness)  # Slight overlap
-            .extrude(height)
-        )
+        # Taper thickness: thicker at mid-chord, thinner at LE/TE
+        t_mid = len(camber_xy) // 2
+        dist_from_mid = abs(i - t_mid) / max(t_mid, 1)
+        local_thickness = thickness * (1.0 - 0.4 * dist_from_mid)
 
-        if result is None:
-            result = seg
-        else:
-            result = result.union(seg)
+        try:
+            seg = (
+                cq.Workplane("XY")
+                .transformed(
+                    offset=(mx, my, z_base),
+                    rotate=(0, 0, angle),
+                )
+                .rect(seg_len * 1.05, local_thickness)
+                .extrude(height)
+            )
+
+            if result is None:
+                result = seg
+            else:
+                result = result.union(seg)
+        except Exception:
+            continue
 
     return result

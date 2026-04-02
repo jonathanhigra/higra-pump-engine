@@ -5,6 +5,7 @@ import CurvesChart from './components/CurvesChart'
 import VelocityTriangle from './components/VelocityTriangle'
 import LossBreakdownChart from './components/LossBreakdownChart'
 import StressView from './components/StressView'
+import ImpellerViewer from './components/ImpellerViewer'
 
 export interface SizingResult {
   specific_speed_nq: number
@@ -32,7 +33,7 @@ export interface CurvePoint {
   npsh_required: number
 }
 
-type Tab = 'results' | 'curves' | 'velocity' | 'losses' | 'stress'
+type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
 
 export default function App() {
   const [sizing, setSizing] = useState<SizingResult | null>(null)
@@ -41,10 +42,12 @@ export default function App() {
   const [stress, setStress] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<Tab>('results')
+  const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'results', label: 'Sizing' },
     { key: 'curves', label: 'Curves' },
+    { key: '3d', label: '3D View' },
     { key: 'velocity', label: 'Velocity' },
     { key: 'losses', label: 'Losses' },
     { key: 'stress', label: 'Stress' },
@@ -71,11 +74,12 @@ export default function App() {
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
         <div>
           <SizingForm
-            onResult={(result, curvePoints, lossData, stressData) => {
+            onResult={(result, curvePoints, lossData, stressData, op) => {
               setSizing(result)
               setCurves(curvePoints)
               setLosses(lossData)
               setStress(stressData)
+              if (op) setOpPoint(op)
             }}
             loading={loading}
             setLoading={setLoading}
@@ -106,6 +110,7 @@ export default function App() {
 
               {tab === 'results' && <ResultsView sizing={sizing} />}
               {tab === 'curves' && <CurvesChart points={curves} />}
+              {tab === '3d' && <ImpellerViewer flowRate={opPoint.flowRate} head={opPoint.head} rpm={opPoint.rpm} />}
               {tab === 'velocity' && <VelocityTriangle triangles={sizing.velocity_triangles} />}
               {tab === 'losses' && <LossBreakdownChart losses={losses} />}
               {tab === 'stress' && <StressView stress={stress} />}

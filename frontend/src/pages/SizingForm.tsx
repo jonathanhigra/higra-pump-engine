@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 
 interface Props {
-  onResult: (sizing: any, curves: any[], losses: any, stress: any) => void
+  onResult: (sizing: any, curves: any[], losses: any, stress: any, op?: { flowRate: number; head: number; rpm: number }) => void
   loading: boolean
   setLoading: (v: boolean) => void
 }
@@ -30,7 +30,7 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
         runStressAnalysis(q, h, n).catch(() => null),
       ])
 
-      onResult(sizing, curvesData.points || [], lossData, stressData)
+      onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: parseFloat(flowRate), head: h, rpm: n })
     } catch (err: any) {
       setError(err.message || 'Request failed')
     } finally {

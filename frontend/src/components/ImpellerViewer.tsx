@@ -169,10 +169,11 @@ void pressureColor
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-const PS_COLOR = '#1e90ff'      // pressure side — vivid blue
-const SS_COLOR = '#c026d3'      // suction side — fuchsia/magenta
-const HUB_COLOR = '#374151'     // hub — dark steel
-const SPLITTER_COLOR = '#06b6d4' // splitter PS — teal/cyan
+// TURBOdesign-style metallic palette
+const BLADE_COLOR = '#b0b8c4'    // blade — brushed steel
+const BLADE_COLOR_ALT = '#8a929c' // blade backside — slightly darker
+const HUB_COLOR = '#6b7280'      // hub — medium steel
+const SPLITTER_COLOR = '#9ca3af'  // splitter — lighter steel
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
@@ -221,9 +222,9 @@ function BladeSurfaceMesh({
   )
 
   const highlight = isSelected || hovered
-  const psColor = showColormap ? '#ffffff' : (highlight ? '#60c8ff' : PS_COLOR)
-  const ssColor = showColormap ? '#ffffff' : (highlight ? '#e040ff' : SS_COLOR)
-  const emissive = isSelected ? '#003355' : hovered ? '#001a2a' : '#000000'
+  const psColor = showColormap ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
+  const ssColor = showColormap ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
+  const emissive = isSelected ? '#1a2530' : hovered ? '#0f1a22' : '#000000'
 
   return (
     <>
@@ -237,8 +238,8 @@ function BladeSurfaceMesh({
           color={psColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.55}
-          roughness={0.28}
+          metalness={0.72}
+          roughness={0.22}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow
@@ -251,8 +252,8 @@ function BladeSurfaceMesh({
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.55}
-          roughness={0.28}
+          metalness={0.72}
+          roughness={0.22}
         />
       </mesh>
     </>
@@ -279,17 +280,17 @@ function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface;
           vertexColors={showColormap}
           color={showColormap ? '#ffffff' : SPLITTER_COLOR}
           side={THREE.DoubleSide}
-          metalness={0.50}
-          roughness={0.32}
+          metalness={0.68}
+          roughness={0.25}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow>
         <meshStandardMaterial
           vertexColors={showColormap}
-          color={showColormap ? '#ffffff' : '#0891b2'}
+          color={showColormap ? '#ffffff' : '#8a929c'}
           side={THREE.DoubleSide}
-          metalness={0.50}
-          roughness={0.32}
+          metalness={0.68}
+          roughness={0.25}
         />
       </mesh>
     </>
@@ -302,10 +303,10 @@ function HubMesh({ profile }: { profile: BladePoint[] }) {
   return (
     <>
       <mesh geometry={geo} receiveShadow castShadow>
-        <meshStandardMaterial color={HUB_COLOR} metalness={0.75} roughness={0.30} />
+        <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} />
       </mesh>
       <mesh geometry={discGeo} receiveShadow castShadow>
-        <meshStandardMaterial color={HUB_COLOR} metalness={0.75} roughness={0.30} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
       </mesh>
     </>
   )
@@ -323,17 +324,17 @@ function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; p
 function SceneLights() {
   return (
     <>
-      <ambientLight intensity={0.35} />
-      {/* Key light — top front */}
-      <directionalLight position={[3, 5, 4]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
-      {/* Fill light — left */}
-      <directionalLight position={[-4, 2, 2]} intensity={0.6} color="#b0d4ff" />
-      {/* Rim light — back right */}
-      <directionalLight position={[2, -3, -3]} intensity={0.45} color="#ffccff" />
-      {/* Under fill */}
-      <directionalLight position={[0, -4, 2]} intensity={0.2} color="#ffffff" />
-      {/* Point at center for blade edge highlights */}
-      <pointLight position={[0, 0, 2]} intensity={0.8} distance={8} color="#ffffff" />
+      <ambientLight intensity={0.50} />
+      {/* Key light — front-top, neutral white */}
+      <directionalLight position={[2, 3, 5]} intensity={1.8} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
+      {/* Fill light — left side, cool white */}
+      <directionalLight position={[-4, 1, 3]} intensity={0.7} color="#e8eef4" />
+      {/* Rim light — behind, subtle */}
+      <directionalLight position={[1, -2, -4]} intensity={0.35} color="#d0d8e0" />
+      {/* Under fill for blade undersides */}
+      <directionalLight position={[0, -3, 1]} intensity={0.25} color="#ffffff" />
+      {/* Point at center for blade edge definition */}
+      <pointLight position={[0, 0, 3]} intensity={0.6} distance={10} color="#f0f4f8" />
     </>
   )
 }
@@ -585,7 +586,8 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[2.2, 1.6, 2.0]} fov={40} />
+      {/* TURBOdesign-style: looking into the eye from slightly above */}
+      <PerspectiveCamera makeDefault position={[0.8, 0.6, 3.2]} fov={36} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={0.5} maxDistance={8} />
       <SceneLights />
       <ClipController clipZ={clipZ} />
@@ -612,7 +614,7 @@ function Scene({
       <ParticleSystem data={data} active={showParticles} paused={paused} />
 
       {/* Floor grid */}
-      <gridHelper args={[6, 24, '#1a2a3a', '#141e27']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
+      <gridHelper args={[6, 24, '#2a3040', '#222838']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
     </>
   )
 }
@@ -626,7 +628,7 @@ export default function ImpellerViewer({
   const [data, setData] = useState<ImpellerData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [paused, setPaused] = useState(false)
+  const [paused, setPaused] = useState(true)
   const [showSplitters, setShowSplitters] = useState(false)
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
@@ -707,7 +709,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
+    <Canvas shadows style={{ width: '100%', height: '100%', background: '#1a1f2e' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
@@ -728,8 +730,7 @@ export default function ImpellerViewer({
         <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
           {!showColormap && (
             <>
-              <LegendItem color={PS_COLOR} label="LP (pressão)" />
-              <LegendItem color={SS_COLOR} label="LS (sucção)" />
+              <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
             </>
           )}
@@ -741,7 +742,7 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#090d12', position: 'relative' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#1a1f2e', position: 'relative' }}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -786,7 +787,7 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: '#090d12' }}>
+      <div style={{ width: '100%', height: '100%', background: '#1a1f2e' }}>
         {canvasEl}
       </div>
 
@@ -805,9 +806,8 @@ export default function ImpellerViewer({
           <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13 }}>HPE</span>
           {!showColormap && (
             <>
-              <LegendItem color={PS_COLOR} label="LP" />
-              <LegendItem color={SS_COLOR} label="LS" />
-              <LegendItem color={HUB_COLOR} label="Hub" />
+              <LegendItem color={BLADE_COLOR} label="Pás" />
+              <LegendItem color={HUB_COLOR} label="Cubo" />
             </>
           )}
           {showColormap && (

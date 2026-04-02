@@ -1,14 +1,14 @@
 FROM node:20-alpine AS build
 
 WORKDIR /app
-COPY frontend/package.json frontend/tsconfig.json ./
+COPY package.json tsconfig.json ./
 RUN npm install
 
-COPY frontend/src/ src/
-COPY frontend/index.html .
+COPY src/ src/
+COPY index.html .
 RUN npm run build || true
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

@@ -9,6 +9,9 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -38,4 +41,4 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
-          file: coverage.xml
+          file: backend/coverage.xml

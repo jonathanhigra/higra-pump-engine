@@ -6,9 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml ./
 COPY src/ src/
-COPY data/ data/
 
 RUN pip install --no-cache-dir . 2>/dev/null || \
     pip install --no-cache-dir numpy scipy pydantic pydantic-settings \

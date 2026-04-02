@@ -1,0 +1,18 @@
+{
+  "name": "higra-pump-engine",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Platform for design, analysis and optimization of hydraulic turbomachinery",
+  "scripts": {
+    "start:all": "node scripts/start-all.js",
+    "start:backend": "node scripts/start-backend.js",
+    "start:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "cd backend && python -m pytest tests/ -v",
+    "lint": "cd backend && ruff check src/ tests/",
+    "typecheck": "cd backend && mypy src/hpe/"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0"
+  }
+}

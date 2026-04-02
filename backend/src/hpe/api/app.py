@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+# Load .env at startup
+from pathlib import Path
+import os
+_env = Path(__file__).parents[3] / ".env"
+if _env.exists():
+    for _line in _env.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +29,7 @@ from hpe.api.routes.io_routes import router as io_router
 from hpe.api.routes.blade_ext import router as blade_ext_router
 from hpe.api.auth import router as auth_router
 from hpe.api.routes.design_db_routes import router as design_db_router
+from hpe.api.routes.db_routes import router as db_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -50,6 +62,7 @@ app.include_router(optimize_ext_router)
 app.include_router(io_router)
 app.include_router(blade_ext_router)
 app.include_router(design_db_router)
+app.include_router(db_router)
 
 
 @app.get("/health")

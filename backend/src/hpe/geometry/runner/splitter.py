@@ -257,3 +257,131 @@ def _apply_splitter_thickness(
         ss.append((r, theta - dtheta))
 
     return ps, ss
+
+
+# ── TD1-style sizing helpers ──────────────────────────────────────────────────
+
+from dataclasses import dataclass as _dataclass, field as _field
+
+
+@_dataclass
+class SplitterSizingResult:
+    """Result of TD1-style splitter blade sizing (work-split approach)."""
+
+    enabled: bool
+    start_fraction: float
+    pitch_offset: float
+    work_ratio: float
+    splitter_blade_count: int          # same as main blade count (interleaved)
+    throat_area_reduction: float       # fractional reduction in throat area
+    loading_reduction_percent: float   # estimated blade loading reduction at throat
+    passage_width_mm: float            # main passage width at throat [mm]
+    splitter_start_m: float            # meridional distance where splitter starts [m]
+    warnings: list[str] = _field(default_factory=list)
+
+
+def size_splitter(
+    blade_count: int,
+    d2: float,
+    d1: float,
+    b2: float,
+    beta2: float,
+    start_fraction: float = 0.4,
+    pitch_offset: float = 0.5,
+    work_ratio: float = 0.5,
+    thickness_ratio: float = 0.8,
+) -> SplitterSizingResult:
+    """Size splitter blades for a centrifugal impeller (TD1-style work-split).
+
+    This function complements :func:`generate_splitter_blades` by providing
+    a higher-level sizing result with throat area and loading estimates, as
+    used in the ADT TurboDesign1 workflow.
+
+    Args:
+        blade_count: Number of main blades
+        d2: Outlet diameter [m]
+        d1: Inlet diameter [m]
+        b2: Outlet width [m]
+        beta2: Outlet blade angle [deg]
+        start_fraction: Where splitter starts (fraction of meridional chord)
+        pitch_offset: Pitchwise position (0.5 = centred between main blades)
+        work_ratio: Work fraction handled by splitter passage
+        thickness_ratio: Splitter/main blade thickness ratio
+
+    Returns:
+        SplitterSizingResult with sizing metrics and warnings
+    """
+    import math as _math
+
+    warnings: list[str] = []
+    beta2_rad = _math.radians(beta2)
+
+    # Meridional chord estimate: half-circumference of mean diameter / blade_count
+    d_mean = (d1 + d2) / 2
+    meridional_chord = _math.pi * d_mean / blade_count  # rough estimate [m]
+    splitter_start_m = start_fraction * meridional_chord
+
+    # Pitch at outlet
+    pitch_d2 = _math.pi * d2 / blade_count  # [m]
+
+    # Throat area reduction: splitter splits each passage into two at throat
+    throat_area_reduction = 1.0 - start_fraction  # approximate
+    loading_reduction_percent = throat_area_reduction * (1.0 - work_ratio) * 100.0
+
+    # Main passage width at throat
+    passage_width_mm = (pitch_d2 * _math.sin(beta2_rad)) * 1000  # mm
+
+    # Validation
+    if start_fraction < 0.25:
+        warnings.append("Splitter start < 25% meridional chord — may increase leading edge blockage")
+    if start_fraction > 0.65:
+        warnings.append("Splitter start > 65% — limited benefit, consider omitting")
+    if work_ratio < 0.35 or work_ratio > 0.65:
+        warnings.append(f"Work ratio {work_ratio:.2f} outside typical 0.35–0.65 range")
+    if blade_count * 2 > 18:
+        warnings.append(f"Total blade count with splitters ({blade_count * 2}) is high — check blockage")
+
+    return SplitterSizingResult(
+        enabled=True,
+        start_fraction=start_fraction,
+        pitch_offset=pitch_offset,
+        work_ratio=work_ratio,
+        splitter_blade_count=blade_count,
+        throat_area_reduction=throat_area_reduction,
+        loading_reduction_percent=loading_reduction_percent,
+        passage_width_mm=passage_width_mm,
+        splitter_start_m=splitter_start_m,
+        warnings=warnings,
+    )
+
+
+def splitter_loading_distribution(
+    main_loading: list[float],
+    start_fraction: float = 0.4,
+    work_ratio: float = 0.5,
+) -> list[float]:
+    """Compute splitter blade rVθ* loading profile from main blade loading.
+
+    The splitter passage carries work_ratio of total work starting from
+    start_fraction of meridional chord. Before that point, only the main
+    blade does work.
+
+    Args:
+        main_loading: rVθ* values at normalized m stations (0 to 1)
+        start_fraction: where splitter starts
+        work_ratio: fraction of work in splitter passage
+
+    Returns:
+        rVθ* profile for splitter blade (same length as main_loading)
+    """
+    n = len(main_loading)
+    result = []
+    for i, rv in enumerate(main_loading):
+        m_norm = i / max(1, n - 1)
+        if m_norm < start_fraction:
+            # Before splitter: no loading on splitter blade
+            result.append(0.0)
+        else:
+            # After splitter: scale main blade loading by work_ratio
+            result.append(rv * work_ratio)
+    return result

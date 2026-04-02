@@ -122,23 +122,26 @@ export default function App() {
     } finally { setSaving(false) }
   }
 
-  // Full sizing run — used by both SizingForm and 3D viewer floating form
+  // Full sizing run — sequential to avoid BaseHTTPMiddleware concurrency deadlock
   const handleRunSizing = async (q: number, h: number, n: number) => {
     setLoading(true)
     try {
       const qm3s = q / 3600
-      const [result, curvesData, lossData, stressData] = await Promise.all([
-        runSizing(qm3s, h, n),
-        getCurves(qm3s, h, n).catch(() => ({ points: [] })),
-        getLossBreakdown(qm3s, h, n).catch(() => null),
-        runStressAnalysis(qm3s, h, n).catch(() => null),
-      ])
+      // 1. Main sizing first
+      const result = await runSizing(qm3s, h, n)
       setSizing(result)
-      setCurves(curvesData.points || [])
-      setLosses(lossData)
-      setStress(stressData)
       setOpPoint({ flowRate: q, head: h, rpm: n })
       setSavedId(null)
+
+      // 2. Secondary data — sequential to avoid middleware serialization deadlock
+      const curvesData = await getCurves(qm3s, h, n).catch(() => ({ points: [] }))
+      setCurves(curvesData.points || [])
+
+      const lossData = await getLossBreakdown(qm3s, h, n).catch(() => null)
+      setLosses(lossData)
+
+      const stressData = await runStressAnalysis(qm3s, h, n).catch(() => null)
+      setStress(stressData)
     } finally {
       setLoading(false)
     }

@@ -133,12 +133,11 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
         ...(overrideB2 ? { override_b2: parseFloat(overrideB2) / 1000 } : {}),
       }
 
-      const [sizing, curvesData, lossData, stressData] = await Promise.all([
-        fetch('/api/v1/sizing', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(params) }).then(r => r.json()),
-        getCurves(q_m3s, h, n).catch(() => ({ points: [] })),
-        getLossBreakdown(q_m3s, h, n).catch(() => null),
-        runStressAnalysis(q_m3s, h, n).catch(() => null),
-      ])
+      // Sequential calls to avoid Starlette BaseHTTPMiddleware concurrency deadlock
+      const sizing = await fetch('/api/v1/sizing', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(params) }).then(r => r.json())
+      const curvesData = await getCurves(q_m3s, h, n).catch(() => ({ points: [] }))
+      const lossData = await getLossBreakdown(q_m3s, h, n).catch(() => null)
+      const stressData = await runStressAnalysis(q_m3s, h, n).catch(() => null)
       onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: q_m3h, head: h, rpm: n })
     } catch (err: any) {
       setError(err.message || 'Erro ao calcular')

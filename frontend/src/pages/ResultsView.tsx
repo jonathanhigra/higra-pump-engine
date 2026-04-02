@@ -140,6 +140,11 @@ export default function ResultsView({ sizing: s }: Props) {
             {row('Z (pás)', `${s.blade_count}`)}
             {row('β1', `${s.beta1?.toFixed(1)}°`, u.beta2_pct)}
             {row('β2', `${s.beta2?.toFixed(1)}°`, u.beta2_pct)}
+            {s.beta1 && s.beta2 && s.impeller_d1 && s.impeller_d2 && (() => {
+              const betaMean = (s.beta1 + s.beta2) / 2 * Math.PI / 180
+              const wrap = (Math.log(s.impeller_d2 / s.impeller_d1) / Math.tan(betaMean)) * 180 / Math.PI
+              return row('Ângulo de embrulho', `${wrap.toFixed(0)}°`)
+            })()}
             {s.slip_factor ? row('Fator deslizamento', s.slip_factor.toFixed(4)) : null}
             {s.throat_area ? row('Área de garganta', `${(s.throat_area * 1e4).toFixed(2)} cm²`) : null}
           </tbody></table>

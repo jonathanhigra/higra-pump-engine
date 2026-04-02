@@ -68,6 +68,7 @@ export default function App() {
   const [stress, setStress] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
+  const [advancedMode, setAdvancedMode] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('hpe_token')
@@ -161,14 +162,40 @@ export default function App() {
 
       <div className="content-header">
         <h1>{currentProject?.name || t.quickDesign}</h1>
-        {sizing && (
-          <div className="meta">
-            <span>Nq: <b>{sizing.specific_speed_nq.toFixed(1)}</b></span>
-            <span>D2: <b>{(sizing.impeller_d2 * 1000).toFixed(0)} mm</b></span>
-            <span>eta: <b>{(sizing.estimated_efficiency * 100).toFixed(1)}%</b></span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {sizing && (
+            <div className="meta">
+              <span>Nq: <b>{sizing.specific_speed_nq.toFixed(1)}</b></span>
+              <span>D2: <b>{(sizing.impeller_d2 * 1000).toFixed(0)} mm</b></span>
+              <span>eta: <b>{(sizing.estimated_efficiency * 100).toFixed(1)}%</b></span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setAdvancedMode(v => !v)}
+            style={{
+              fontSize: 11, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
+              border: `1px solid ${advancedMode ? 'var(--accent)' : 'var(--border-primary)'}`,
+              background: advancedMode ? 'rgba(0,160,223,0.15)' : 'transparent',
+              color: advancedMode ? 'var(--accent)' : 'var(--text-muted)',
+              fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
+            }}
+          >
+            {advancedMode ? '● Modo Avançado' : '○ Modo Avançado'}
+          </button>
+        </div>
       </div>
+      {advancedMode && (
+        <div style={{
+          marginBottom: 12, padding: '8px 14px',
+          background: 'rgba(0,160,223,0.06)',
+          border: '1px solid rgba(0,160,223,0.2)',
+          borderRadius: 6, fontSize: 12,
+          color: 'var(--text-secondary)',
+        }}>
+          <b style={{ color: 'var(--accent)' }}>Modo Avançado:</b> acesse mais análises na barra lateral esquerda — Triângulos, Perdas, Tensões, Otimização, Carregamento, Pressão, Multi-velocidade e Trecho Meridional.
+        </div>
+      )}
 
       {/* Two-column design layout: left = form + export, right = results + analysis tabs */}
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>

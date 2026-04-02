@@ -1,6 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import t from '../i18n/pt-br'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
+
+interface DesignHint {
+  eta_expected: number
+  beta2_recommended_deg: number
+  blade_count_recommended: number
+  b2_d2_recommended: number
+  splitter_recommended: boolean
+  notes?: string
+}
 
 // ----- constants -----
 const MACHINE_TYPES = [
@@ -61,11 +70,29 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
   const [customRho, setCustomRho] = useState('998')
   const [customMu, setCustomMu] = useState('1.0e-3')
   const [error, setError] = useState<string | null>(null)
+  const [designHint, setDesignHint] = useState<DesignHint | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fluid = FLUIDS.find(f => f.id === fluidId) || FLUIDS[0]
   const q_m3h = parseFloat(flowRate) || 0
   const nq = calcNq(q_m3h, parseFloat(head) || 0, parseFloat(rpm) || 0)
   const badge = nqBadge(nq)
+
+  useEffect(() => {
+    if (nq <= 0) { setDesignHint(null); return }
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      fetch('/api/v1/design/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ machine_type: machineType, nq }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setDesignHint(data) })
+        .catch(() => {})
+    }, 500)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [machineType, nq])
 
   const toggleUnit = () => {
     const next = unit === 'm3h' ? 'm3s' : 'm3h'
@@ -205,6 +232,36 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
             background: 'rgba(0,0,0,0.3)', border: `1px solid ${badge.color}40` }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: badge.color, flexShrink: 0 }} />
             <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
+          </div>
+        )}
+
+        {/* Design Hints panel */}
+        {designHint && nq > 0 && (
+          <div style={{
+            marginBottom: 12, padding: '10px 12px',
+            background: 'rgba(0,160,223,0.06)',
+            border: '1px solid rgba(0,160,223,0.2)',
+            borderRadius: 6, fontSize: 11,
+          }}>
+            <div style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 5, fontSize: 10, letterSpacing: '0.05em' }}>
+              DICAS DO BANCO DE DADOS
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', color: 'var(--text-secondary)' }}>
+              <span>η esperado: <b style={{ color: 'var(--text-primary)' }}>{(designHint.eta_expected * 100).toFixed(0)}%</b></span>
+              <span>β2 ref: <b style={{ color: 'var(--text-primary)' }}>{designHint.beta2_recommended_deg}°</b></span>
+              <span>Z recomendado: <b style={{ color: 'var(--text-primary)' }}>{designHint.blade_count_recommended}</b></span>
+              <span>b2/D2: <b style={{ color: 'var(--text-primary)' }}>{designHint.b2_d2_recommended.toFixed(3)}</b></span>
+            </div>
+            {designHint.splitter_recommended && (
+              <div style={{ marginTop: 5, color: '#a78bfa', fontSize: 10 }}>
+                ◆ Considere pás interpassagem (splitter) para Nq = {nq.toFixed(0)}
+              </div>
+            )}
+            {designHint.notes && (
+              <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 10, fontStyle: 'italic' }}>
+                {designHint.notes}
+              </div>
+            )}
           </div>
         )}
 

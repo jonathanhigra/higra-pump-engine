@@ -76,6 +76,20 @@ export default function ExportPanel({ sizing, op }: Props) {
         }
       },
     },
+    {
+      id: 'ptd', label: 'Arquivo PTD', icon: '\uD83D\uDCCA', ext: '.td1',
+      action: async () => {
+        const res = await fetch('/api/v1/io/td1_perfdata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flow_rate: q, head: h, rpm: n }),
+        })
+        if (res.ok) {
+          const text = await res.text()
+          downloadText(text, 'hpe_perfdata.td1')
+        }
+      },
+    },
   ]
 
   return (

@@ -46,6 +46,12 @@ def main() -> None:
     sp_cfd.add_argument("--procs", type=int, default=4, help="Number of processors")
     sp_cfd.add_argument("--run", action="store_true", help="Attempt to run OpenFOAM")
 
+    # --- batch ---
+    sp_batch = subparsers.add_parser("batch", help="Batch sizing from JSON input file")
+    sp_batch.add_argument("--input", "-i", type=str, required=True, help="Input JSON file (list of {flow_rate, head, rpm, name})")
+    sp_batch.add_argument("--output", "-o", type=str, default="results.json", help="Output file (default: results.json)")
+    sp_batch.add_argument("--format", "-f", type=str, default="json", choices=["json", "csv"], help="Output format: json or csv")
+
     # --- optimize ---
     sp_opt = subparsers.add_parser("optimize", help="Run multi-objective optimization")
     _add_operating_point_args(sp_opt)
@@ -70,6 +76,8 @@ def main() -> None:
         _cmd_cfd(args)
     elif args.command == "optimize":
         _cmd_optimize(args)
+    elif args.command == "batch":
+        _cmd_batch(args)
 
 
 def _add_operating_point_args(parser: argparse.ArgumentParser) -> None:
@@ -322,6 +330,66 @@ def _cmd_cfd(args: argparse.Namespace) -> None:
             print(f"    - {e}")
 
     print()
+
+
+def _cmd_batch(args: argparse.Namespace) -> None:
+    """Batch sizing from JSON input file.
+
+    Input format: list of {flow_rate, head, rpm, name} dicts.
+    Output format: json (default) or csv.
+    """
+    import json
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing import run_sizing
+
+    with open(args.input) as f:
+        jobs = json.load(f)
+
+    results = []
+    for job in jobs:
+        try:
+            op = OperatingPoint(
+                flow_rate=job["flow_rate"],
+                head=job["head"],
+                rpm=job["rpm"],
+            )
+            r = run_sizing(op)
+            entry = {
+                "name": job.get("name", ""),
+                "flow_rate": job["flow_rate"],
+                "head": job["head"],
+                "rpm": job["rpm"],
+                "nq": round(r.specific_speed_nq, 1),
+                "d2_mm": round(r.impeller_d2 * 1000, 1),
+                "b2_mm": round(r.impeller_b2 * 1000, 1),
+                "eta_pct": round(r.estimated_efficiency * 100, 1),
+                "npsh_r": round(r.estimated_npsh_r, 2),
+                "power_kw": round(r.estimated_power / 1000, 2),
+                "warnings": r.warnings,
+            }
+            results.append(entry)
+            print(f"  ✓ {job.get('name', job['flow_rate'])}: D2={entry['d2_mm']}mm η={entry['eta_pct']}%")
+        except Exception as e:
+            results.append({"name": job.get("name", ""), "error": str(e)})
+            print(f"  ✗ {job.get('name', '')}: {e}", file=sys.stderr)
+
+    if args.format == "csv":
+        import csv
+        import io as _io
+        buf = _io.StringIO()
+        if results:
+            fieldnames = [k for k in results[0] if k != "warnings"]
+            writer = csv.DictWriter(buf, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in results:
+                writer.writerow({k: v for k, v in r.items() if k != "warnings"})
+        with open(args.output, "w") as f:
+            f.write(buf.getvalue())
+    else:
+        with open(args.output, "w") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+
+    print(f"\n  ✓ {len(results)} resultados → {args.output}")
 
 
 def _save_curves_csv(curves, filepath: str) -> None:

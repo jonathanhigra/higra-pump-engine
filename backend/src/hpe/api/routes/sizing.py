@@ -463,6 +463,111 @@ def sizing_multi_speed(
     return {"families": families, "n_speeds": len(families)}
 
 
+@router.get("/units/convert")
+def units_convert(
+    unit_type: str,
+    value: float,
+    from_unit: str,
+    to_unit: str,
+    rho: float = 998.0,
+) -> dict:
+    """Convert a value between unit systems (I5).
+
+    Supported unit_type values and from/to_unit options:
+
+    - flow_rate:  m3s, gpm, m3h, ft3s
+    - head:       m, ft, psi
+    - power:      w, kw, hp
+    - diameter:   m, mm, in, ft
+    - pressure:   pa, psi, bar, kpa
+
+    Args:
+        unit_type: Category of unit (flow_rate, head, power, diameter, pressure).
+        value: Numeric value to convert.
+        from_unit: Source unit string (e.g. "m3s", "gpm").
+        to_unit: Target unit string (e.g. "gpm", "m3h").
+        rho: Fluid density [kg/m³] — only used when converting head ↔ pressure (default: 998.0).
+
+    Returns:
+        Dict with input_value, input_unit, output_value, output_unit, unit_type.
+    """
+    from hpe.units import UnitConverter
+
+    uc = UnitConverter
+    fu = from_unit.lower().replace("/", "").replace("³", "3").replace("²", "2")
+    tu = to_unit.lower().replace("/", "").replace("³", "3").replace("²", "2")
+
+    # Normalise to SI first, then convert to target
+    # ── Flow rate ──────────────────────────────────────────────────────────────
+    if unit_type == "flow_rate":
+        _to_si = {"m3s": 1.0, "gpm": 1.0/uc.GPM_PER_M3S, "m3h": 1.0/uc.M3H_PER_M3S, "ft3s": 1.0/uc.FT3S_PER_M3S}
+        _from_si = {"m3s": 1.0, "gpm": uc.GPM_PER_M3S, "m3h": uc.M3H_PER_M3S, "ft3s": uc.FT3S_PER_M3S}
+        if fu not in _to_si or tu not in _from_si:
+            raise HTTPException(status_code=422, detail=f"Unknown flow_rate units: {from_unit} or {to_unit}. Valid: {list(_to_si)}")
+        si_val = value * _to_si[fu]
+        result = si_val * _from_si[tu]
+
+    # ── Head ───────────────────────────────────────────────────────────────────
+    elif unit_type == "head":
+        if fu == "m":
+            si_val = value
+        elif fu == "ft":
+            si_val = uc.ft_to_m(value)
+        elif fu == "psi":
+            si_val = uc.psi_to_m(value, rho=rho)
+        else:
+            raise HTTPException(status_code=422, detail=f"Unknown head unit: {from_unit}. Valid: m, ft, psi")
+        if tu == "m":
+            result = si_val
+        elif tu == "ft":
+            result = uc.m_to_ft(si_val)
+        elif tu == "psi":
+            result = uc.m_to_psi(si_val, rho=rho)
+        else:
+            raise HTTPException(status_code=422, detail=f"Unknown head unit: {to_unit}. Valid: m, ft, psi")
+
+    # ── Power ──────────────────────────────────────────────────────────────────
+    elif unit_type == "power":
+        _to_si = {"w": 1.0, "kw": 1000.0, "hp": 1.0/uc.HP_PER_W}
+        _from_si = {"w": 1.0, "kw": 1e-3, "hp": uc.HP_PER_W}
+        if fu not in _to_si or tu not in _from_si:
+            raise HTTPException(status_code=422, detail=f"Unknown power units: {from_unit} or {to_unit}. Valid: {list(_to_si)}")
+        si_val = value * _to_si[fu]
+        result = si_val * _from_si[tu]
+
+    # ── Diameter / length ──────────────────────────────────────────────────────
+    elif unit_type == "diameter":
+        _to_si = {"m": 1.0, "mm": 1e-3, "in": 1.0/uc.IN_PER_M, "ft": 1.0/uc.FT_PER_M}
+        _from_si = {"m": 1.0, "mm": 1e3, "in": uc.IN_PER_M, "ft": uc.FT_PER_M}
+        if fu not in _to_si or tu not in _from_si:
+            raise HTTPException(status_code=422, detail=f"Unknown diameter units: {from_unit} or {to_unit}. Valid: {list(_to_si)}")
+        si_val = value * _to_si[fu]
+        result = si_val * _from_si[tu]
+
+    # ── Pressure ───────────────────────────────────────────────────────────────
+    elif unit_type == "pressure":
+        _to_si = {"pa": 1.0, "psi": 1.0/uc.PSI_PER_PA, "bar": 1.0/uc.BAR_PER_PA, "kpa": 1.0/uc.KPA_PER_PA}
+        _from_si = {"pa": 1.0, "psi": uc.PSI_PER_PA, "bar": uc.BAR_PER_PA, "kpa": uc.KPA_PER_PA}
+        if fu not in _to_si or tu not in _from_si:
+            raise HTTPException(status_code=422, detail=f"Unknown pressure units: {from_unit} or {to_unit}. Valid: {list(_to_si)}")
+        si_val = value * _to_si[fu]
+        result = si_val * _from_si[tu]
+
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown unit_type '{unit_type}'. Valid: flow_rate, head, power, diameter, pressure",
+        )
+
+    return {
+        "unit_type": unit_type,
+        "input_value": value,
+        "input_unit": from_unit,
+        "output_value": round(result, 8),
+        "output_unit": to_unit,
+    }
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 def optimize_endpoint(req: OptimizeRequest) -> OptimizeResponse:
     """Run multi-objective optimization."""

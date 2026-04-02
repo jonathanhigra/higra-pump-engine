@@ -594,3 +594,395 @@ def optimize_endpoint(req: OptimizeRequest) -> OptimizeResponse:
             pareto_front=[{"variables": result["best_params"], "objectives": {"efficiency": result["best_value"]}}],
             n_evaluations=result["n_trials"],
         )
+
+
+# ---------------------------------------------------------------------------
+# NP1 — Tip clearance loss
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/tip_clearance")
+def tip_clearance_endpoint(
+    flow_rate: float,
+    head: float,
+    rpm: float,
+    tip_clearance_mm: float = 0.3,
+) -> dict:
+    """Calculate tip clearance loss for the sized impeller (NP1).
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm: RPM.
+        tip_clearance_mm: Radial tip gap s [mm] (default 0.3 mm).
+
+    Returns:
+        Tip clearance loss metrics plus the underlying sizing result.
+    """
+    from hpe.sizing import run_sizing
+    from hpe.physics.tip_clearance import calc_tip_clearance_loss
+
+    _validate_op(flow_rate, head, rpm)
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    result = run_sizing(op)
+
+    loss = calc_tip_clearance_loss(
+        tip_clearance=tip_clearance_mm / 1000.0,
+        b2=result.impeller_b2,
+        d2=result.impeller_d2,
+        blade_count=result.blade_count,
+        beta2=result.beta2,
+        head=head,
+    )
+    return {
+        "tip_clearance_mm": tip_clearance_mm,
+        "d2_mm": round(result.impeller_d2 * 1000, 1),
+        "b2_mm": round(result.impeller_b2 * 1000, 2),
+        "blade_count": result.blade_count,
+        "beta2_deg": round(result.beta2, 1),
+        **loss,
+    }
+
+
+# ---------------------------------------------------------------------------
+# NP2 — Surface roughness correction
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/roughness")
+def roughness_endpoint(
+    flow_rate: float,
+    head: float,
+    rpm: float,
+    roughness_ra_um: float = 6.3,
+) -> dict:
+    """Calculate roughness-induced efficiency penalty (NP2).
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm: RPM.
+        roughness_ra_um: Average surface roughness Ra [µm]
+            (typical: 0.8 µm polished, 6.3 µm machined, 50 µm cast iron).
+
+    Returns:
+        Roughness correction metrics.
+    """
+    from hpe.sizing import run_sizing
+    from hpe.physics.roughness import calc_roughness_correction
+
+    _validate_op(flow_rate, head, rpm)
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    result = run_sizing(op)
+
+    correction = calc_roughness_correction(
+        roughness_ra=roughness_ra_um * 1e-6,
+        d2=result.impeller_d2,
+        b2=result.impeller_b2,
+        flow_rate=flow_rate,
+        rpm=rpm,
+        nq=result.specific_speed_nq,
+    )
+    return {
+        "roughness_ra_um": roughness_ra_um,
+        "d2_mm": round(result.impeller_d2 * 1000, 1),
+        "b2_mm": round(result.impeller_b2 * 1000, 2),
+        "baseline_efficiency": round(result.estimated_efficiency, 5),
+        "corrected_efficiency": round(
+            max(0.0, result.estimated_efficiency - correction["efficiency_penalty"]), 5
+        ),
+        **correction,
+    }
+
+
+# ---------------------------------------------------------------------------
+# NP3 — Parametric speed sweep
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/speed_sweep")
+async def sizing_speed_sweep(
+    flow_rate: float,
+    head: float,
+    rpm_vector: str = "800,1000,1200,1450,1750",
+) -> dict:
+    """Run sizing at multiple rotational speeds (NP3).
+
+    Equivalent to TURBOdesignPre ANALYSIS_ROTATIONAL_SPEED_VECTOR.
+    Returns design comparison across speed range.
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm_vector: Comma-separated RPM values.
+
+    Returns:
+        Dict with per-speed sizing results and optimal speed identified.
+    """
+    from hpe.sizing.meanline import run_sizing
+
+    speeds = [float(n.strip()) for n in rpm_vector.split(",") if n.strip()]
+
+    def _size_at_speed(n_rpm: float) -> dict:
+        _validate_op(flow_rate, head, n_rpm)
+        op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=n_rpm)
+        result = run_sizing(op)
+        return {
+            "rpm": n_rpm,
+            "nq": round(result.specific_speed_nq, 1),
+            "d2_mm": round(result.impeller_d2 * 1000, 1),
+            "b2_mm": round(result.impeller_b2 * 1000, 2),
+            "eta_pct": round(result.estimated_efficiency * 100, 1),
+            "npsh_r": round(result.estimated_npsh_r, 2),
+            "power_kw": round(result.estimated_power / 1000, 2),
+            "blade_count": result.blade_count,
+            "beta2": round(result.beta2, 1),
+        }
+
+    loop = asyncio.get_event_loop()
+    results = await asyncio.gather(
+        *[loop.run_in_executor(None, _size_at_speed, n) for n in speeds]
+    )
+    results_list = list(results)
+
+    return {
+        "flow_rate_m3h": round(flow_rate * 3600, 1),
+        "head_m": head,
+        "speeds": results_list,
+        "optimal": max(results_list, key=lambda r: r["eta_pct"]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# NP4 — Return channel sizing
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/return_channel")
+def return_channel_endpoint(
+    flow_rate: float,
+    head: float,
+    rpm: float,
+    n_stages: int = 2,
+) -> dict:
+    """Size the return channel for a multi-stage centrifugal pump (NP4).
+
+    Covers radial diffuser + return guide vanes for stage-to-stage transition.
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: Single-stage head [m].
+        rpm: RPM.
+        n_stages: Total number of stages (default 2).
+
+    Returns:
+        Return channel geometry dict.
+    """
+    from hpe.sizing import run_sizing
+    from hpe.sizing.return_channel import size_return_channel
+
+    _validate_op(flow_rate, head, rpm)
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    result = run_sizing(op)
+
+    geom = size_return_channel(
+        d2=result.impeller_d2,
+        b2=result.impeller_b2,
+        flow_rate=flow_rate,
+        head=head,
+        rpm=rpm,
+        n_stages=n_stages,
+    )
+    return {
+        "impeller_d2_mm": round(result.impeller_d2 * 1000, 1),
+        "impeller_b2_mm": round(result.impeller_b2 * 1000, 2),
+        "n_stages": n_stages,
+        "d3_mm": round(geom.d3 * 1000, 1),
+        "b3_mm": round(geom.b3 * 1000, 2),
+        "d4_mm": round(geom.d4 * 1000, 1),
+        "d5_mm": round(geom.d5 * 1000, 1),
+        "b5_mm": round(geom.b5 * 1000, 2),
+        "return_vane_count": geom.blade_count,
+        "beta3_deg": geom.beta3,
+        "beta5_deg": geom.beta5,
+        "axial_length_mm": round(geom.axial_length * 1000, 1),
+        "loss_coefficient": geom.loss_coefficient,
+        "head_loss_m": round(head * geom.loss_coefficient, 3),
+    }
+
+
+# ---------------------------------------------------------------------------
+# NP5 — Multi-stage with work split
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/multistage")
+def multistage_endpoint(
+    flow_rate: float,
+    total_head: float,
+    rpm: float,
+    n_stages: int | None = None,
+    head_distribution: str = "equal",
+    work_split: str = "",
+) -> dict:
+    """Size a multi-stage centrifugal pump (NP5).
+
+    Supports equal/optimized/decreasing head distribution and an explicit
+    per-stage work split vector.
+
+    Args:
+        flow_rate: Q [m³/s].
+        total_head: Total H [m].
+        rpm: RPM.
+        n_stages: Number of stages. Auto-determined if omitted.
+        head_distribution: equal | optimized | decreasing.
+        work_split: Comma-separated weights for unevenly distributing head
+            (e.g. "0.4,0.3,0.3"). Overrides head_distribution when provided.
+
+    Returns:
+        Multi-stage sizing summary with per-stage details.
+    """
+    from hpe.sizing.multistage import size_multistage
+
+    _validate_op(flow_rate, total_head, rpm)
+
+    split_vec: list[float] | None = None
+    if work_split.strip():
+        try:
+            split_vec = [float(w) for w in work_split.split(",") if w.strip()]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="work_split must be comma-separated floats.")
+
+    ms = size_multistage(
+        flow_rate=flow_rate,
+        total_head=total_head,
+        rpm=rpm,
+        n_stages=n_stages,
+        head_distribution=head_distribution,
+        work_split_vector=split_vec,
+    )
+
+    stages_out = []
+    for s in ms.stages:
+        stages_out.append({
+            "stage": s.stage_number,
+            "head_m": round(s.sizing.head if hasattr(s.sizing, "head") else total_head / ms.n_stages, 2),
+            "head_fraction": round(s.head_fraction, 4),
+            "nq": round(s.nq, 1),
+            "d2_mm": round(s.sizing.impeller_d2 * 1000, 1),
+            "b2_mm": round(s.sizing.impeller_b2 * 1000, 2),
+            "eta": round(s.sizing.estimated_efficiency, 4),
+            "power_kw": round(s.sizing.estimated_power / 1000, 2),
+            "outlet_pressure_kpa": round(s.outlet_pressure / 1000, 1),
+        })
+
+    return {
+        "n_stages": ms.n_stages,
+        "total_head_m": ms.total_head,
+        "total_power_kw": round(ms.total_power / 1000, 2),
+        "overall_efficiency": round(ms.overall_efficiency, 4),
+        "stages": stages_out,
+        "warnings": ms.warnings,
+    }
+
+
+# ---------------------------------------------------------------------------
+# NP8 — Axial compressor 1D sizing
+# ---------------------------------------------------------------------------
+
+@router.post("/sizing/axial_compressor")
+def axial_compressor_endpoint(
+    flow_rate: float,
+    pressure_ratio: float,
+    rpm: float,
+    n_stages: int = 1,
+    inlet_temperature: float = 288.15,
+    inlet_pressure: float = 101325.0,
+    gamma: float = 1.4,
+    r_gas: float = 287.05,
+) -> dict:
+    """Size an axial compressor stage using compressible flow parameters (NP8).
+
+    Uses the free-vortex design method from hpe.sizing.axial with
+    an equivalent head derived from the isentropic total enthalpy rise.
+
+    Args:
+        flow_rate: Mass flow rate [kg/s] (compressible convention).
+        pressure_ratio: Total-to-total pressure ratio (p02/p01).
+        rpm: RPM.
+        n_stages: Number of stages (head split equally).
+        inlet_temperature: T01 [K].
+        inlet_pressure: p01 [Pa].
+        gamma: Ratio of specific heats (default 1.4 for air).
+        r_gas: Gas constant [J/(kg·K)] (default 287.05 for air).
+
+    Returns:
+        Dict with compressor sizing results and velocity triangle data.
+    """
+    from hpe.sizing.axial import size_axial
+
+    if pressure_ratio <= 1.0:
+        raise HTTPException(status_code=422, detail="pressure_ratio must be > 1.0")
+    if n_stages < 1:
+        raise HTTPException(status_code=422, detail="n_stages must be >= 1")
+
+    # Isentropic enthalpy rise for the full machine
+    T02_is = inlet_temperature * pressure_ratio ** ((gamma - 1) / gamma)
+    delta_h0_is = r_gas * gamma / (gamma - 1) * inlet_temperature * (
+        pressure_ratio ** ((gamma - 1) / gamma) - 1
+    )
+
+    # Per-stage enthalpy rise (equal work split)
+    delta_h0_stage = delta_h0_is / n_stages
+
+    # Convert to equivalent head for the axial sizing model
+    # Using inlet density for a rough volumetric flow
+    rho_in = inlet_pressure / (r_gas * inlet_temperature)
+    vol_flow = flow_rate / rho_in  # m³/s (inlet conditions)
+    g = 9.81
+    head_equiv = delta_h0_stage / g  # [m] — isentropic head per stage
+
+    # Validate equivalent operating point
+    if vol_flow <= 0 or head_equiv <= 0:
+        raise HTTPException(status_code=422, detail="Invalid compressor operating point.")
+
+    op = OperatingPoint(flow_rate=vol_flow, head=head_equiv, rpm=rpm)
+    axial = size_axial(op)
+
+    # Per-stage pressure ratio
+    pr_stage = pressure_ratio ** (1.0 / n_stages)
+
+    return {
+        # Operating conditions
+        "n_stages": n_stages,
+        "pressure_ratio_total": pressure_ratio,
+        "pressure_ratio_per_stage": round(pr_stage, 4),
+        "inlet_temperature_k": inlet_temperature,
+        "inlet_pressure_pa": inlet_pressure,
+        "mass_flow_kgs": flow_rate,
+        "inlet_density_kgm3": round(rho_in, 4),
+        "volumetric_flow_m3s": round(vol_flow, 6),
+        # Isentropic work
+        "delta_h0_total_jkg": round(delta_h0_is, 1),
+        "delta_h0_stage_jkg": round(delta_h0_stage, 1),
+        "head_equiv_m": round(head_equiv, 2),
+        # Geometry (per stage)
+        "nq": round(axial.nq, 1),
+        "d_tip_mm": round(axial.d_tip * 1000, 1),
+        "d_hub_mm": round(axial.d_hub * 1000, 1),
+        "d_mean_mm": round(axial.d_mean * 1000, 1),
+        "hub_tip_ratio": round(axial.hub_tip_ratio, 3),
+        "blade_height_mm": round(axial.blade_height * 1000, 1),
+        "blade_count": axial.blade_count,
+        "chord_mm": round(axial.chord * 1000, 1),
+        "solidity": round(axial.solidity, 3),
+        "stagger_angle_deg": round(axial.stagger_angle, 1),
+        # Aerodynamics
+        "beta1_mean_deg": round(axial.beta1_mean, 1),
+        "beta2_mean_deg": round(axial.beta2_mean, 1),
+        "alpha1_mean_deg": round(axial.alpha1_mean, 1),
+        "alpha2_mean_deg": round(axial.alpha2_mean, 1),
+        "de_haller": round(axial.de_haller, 3),
+        "diffusion_factor": round(axial.diffusion_factor, 3),
+        "axial_velocity_ms": round(axial.axial_velocity, 2),
+        "reaction_degree": round(axial.reaction_degree, 3),
+        # Performance
+        "estimated_isentropic_efficiency": round(axial.estimated_efficiency, 4),
+        "estimated_shaft_power_kw": round(axial.estimated_power / 1000, 2),
+        "warnings": axial.warnings,
+    }

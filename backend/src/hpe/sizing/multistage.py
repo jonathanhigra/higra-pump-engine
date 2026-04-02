@@ -153,6 +153,56 @@ def distribute_head(
     return [total_head / n_stages] * n_stages
 
 
+def _distribute_head_by_split(
+    total_head: float,
+    n_stages: int,
+    work_split_vector: list[float],
+    warnings: list[str],
+) -> list[float]:
+    """Distribute head using an explicit weight vector.
+
+    The vector is normalised so its elements sum to 1.  If the vector
+    is shorter than n_stages the last weight is repeated; if it is
+    longer it is truncated.
+
+    Args:
+        total_head: Total head [m].
+        n_stages: Number of stages.
+        work_split_vector: Raw weight values (any positive floats).
+        warnings: Mutable list; warning messages are appended here.
+
+    Returns:
+        List of head values [m], one per stage, summing to total_head.
+    """
+    if not work_split_vector or any(w < 0 for w in work_split_vector):
+        warnings.append("work_split_vector contains invalid values; falling back to equal split.")
+        return [total_head / n_stages] * n_stages
+
+    # Pad or truncate to match n_stages
+    vec = list(work_split_vector)
+    if len(vec) < n_stages:
+        last = vec[-1]
+        vec.extend([last] * (n_stages - len(vec)))
+    vec = vec[:n_stages]
+
+    total_w = sum(vec)
+    if total_w <= 0:
+        warnings.append("work_split_vector sums to zero; falling back to equal split.")
+        return [total_head / n_stages] * n_stages
+
+    heads = [total_head * w / total_w for w in vec]
+
+    # Warn if any stage head is very small
+    for i, h in enumerate(heads):
+        if h < 0.05 * total_head:
+            warnings.append(
+                f"Stage {i+1} work split yields only {h:.1f} m "
+                f"({h/total_head*100:.1f}% of total). Check split vector."
+            )
+
+    return heads
+
+
 def size_multistage(
     flow_rate: float,
     total_head: float,
@@ -161,6 +211,7 @@ def size_multistage(
     head_distribution: str = "equal",
     rho: float = 998.2,
     p_inlet: float = 101325.0,
+    work_split_vector: list[float] | None = None,
 ) -> MultiStageResult:
     """Size a complete multi-stage machine.
 
@@ -170,8 +221,13 @@ def size_multistage(
         rpm: Rotational speed [rpm].
         n_stages: Number of stages. If None, auto-determined.
         head_distribution: Head split method (equal/optimized/decreasing).
+            Ignored when work_split_vector is provided.
         rho: Fluid density [kg/m³].
         p_inlet: Inlet pressure [Pa].
+        work_split_vector: Optional list of weights (one per stage) for
+            distributing total head unevenly. Will be normalised to sum to 1.
+            E.g. [0.4, 0.3, 0.3] gives the first stage 40% of total head.
+            Overrides head_distribution when provided.
 
     Returns:
         MultiStageResult with all stage details.
@@ -181,7 +237,11 @@ def size_multistage(
     if n_stages is None:
         n_stages = determine_stage_count(flow_rate, total_head, rpm)
 
-    heads = distribute_head(total_head, n_stages, head_distribution)
+    # work_split_vector takes precedence over head_distribution method
+    if work_split_vector is not None:
+        heads = _distribute_head_by_split(total_head, n_stages, work_split_vector, warnings)
+    else:
+        heads = distribute_head(total_head, n_stages, head_distribution)
 
     stages: list[StageResult] = []
     total_power = 0.0

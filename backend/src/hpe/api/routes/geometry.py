@@ -69,18 +69,68 @@ def _meridional_curves(
     r1: float, r1_hub: float, r2: float,
     b1: float, b2: float, n_chord: int,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    z_total = 0.8 * (r2 - r1)
-    hub_rz, shroud_rz = [], []
+    """Generate realistic meridional hub/shroud curves for centrifugal impeller.
+
+    Hub: transitions from axial inlet (r=r1_hub, z=z_total) to radial outlet
+         (r=r2, z=0) along a quarter-circle arc.
+    Shroud: parallels the hub, offset outward by the passage width b(t).
+
+    The axial length is sized proportional to (r2-r1) to give a realistic
+    L/D ratio (~0.6-0.8) consistent with Gülich §3.3.
+    """
+    z_total = 0.72 * (r2 - r1)   # meridional length ≈ 0.72*(r2-r1)
+    hub_rz: list[tuple[float, float]] = []
+    shroud_rz: list[tuple[float, float]] = []
+
     for i in range(n_chord):
         t = i / (n_chord - 1)
+        # Quarter-circle arc: (sin, cos) → goes from axial to radial smoothly
         arc = math.pi / 2 * t
-        r_h = r1_hub + (r2 - r1_hub) * math.sin(arc)
-        z_h = z_total * (1.0 - math.sin(arc))
-        r_s = r1 + (r2 - r1) * math.sin(arc)
-        b_l = b1 + t * (b2 - b1)
+        sin_a = math.sin(arc)
+        cos_a = math.cos(arc)
+
+        # Hub: from (r1_hub, z_total) → (r2, 0)
+        r_h = r1_hub + (r2 - r1_hub) * sin_a
+        z_h = z_total * cos_a
+
+        # Shroud: from (r1, z_total + b1) → (r2, b2) — tracks hub + passage width
+        r_s = r1 + (r2 - r1) * sin_a
+        b_t = b1 + t * (b2 - b1)   # passage width tapers from b1 to b2
+
+        # Shroud offset perpendicular to meridional direction
+        # For a quarter-circle, the outward normal is (cos_a, sin_a) in (r, z)
+        r_sh = r_s + b_t * cos_a
+        z_sh = z_h + b_t * sin_a
+
         hub_rz.append((r_h, z_h))
-        shroud_rz.append((r_s, z_h + b_l))
+        shroud_rz.append((r_sh, z_sh))
+
     return hub_rz, shroud_rz
+
+
+def _hub_with_shaft(
+    hub_rz: list[tuple[float, float]],
+    r1_hub: float,
+) -> list[tuple[float, float]]:
+    """Extend hub profile with a shaft stub for visual completeness.
+
+    Adds a small shaft cylinder at the inlet end of the hub, from
+    shaft radius (≈ 0.4*r1_hub) inward, then the hub disc at outlet.
+    Returns an extended list of (r, z) points for the revolution surface.
+    """
+    if not hub_rz:
+        return hub_rz
+    r_shaft = r1_hub * 0.40
+    r_in, z_in = hub_rz[0]
+    r_out, z_out = hub_rz[-1]
+
+    # Shaft stub at inlet: horizontal segment from r_shaft to r_in
+    shaft = [(r_shaft, z_in + 0.3 * (hub_rz[-1][1] - z_in)), (r_in, z_in)]
+
+    # Hub disc at outlet: flat from r_out back to r_shaft
+    disc = [(r_out, z_out), (r_shaft, z_out)]
+
+    return shaft + hub_rz + disc[1:]
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +358,7 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     n_span = req.n_span_points
 
     hub_rz, shroud_rz = _meridional_curves(r1, r1_hub, r2, b1, b2, n_chord)
+    hub_rz_visual = _hub_with_shaft(hub_rz, r1_hub)
 
     # #9 — wrap angle targeting
     if req.target_wrap_angle is not None:
@@ -347,7 +398,7 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
 
     return ImpellerGeometry(
         blade_surfaces=blade_surfaces,
-        hub_profile=_revolution_profile(hub_rz),
+        hub_profile=_revolution_profile(hub_rz_visual),
         shroud_profile=_revolution_profile(shroud_rz),
         blade_count=sizing.blade_count,
         d2=d2, d1=d1, b2=b2,

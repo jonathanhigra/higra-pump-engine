@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000/api/v1'
+const API_BASE = '/api/v1'
 
 export async function runSizing(flowRate: number, head: number, rpm: number) {
   const res = await fetch(`${API_BASE}/sizing`, {
@@ -10,7 +10,7 @@ export async function runSizing(flowRate: number, head: number, rpm: number) {
   return res.json()
 }
 
-export async function getCurves(flowRate: number, head: number, rpm: number, nPoints = 20) {
+export async function getCurves(flowRate: number, head: number, rpm: number, nPoints = 25) {
   const res = await fetch(`${API_BASE}/curves`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -33,5 +33,38 @@ export async function runOptimize(
     }),
   })
   if (!res.ok) throw new Error(`Optimize failed: ${res.status}`)
+  return res.json()
+}
+
+export async function runStressAnalysis(flowRate: number, head: number, rpm: number) {
+  const res = await fetch(`${API_BASE}/stress`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flow_rate: flowRate, head, rpm }),
+  })
+  if (!res.ok) throw new Error(`Stress failed: ${res.status}`)
+  return res.json()
+}
+
+export async function runInverseDesign(
+  flowRate: number, head: number, rpm: number,
+  loadingType = 'mid_loaded',
+) {
+  const res = await fetch(`${API_BASE}/inverse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flow_rate: flowRate, head, rpm, loading_type: loadingType }),
+  })
+  if (!res.ok) throw new Error(`Inverse failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getLossBreakdown(flowRate: number, head: number, rpm: number) {
+  const res = await fetch(`${API_BASE}/losses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flow_rate: flowRate, head, rpm }),
+  })
+  if (!res.ok) throw new Error(`Losses failed: ${res.status}`)
   return res.json()
 }

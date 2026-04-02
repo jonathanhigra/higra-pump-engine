@@ -4,10 +4,14 @@ import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei
 import * as THREE from 'three'
 import t from '../i18n/pt-br'
 import type { SizingResult } from '../App'
-import MeridionalPanel from './MeridionalPanel'
 
 interface BladePoint { x: number; y: number; z: number }
-interface BladeSurface { ps: BladePoint[][]; ss: BladePoint[][] }
+interface BladeSurface {
+  ps: BladePoint[][]
+  ss: BladePoint[][]
+  ps_pressure?: number[][]
+  ss_pressure?: number[][]
+}
 interface ImpellerData {
   blade_surfaces: BladeSurface[]
   splitter_surfaces?: BladeSurface[]
@@ -39,7 +43,6 @@ function buildQuadGeo(grid: BladePoint[][]): THREE.BufferGeometry {
   const nSpan = grid.length
   const nChord = grid[0]?.length ?? 0
   const pos: number[] = []
-  const nrm: number[] = []
 
   for (let s = 0; s < nSpan - 1; s++) {
     for (let c = 0; c < nChord - 1; c++) {
@@ -54,6 +57,48 @@ function buildQuadGeo(grid: BladePoint[][]): THREE.BufferGeometry {
 
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.computeVertexNormals()
+  return g
+}
+
+function buildQuadGeoWithColors(grid: BladePoint[][], pressureGrid: number[][]): THREE.BufferGeometry {
+  const nSpan = grid.length
+  const nChord = grid[0]?.length ?? 0
+  const pos: number[] = []
+  const colors: number[] = []
+
+  const pColor = (p: number): [number, number, number] => {
+    const r = Math.max(0, Math.min(1, p < 0.5 ? 0.08 + p * 0.24 : 0.32 + (p - 0.5) * 1.37))
+    const g = Math.max(0, Math.min(1, p < 0.3 ? 0.08 + p * 0.39 : p < 0.7 ? 0.2 + p * 0.63 : 0.63 + (p - 0.7) * 1.1))
+    const b = Math.max(0, Math.min(1, p < 0.4 ? 0.71 - p * 0.78 : Math.max(0, 0.4 - p * 0.4)))
+    return [r, g, b]
+  }
+
+  const addTri = (
+    p0: BladePoint, p1: BladePoint, p2: BladePoint,
+    pr0: number, pr1: number, pr2: number,
+  ) => {
+    pos.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z)
+    const c0 = pColor(pr0), c1 = pColor(pr1), c2 = pColor(pr2)
+    colors.push(...c0, ...c1, ...c2)
+  }
+
+  for (let s = 0; s < nSpan - 1; s++) {
+    for (let c = 0; c < nChord - 1; c++) {
+      const p00 = grid[s][c], p10 = grid[s + 1][c]
+      const p01 = grid[s][c + 1], p11 = grid[s + 1][c + 1]
+      const pr00 = pressureGrid?.[s]?.[c] ?? 0.5
+      const pr10 = pressureGrid?.[s + 1]?.[c] ?? 0.5
+      const pr01 = pressureGrid?.[s]?.[c + 1] ?? 0.5
+      const pr11 = pressureGrid?.[s + 1]?.[c + 1] ?? 0.5
+      addTri(p00, p10, p01, pr00, pr10, pr01)
+      addTri(p10, p11, p01, pr10, pr11, pr01)
+    }
+  }
+
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
   g.computeVertexNormals()
   return g
 }
@@ -110,6 +155,19 @@ function buildHubDiscGeo(hubProfile: BladePoint[], segs = 128): THREE.BufferGeom
   return g
 }
 
+// ─── Pressure colormap helper (used in legend) ────────────────────────────────
+
+function pressureColor(p: number): string {
+  // Viridis-inspired: low=dark blue, mid=teal/green, high=yellow
+  const r = Math.round(Math.max(0, Math.min(255, p < 0.5 ? 20 + p * 60 : 80 + (p - 0.5) * 350)))
+  const g = Math.round(Math.max(0, Math.min(255, p < 0.3 ? 20 + p * 100 : p < 0.7 ? 50 + p * 160 : 160 + (p - 0.7) * 280)))
+  const b = Math.round(Math.max(0, Math.min(255, p < 0.4 ? 180 - p * 200 : Math.max(0, 100 - p * 100))))
+  return `rgb(${r},${g},${b})`
+}
+
+// suppress unused warning — pressureColor is exported as utility; keep for reference
+void pressureColor
+
 // ─── Materials ────────────────────────────────────────────────────────────────
 
 const PS_COLOR = '#1e90ff'      // pressure side — vivid blue
@@ -118,16 +176,47 @@ const HUB_COLOR = '#374151'     // hub — dark steel
 const SHROUD_COLOR = '#1f2937'
 const SPLITTER_COLOR = '#06b6d4' // splitter PS — teal/cyan
 
+// ─── ClipController ───────────────────────────────────────────────────────────
+
+function ClipController({ clipZ }: { clipZ: number | null }) {
+  const { gl } = useThree()
+  useEffect(() => {
+    if (clipZ === null) {
+      gl.clippingPlanes = []
+      gl.localClippingEnabled = false
+    } else {
+      gl.localClippingEnabled = true
+      gl.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 0, -1), clipZ)]
+    }
+    return () => {
+      gl.clippingPlanes = []
+      gl.localClippingEnabled = false
+    }
+  }, [clipZ, gl])
+  return null
+}
+
 // ─── Scene components ─────────────────────────────────────────────────────────
 
-function BladeSurfaceMesh({ surface, idx }: { surface: BladeSurface; idx: number }) {
-  const psGeo = useMemo(() => buildQuadGeo(surface.ps), [surface])
-  const ssGeo = useMemo(() => buildQuadGeo(surface.ss), [surface])
+function BladeSurfaceMesh({ surface, idx, showColormap }: { surface: BladeSurface; idx: number; showColormap: boolean }) {
+  const psGeo = useMemo(
+    () => showColormap && surface.ps_pressure
+      ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
+      : buildQuadGeo(surface.ps),
+    [surface, showColormap],
+  )
+  const ssGeo = useMemo(
+    () => showColormap && surface.ss_pressure
+      ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
+      : buildQuadGeo(surface.ss),
+    [surface, showColormap],
+  )
   return (
     <>
       <mesh geometry={psGeo} castShadow>
         <meshStandardMaterial
-          color={PS_COLOR}
+          vertexColors={showColormap}
+          color={showColormap ? '#ffffff' : PS_COLOR}
           side={THREE.DoubleSide}
           metalness={0.55}
           roughness={0.28}
@@ -135,7 +224,8 @@ function BladeSurfaceMesh({ surface, idx }: { surface: BladeSurface; idx: number
       </mesh>
       <mesh geometry={ssGeo} castShadow>
         <meshStandardMaterial
-          color={SS_COLOR}
+          vertexColors={showColormap}
+          color={showColormap ? '#ffffff' : SS_COLOR}
           side={THREE.DoubleSide}
           metalness={0.55}
           roughness={0.28}
@@ -145,16 +235,38 @@ function BladeSurfaceMesh({ surface, idx }: { surface: BladeSurface; idx: number
   )
 }
 
-function SplitterSurfaceMesh({ surface }: { surface: BladeSurface }) {
-  const psGeo = useMemo(() => buildQuadGeo(surface.ps), [surface])
-  const ssGeo = useMemo(() => buildQuadGeo(surface.ss), [surface])
+function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface; showColormap: boolean }) {
+  const psGeo = useMemo(
+    () => showColormap && surface.ps_pressure
+      ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
+      : buildQuadGeo(surface.ps),
+    [surface, showColormap],
+  )
+  const ssGeo = useMemo(
+    () => showColormap && surface.ss_pressure
+      ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
+      : buildQuadGeo(surface.ss),
+    [surface, showColormap],
+  )
   return (
     <>
       <mesh geometry={psGeo} castShadow>
-        <meshStandardMaterial color={SPLITTER_COLOR} side={THREE.DoubleSide} metalness={0.50} roughness={0.32} />
+        <meshStandardMaterial
+          vertexColors={showColormap}
+          color={showColormap ? '#ffffff' : SPLITTER_COLOR}
+          side={THREE.DoubleSide}
+          metalness={0.50}
+          roughness={0.32}
+        />
       </mesh>
       <mesh geometry={ssGeo} castShadow>
-        <meshStandardMaterial color="#0891b2" side={THREE.DoubleSide} metalness={0.50} roughness={0.32} />
+        <meshStandardMaterial
+          vertexColors={showColormap}
+          color={showColormap ? '#ffffff' : '#0891b2'}
+          side={THREE.DoubleSide}
+          metalness={0.50}
+          roughness={0.32}
+        />
       </mesh>
     </>
   )
@@ -210,7 +322,16 @@ function SceneLights() {
   )
 }
 
-function Scene({ data, paused, rpm, showSplitters }: { data: ImpellerData; paused?: boolean; rpm?: number; showSplitters?: boolean }) {
+function Scene({
+  data, paused, rpm, showSplitters, clipZ, showColormap,
+}: {
+  data: ImpellerData
+  paused?: boolean
+  rpm?: number
+  showSplitters?: boolean
+  clipZ: number | null
+  showColormap: boolean
+}) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
   const scale = 1.8 / r2_mm
@@ -220,16 +341,17 @@ function Scene({ data, paused, rpm, showSplitters }: { data: ImpellerData; pause
       <PerspectiveCamera makeDefault position={[1.8, 1.4, 1.2]} fov={45} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={0.5} maxDistance={8} />
       <SceneLights />
+      <ClipController clipZ={clipZ} />
 
       <RotatingGroup paused={paused} rpm={rpm}>
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
           <ShroudMesh profile={data.shroud_profile} />
           {data.blade_surfaces.map((surf, i) => (
-            <BladeSurfaceMesh key={i} surface={surf} idx={i} />
+            <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap} />
           ))}
           {showSplitters && data.splitter_surfaces?.map((surf, i) => (
-            <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} />
+            <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} showColormap={showColormap} />
           ))}
         </group>
       </RotatingGroup>
@@ -250,9 +372,9 @@ export default function ImpellerViewer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(false)
-  const [wireframe, setWireframe] = useState(false)
   const [showSplitters, setShowSplitters] = useState(false)
-  const [showMeridional, setShowMeridional] = useState(false)
+  const [clipZ, setClipZ] = useState<number | null>(null)
+  const [showColormap, setShowColormap] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -312,7 +434,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -328,48 +450,48 @@ export default function ImpellerViewer({
             {data?.actual_wrap_angle && <span>Wrap {data.actual_wrap_angle.toFixed(0)}°</span>}
           </div>
         </div>
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center' }}>
-          <LegendItem color={PS_COLOR} label="LP (pressão)" />
-          <LegendItem color={SS_COLOR} label="LS (sucção)" />
-          <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
-          {showSplitters && <LegendItem color={SPLITTER_COLOR} label="Splitters" />}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}>
-            <input type="checkbox" checked={showSplitters} onChange={e => setShowSplitters(e.target.checked)} style={{ cursor: 'pointer' }} />
-            Splitters
-          </label>
+        {/* Legend / colormap legend */}
+        <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
+          {!showColormap && (
+            <>
+              <LegendItem color={PS_COLOR} label="LP (pressão)" />
+              <LegendItem color={SS_COLOR} label="LS (sucção)" />
+              <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
+            </>
+          )}
+          {showColormap && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixa P</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #1040b0, #00a0a0, #40c040, #e0c000, #e04000)' }} />
+              <span>Alta P</span>
+            </div>
+          )}
         </div>
         <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#090d12' }}>
           {canvasEl}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
-          {data && (
-            <ControlButton
-              label={showMeridional ? '■ Seção 2D' : '◻ Seção 2D'}
-              onClick={() => setShowMeridional(v => !v)}
-            />
-          )}
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+          <button
+            onClick={() => setClipZ(c => c === null ? 0 : null)}
+            style={{
+              fontSize: 10, padding: '3px 8px', borderRadius: 4,
+              border: `1px solid ${clipZ !== null ? 'var(--accent)' : 'var(--border-primary)'}`,
+              background: clipZ !== null ? 'rgba(0,160,223,0.15)' : 'transparent',
+              color: clipZ !== null ? 'var(--accent)' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {clipZ !== null ? 'Corte ON' : 'Corte'}
+          </button>
           {['STEP', 'STL'].map(fmt => (
             <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
             </button>
           ))}
         </div>
-        {showMeridional && data && (
-          <div style={{ marginTop: 10 }}>
-            <MeridionalPanel
-              hubProfile={data.hub_profile}
-              shroudProfile={data.shroud_profile}
-              d2={data.d2}
-              d1={data.d1}
-              b2={data.b2}
-              wrapAngle={data.actual_wrap_angle}
-              compact={true}
-            />
-          </div>
-        )}
       </div>
     )
   }
@@ -385,10 +507,20 @@ export default function ImpellerViewer({
       <div className="viewer-overlay viewer-overlay-tl">
         <div className="glass-panel" style={{ padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 12 }}>
           <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13 }}>HPE</span>
-          <LegendItem color={PS_COLOR} label="LP" />
-          <LegendItem color={SS_COLOR} label="LS" />
-          <LegendItem color={HUB_COLOR} label="Hub" />
-          {showSplitters && <LegendItem color={SPLITTER_COLOR} label="Splitters" />}
+          {!showColormap && (
+            <>
+              <LegendItem color={PS_COLOR} label="LP" />
+              <LegendItem color={SS_COLOR} label="LS" />
+              <LegendItem color={HUB_COLOR} label="Hub" />
+            </>
+          )}
+          {showColormap && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixa P</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #1040b0, #00a0a0, #40c040, #e0c000, #e04000)' }} />
+              <span>Alta P</span>
+            </div>
+          )}
           {data && (
             <>
               <span style={{ color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 12 }}>
@@ -399,10 +531,6 @@ export default function ImpellerViewer({
                 <span style={{ color: 'var(--text-muted)' }}>Wrap {data.actual_wrap_angle.toFixed(0)}°</span>}
             </>
           )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', borderLeft: '1px solid var(--border-primary)', paddingLeft: 12 }}>
-            <input type="checkbox" checked={showSplitters} onChange={e => setShowSplitters(e.target.checked)} style={{ cursor: 'pointer' }} />
-            <span style={{ color: 'var(--text-muted)' }}>Splitters</span>
-          </label>
         </div>
       </div>
 
@@ -430,50 +558,40 @@ export default function ImpellerViewer({
               <MetaRow label="Potência" value={`${(sizing.estimated_power / 1000).toFixed(1)} kW`} />
             </div>
           )}
-
-          {/* Meridional section toggle */}
-          {data && (
-            <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
-              <button
-                onClick={() => setShowMeridional(v => !v)}
-                style={{
-                  width: '100%',
-                  background: showMeridional ? 'rgba(0,160,223,0.15)' : 'none',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  color: showMeridional ? 'var(--accent)' : 'var(--text-secondary)',
-                  padding: '5px 8px',
-                  fontSize: 11,
-                  textAlign: 'left' as const,
-                }}
-              >
-                {showMeridional ? '■' : '◻'} Meridional
-              </button>
-            </div>
-          )}
-
-          {showMeridional && data && (
-            <div style={{ marginTop: 10 }}>
-              <MeridionalPanel
-                hubProfile={data.hub_profile}
-                shroudProfile={data.shroud_profile}
-                d2={data.d2}
-                d1={data.d1}
-                b2={data.b2}
-                wrapAngle={data.actual_wrap_angle}
-                compact={false}
-              />
-            </div>
-          )}
         </div>
       </div>
 
       {/* BOTTOM-RIGHT: Controls */}
       <div className="viewer-overlay viewer-overlay-br">
-        <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 520 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+
+          {/* Clip plane slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Corte Z</span>
+            <input
+              type="range"
+              min={-200} max={200} step={5}
+              value={clipZ ?? 0}
+              onChange={e => setClipZ(clipZ === null ? null : parseFloat(e.target.value))}
+              style={{ width: 80, accentColor: 'var(--accent)' }}
+            />
+            <button
+              onClick={() => setClipZ(c => c === null ? 0 : null)}
+              style={{
+                fontSize: 9, padding: '2px 6px', borderRadius: 3,
+                border: `1px solid ${clipZ !== null ? 'var(--accent)' : 'var(--border-primary)'}`,
+                background: clipZ !== null ? 'rgba(0,160,223,0.15)' : 'transparent',
+                color: clipZ !== null ? 'var(--accent)' : 'var(--text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {clipZ !== null ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
           {['STEP', 'STL'].map(fmt => (
             <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}

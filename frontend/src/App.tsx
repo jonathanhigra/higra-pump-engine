@@ -1,4 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import LoginPage from './pages/LoginPage'
+import ProjectsPage from './pages/ProjectsPage'
 import SizingForm from './pages/SizingForm'
 import ResultsView from './pages/ResultsView'
 import CurvesChart from './components/CurvesChart'
@@ -33,9 +35,15 @@ export interface CurvePoint {
   npsh_required: number
 }
 
+type Page = 'login' | 'projects' | 'design'
 type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
 
 export default function App() {
+  const [page, setPage] = useState<Page>('login')
+  const [user, setUser] = useState<any>(null)
+  const [token, setToken] = useState('')
+  const [currentProject, setCurrentProject] = useState<any>(null)
+
   const [sizing, setSizing] = useState<SizingResult | null>(null)
   const [curves, setCurves] = useState<CurvePoint[]>([])
   const [losses, setLosses] = useState<any>(null)
@@ -43,6 +51,38 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<Tab>('results')
   const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
+
+  // Check for saved token on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('hpe_token')
+    if (saved) {
+      setToken(saved)
+      setPage('projects')
+    }
+  }, [])
+
+  const handleLogin = (userData: any, tok: string) => {
+    setUser(userData)
+    setToken(tok)
+    setPage('projects')
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('hpe_token')
+    setUser(null)
+    setToken('')
+    setPage('login')
+    setSizing(null)
+  }
+
+  const handleSelectProject = (project: any) => {
+    setCurrentProject(project)
+    setSizing(null)
+    setCurves([])
+    setLosses(null)
+    setStress(null)
+    setPage('design')
+  }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'results', label: 'Sizing' },
@@ -53,14 +93,43 @@ export default function App() {
     { key: 'stress', label: 'Stress' },
   ]
 
+  if (page === 'login') {
+    return <LoginPage onLogin={handleLogin} />
+  }
+
+  if (page === 'projects') {
+    return (
+      <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <header style={{ display: 'flex', alignItems: 'center', padding: '12px 24px', borderBottom: '2px solid #2E8B57' }}>
+          <h1 style={{ color: '#2E8B57', margin: 0, fontSize: 22 }}>Higra Pump Engine</h1>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
+            <span style={{ color: '#666' }}>{user?.name || 'User'}</span>
+            <button onClick={handleLogout} style={{
+              background: 'none', border: '1px solid #ddd', borderRadius: 4, padding: '4px 12px', cursor: 'pointer', color: '#888',
+            }}>Logout</button>
+          </div>
+        </header>
+        <ProjectsPage onSelectProject={handleSelectProject} token={token} />
+      </div>
+    )
+  }
+
+  // Design page
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", maxWidth: 1280, margin: '0 auto', padding: '16px 24px' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '2px solid #2E8B57', paddingBottom: 12, marginBottom: 24 }}>
-        <div>
-          <h1 style={{ color: '#2E8B57', margin: 0, fontSize: 24, letterSpacing: -0.5 }}>Higra Pump Engine</h1>
-          <p style={{ color: '#888', margin: '2px 0 0', fontSize: 13 }}>
-            Hydraulic turbomachinery design platform
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => { setPage('projects'); setSizing(null) }} style={{
+            background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#2E8B57', padding: 0,
+          }}>{'<'}</button>
+          <div>
+            <h1 style={{ color: '#2E8B57', margin: 0, fontSize: 22, letterSpacing: -0.5 }}>
+              {currentProject?.name || 'Quick Design'}
+            </h1>
+            <p style={{ color: '#888', margin: '2px 0 0', fontSize: 12 }}>
+              {currentProject?.description || 'Hydraulic turbomachinery design'}
+            </p>
+          </div>
         </div>
         {sizing && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 13, color: '#666' }}>

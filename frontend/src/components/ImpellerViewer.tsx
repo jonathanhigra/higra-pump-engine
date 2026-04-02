@@ -163,6 +163,30 @@ export default function ImpellerViewer({ flowRate, head, rpm }: Props) {
       .finally(() => setLoading(false))
   }, [flowRate, head, rpm])
 
+  const handleExport = async (format: string, q: number, h: number, n: number) => {
+    try {
+      const res = await fetch('/api/v1/geometry/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flow_rate: q / 3600, head: h, rpm: n, format }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }))
+        alert(err.detail || `Export failed: ${res.status}`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `impeller.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert(`Export failed: ${e.message}`)
+    }
+  }
+
   if (loading) return <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>Loading 3D geometry...</div>
   if (error) return <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c00' }}>Failed to load geometry: {error}</div>
   if (!data) return <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>No geometry data</div>
@@ -175,10 +199,24 @@ export default function ImpellerViewer({ flowRate, head, rpm }: Props) {
           <Scene data={data} />
         </Canvas>
       </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: '#888' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, fontSize: 12, color: '#888' }}>
         <span>{data.blade_count} blades</span>
         <span>D2: {(data.d2 * 1000).toFixed(0)} mm</span>
         <span>Drag to rotate, scroll to zoom</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {['STEP', 'STL'].map(fmt => (
+            <button
+              key={fmt}
+              onClick={() => handleExport(fmt.toLowerCase(), flowRate, head, rpm)}
+              style={{
+                padding: '4px 12px', background: '#2E8B57', color: '#fff',
+                border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+              }}
+            >
+              Export {fmt}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

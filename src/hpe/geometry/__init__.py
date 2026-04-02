@@ -13,6 +13,10 @@ Usage:
     from hpe.geometry.runner.export import export_runner
 """
 
-from hpe.geometry.runner.impeller import generate_runner, generate_runner_from_sizing
+def __getattr__(name: str):  # type: ignore[no-untyped-def]
+    if name in ("generate_runner", "generate_runner_from_sizing"):
+        from hpe.geometry.runner.impeller import generate_runner, generate_runner_from_sizing
+        return {"generate_runner": generate_runner, "generate_runner_from_sizing": generate_runner_from_sizing}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = ["generate_runner", "generate_runner_from_sizing"]

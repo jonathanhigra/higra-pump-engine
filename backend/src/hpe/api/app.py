@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from hpe.api.routes.sizing import router as sizing_router
 from hpe.api.routes.analysis import router as analysis_router
+from hpe.api.routes.projects import router as projects_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -24,6 +25,7 @@ app.add_middleware(
 
 app.include_router(sizing_router)
 app.include_router(analysis_router)
+app.include_router(projects_router)
 
 
 @app.get("/health")

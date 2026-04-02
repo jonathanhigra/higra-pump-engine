@@ -2,62 +2,295 @@ import React, { useState } from 'react'
 import t from '../i18n/pt-br'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 
+// ----- constants -----
+const MACHINE_TYPES = [
+  { id: 'centrifugal_pump', label: 'Bomba Centrif.', rpm_hint: 1450 },
+  { id: 'mixed_flow_pump', label: 'Bomba Mista', rpm_hint: 1000 },
+  { id: 'axial_pump', label: 'Bomba Axial', rpm_hint: 730 },
+  { id: 'francis_turbine', label: 'Turbina Francis', rpm_hint: 1350 },
+  { id: 'centrifugal_compressor', label: 'Compressor', rpm_hint: 8000 },
+]
+
+const FLUIDS = [
+  { id: 'water20', label: 'Água 20°C', rho: 998, mu: 1.0e-3, pv: 2340 },
+  { id: 'water60', label: 'Água 60°C', rho: 983, mu: 4.7e-4, pv: 19940 },
+  { id: 'oil', label: 'Óleo Mineral', rho: 870, mu: 30e-3, pv: 50 },
+  { id: 'custom', label: 'Custom', rho: 998, mu: 1.0e-3, pv: 2340 },
+]
+
+const PRESETS = [
+  { label: 'NS280', q: 385, h: 17, n: 1000 },
+  { label: 'Bomba Típica', q: 180, h: 30, n: 1750 },
+  { label: 'Alta Velocidade', q: 50, h: 80, n: 2900 },
+]
+
+function calcNq(q_m3h: number, h: number, n: number): number {
+  const q = q_m3h / 3600
+  if (q <= 0 || h <= 0 || n <= 0) return 0
+  return n * Math.sqrt(q) / Math.pow(h, 0.75)
+}
+
+function nqBadge(nq: number): { label: string; color: string } {
+  if (nq <= 0) return { label: '—', color: 'var(--text-muted)' }
+  if (nq < 15) return { label: `Nq ${nq.toFixed(0)} · Muito baixo`, color: '#ff9800' }
+  if (nq < 40) return { label: `Nq ${nq.toFixed(0)} · Centrífugo`, color: '#4caf50' }
+  if (nq < 100) return { label: `Nq ${nq.toFixed(0)} · Misto`, color: '#00A0DF' }
+  return { label: `Nq ${nq.toFixed(0)} · Axial`, color: '#9c27b0' }
+}
+
 interface Props {
-  onResult: (sizing: any, curves: any[], losses: any, stress: any, op?: { flowRate: number; head: number; rpm: number }) => void
+  onResult: (sizing: any, curves: any[], losses: any, stress: any, op?: any) => void
   loading: boolean
   setLoading: (v: boolean) => void
 }
 
 export default function SizingForm({ onResult, loading, setLoading }: Props) {
-  const [flowRate, setFlowRate] = useState('180')
+  const [unit, setUnit] = useState<'m3h' | 'm3s'>(() =>
+    (localStorage.getItem('hpe_unit') as 'm3h' | 'm3s') || 'm3h'
+  )
+  const [machineType, setMachineType] = useState('centrifugal_pump')
+  const [fluidId, setFluidId] = useState('water20')
+  const [flowRate, setFlowRate] = useState('180')  // always in m³/h internally
   const [head, setHead] = useState('30')
   const [rpm, setRpm] = useState('1750')
+  const [advOpen, setAdvOpen] = useState(false)
+  const [tipClearance, setTipClearance] = useState('0.3')   // mm
+  const [roughness, setRoughness] = useState('25')           // μm
+  const [overrideD2, setOverrideD2] = useState('')
+  const [overrideB2, setOverrideB2] = useState('')
+  const [customRho, setCustomRho] = useState('998')
+  const [customMu, setCustomMu] = useState('1.0e-3')
   const [error, setError] = useState<string | null>(null)
+
+  const fluid = FLUIDS.find(f => f.id === fluidId) || FLUIDS[0]
+  const q_m3h = parseFloat(flowRate) || 0
+  const nq = calcNq(q_m3h, parseFloat(head) || 0, parseFloat(rpm) || 0)
+  const badge = nqBadge(nq)
+
+  const toggleUnit = () => {
+    const next = unit === 'm3h' ? 'm3s' : 'm3h'
+    setUnit(next)
+    localStorage.setItem('hpe_unit', next)
+    if (next === 'm3s') {
+      setFlowRate((q_m3h / 3600).toFixed(5))
+    } else {
+      setFlowRate((parseFloat(flowRate) * 3600).toFixed(1))
+    }
+  }
+
+  const applyPreset = (p: typeof PRESETS[0]) => {
+    setFlowRate(unit === 'm3h' ? String(p.q) : (p.q / 3600).toFixed(5))
+    setHead(String(p.h))
+    setRpm(String(p.n))
+  }
+
+  const handleMachineType = (id: string) => {
+    setMachineType(id)
+    const mt = MACHINE_TYPES.find(m => m.id === id)
+    if (mt) setRpm(String(mt.rpm_hint))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError(null)
     try {
-      const q = parseFloat(flowRate) / 3600
+      const q_m3s = unit === 'm3h' ? q_m3h / 3600 : parseFloat(flowRate)
       const h = parseFloat(head)
       const n = parseFloat(rpm)
+      const rho = fluidId === 'custom' ? parseFloat(customRho) : fluid.rho
+
+      const params = {
+        flow_rate: q_m3s, head: h, rpm: n,
+        machine_type: machineType,
+        fluid_density: rho,
+        ...(overrideD2 ? { override_d2: parseFloat(overrideD2) / 1000 } : {}),
+        ...(overrideB2 ? { override_b2: parseFloat(overrideB2) / 1000 } : {}),
+      }
+
       const [sizing, curvesData, lossData, stressData] = await Promise.all([
-        runSizing(q, h, n),
-        getCurves(q, h, n).catch(() => ({ points: [] })),
-        getLossBreakdown(q, h, n).catch(() => null),
-        runStressAnalysis(q, h, n).catch(() => null),
+        fetch('/api/v1/sizing', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(params) }).then(r => r.json()),
+        getCurves(q_m3s, h, n).catch(() => ({ points: [] })),
+        getLossBreakdown(q_m3s, h, n).catch(() => null),
+        runStressAnalysis(q_m3s, h, n).catch(() => null),
       ])
-      onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: parseFloat(flowRate), head: h, rpm: n })
-    } catch (err: any) { setError(err.message || 'Erro') } finally { setLoading(false) }
+      onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: q_m3h, head: h, rpm: n })
+    } catch (err: any) {
+      setError(err.message || 'Erro ao calcular')
+    } finally {
+      setLoading(false)
+    }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', background: 'var(--bg-input)',
+    border: '1px solid var(--border-primary)', borderRadius: 6,
+    color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-family)',
+    outline: 'none',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, color: 'var(--text-muted)', display: 'block',
+    marginBottom: 3, fontWeight: 500, letterSpacing: '0.03em',
+  }
+  const fieldStyle: React.CSSProperties = { marginBottom: 12 }
+
   return (
-    <form onSubmit={handleSubmit} className="card" style={{ padding: 20 }}>
-      <h3 style={{ marginTop: 0, color: 'var(--accent)', fontSize: 14, marginBottom: 16 }}>{t.operatingPoint}</h3>
+    <form onSubmit={handleSubmit} className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      <label style={{ display: 'block', marginBottom: 14 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.flowRate}</span>
-        <input className="input" type="number" step="1" value={flowRate} onChange={e => setFlowRate(e.target.value)} />
-      </label>
+      {/* Machine type pills */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 500 }}>TIPO DE MÁQUINA</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {MACHINE_TYPES.map(m => (
+            <button key={m.id} type="button" onClick={() => handleMachineType(m.id)}
+              style={{
+                padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                border: `1px solid ${machineType === m.id ? 'var(--accent)' : 'var(--border-primary)'}`,
+                background: machineType === m.id ? 'rgba(0,160,223,0.15)' : 'transparent',
+                color: machineType === m.id ? 'var(--accent)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <label style={{ display: 'block', marginBottom: 14 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.head}</span>
-        <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} />
-      </label>
+      {/* Fluid selector */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 500 }}>FLUIDO</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {FLUIDS.map(f => (
+            <button key={f.id} type="button" onClick={() => setFluidId(f.id)}
+              style={{
+                padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                border: `1px solid ${fluidId === f.id ? 'var(--accent)' : 'var(--border-primary)'}`,
+                background: fluidId === f.id ? 'rgba(0,160,223,0.12)' : 'transparent',
+                color: fluidId === f.id ? 'var(--accent)' : 'var(--text-muted)',
+              }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {fluidId !== 'custom' && (
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+            ρ = {fluid.rho} kg/m³ · μ = {(fluid.mu * 1000).toFixed(2)} mPa·s · Pv = {fluid.pv} Pa
+          </div>
+        )}
+        {fluidId === 'custom' && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <label style={{ flex: 1 }}>
+              <span style={labelStyle}>ρ [kg/m³]</span>
+              <input style={inputStyle} type="number" value={customRho} onChange={e => setCustomRho(e.target.value)} />
+            </label>
+            <label style={{ flex: 1 }}>
+              <span style={labelStyle}>μ [Pa·s]</span>
+              <input style={inputStyle} type="number" value={customMu} onChange={e => setCustomMu(e.target.value)} />
+            </label>
+          </div>
+        )}
+      </div>
 
-      <label style={{ display: 'block', marginBottom: 14 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{t.speed}</span>
-        <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} />
-      </label>
+      {/* Operating point */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>PONTO DE OPERAÇÃO</div>
+          <button type="button" onClick={toggleUnit}
+            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+            {unit === 'm3h' ? 'm³/h' : 'm³/s'}
+          </button>
+        </div>
+
+        {/* Nq live badge */}
+        {nq > 0 && (
+          <div style={{ marginBottom: 10, padding: '4px 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'rgba(0,0,0,0.3)', border: `1px solid ${badge.color}40` }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: badge.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
+          </div>
+        )}
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Vazão Q [{unit === 'm3h' ? 'm³/h' : 'm³/s'}]</label>
+          <input className="input" type="number" step="any"
+            value={unit === 'm3h' ? flowRate : (q_m3h / 3600).toFixed(6)}
+            onChange={e => setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600))}
+            placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'} />
+        </div>
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Altura Total H [m]</label>
+          <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30" />
+        </div>
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Rotação n [rpm]</label>
+          <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750" />
+        </div>
+      </div>
+
+      {/* Presets */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>Exemplos rápidos:</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {PRESETS.map(p => (
+            <button key={p.label} type="button" onClick={() => applyPreset(p)}
+              style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Advanced options */}
+      <div style={{ marginBottom: 14 }}>
+        <button type="button" onClick={() => setAdvOpen(o => !o)}
+          style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            style={{ transform: advOpen ? 'rotate(90deg)' : 'none', transition: '0.15s' }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          Opções Avançadas
+        </button>
+        {advOpen && (
+          <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-surface)', borderRadius: 6, border: '1px solid var(--border-primary)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label>
+              <span style={labelStyle}>Folga de topo [mm]</span>
+              <input style={inputStyle} type="number" step="0.1" value={tipClearance} onChange={e => setTipClearance(e.target.value)} placeholder="0.3" />
+            </label>
+            <label>
+              <span style={labelStyle}>Rugosidade Ra [μm]</span>
+              <input style={inputStyle} type="number" step="1" value={roughness} onChange={e => setRoughness(e.target.value)} placeholder="25" />
+            </label>
+            <label>
+              <span style={labelStyle}>Sobreposição D2 [mm]</span>
+              <input style={inputStyle} type="number" step="1" value={overrideD2} onChange={e => setOverrideD2(e.target.value)} placeholder="Automático" />
+            </label>
+            <label>
+              <span style={labelStyle}>Sobreposição b2 [mm]</span>
+              <input style={inputStyle} type="number" step="0.5" value={overrideB2} onChange={e => setOverrideB2(e.target.value)} placeholder="Automático" />
+            </label>
+          </div>
+        )}
+      </div>
 
       <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
-        {loading ? t.computing : t.runSizing}
+        {loading
+          ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                style={{ animation: 'spin 1s linear infinite' }}>
+                <path d="M21 12a9 9 0 11-6.219-8.56" />
+              </svg>
+              Calculando...
+            </span>
+          : '⚡ Executar Dimensionamento'}
       </button>
 
       {error && (
-        <div style={{ marginTop: 10, padding: 8, background: 'rgba(239,68,68,0.15)', borderRadius: 4, color: 'var(--accent-danger)', fontSize: 12 }}>
+        <div style={{ marginTop: 10, padding: 8, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, color: '#ef4444', fontSize: 12 }}>
           {error}
         </div>
       )}
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </form>
   )
 }

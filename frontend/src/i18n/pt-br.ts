@@ -40,6 +40,33 @@ const t = {
   runSizing: 'Executar Dimensionamento',
   computing: 'Calculando...',
 
+  // Sizing Form — machine / fluid / advanced (FX1)
+  machineType: 'TIPO DE MAQUINA',
+  fluid: 'FLUIDO',
+  operatingPointLabel: 'PONTO DE OPERACAO',
+  quickExamples: 'Exemplos rapidos:',
+  advancedOptions: 'Opcoes Avancadas',
+  tipClearance: 'Folga de topo [mm]',
+  roughness: 'Rugosidade Ra [um]',
+  overrideD2: 'Sobreposicao D2 [mm]',
+  overrideB2: 'Sobreposicao b2 [mm]',
+  automatic: 'Automatico',
+  flowRateLabel: 'Vazao Q',
+  headLabel: 'Altura Total H [m]',
+  rpmLabel: 'Rotacao n [rpm]',
+
+  // Results — status panel (FX2-FX3)
+  projectStatus: 'STATUS DO PROJETO',
+  deHaller: 'De Haller',
+  peripheralSpeed: 'Vel. periferica u2',
+  pmin: 'Pmin',
+  geometry: 'Geometria',
+  performance2: 'Desempenho',
+  losses2: 'Perdas',
+  meridionalView: 'Meridional',
+  closeView: 'Fechar',
+  warningsLabel: 'AVISOS',
+
   // Navigation / Tabs
   navProjects: 'Projetos',
   navCurrentProject: 'Projeto Atual',

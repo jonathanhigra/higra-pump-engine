@@ -20,6 +20,8 @@ import PressureDistribution from './components/PressureDistribution'
 import MultiSpeedChart from './components/MultiSpeedChart'
 import MeridionalEditor from './components/MeridionalEditor'
 import SpanwiseLoadingChart from './components/SpanwiseLoadingChart'
+import ReferencePanel from './components/ReferencePanel'
+import ExportPanel from './components/ExportPanel'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
 
 export interface SizingResult {
@@ -164,42 +166,15 @@ export default function App() {
             <span>Nq: <b>{sizing.specific_speed_nq.toFixed(1)}</b></span>
             <span>D2: <b>{(sizing.impeller_d2 * 1000).toFixed(0)} mm</b></span>
             <span>eta: <b>{(sizing.estimated_efficiency * 100).toFixed(1)}%</b></span>
-            <button
-              className="btn-primary"
-              style={{ padding: '4px 14px', fontSize: 12, marginLeft: 12 }}
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/v1/report/pdf', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      project_name: currentProject?.name || 'Projeto HPE',
-                      flow_rate: opPoint.flowRate / 3600,
-                      head: opPoint.head,
-                      rpm: opPoint.rpm,
-                      sizing: { ...sizing, uncertainty: sizing.uncertainty ?? {} },
-                      author: user?.name || 'Engenharia HIGRA',
-                    }),
-                  })
-                  if (!res.ok) { alert(`Erro ao gerar PDF: ${res.status}`); return }
-                  const blob = await res.blob()
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `${(currentProject?.name || 'relatorio').replace(/\s+/g, '_')}.pdf`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                } catch (e: any) { alert(`Falha: ${e.message}`) }
-              }}
-            >
-              ↓ PDF
-            </button>
           </div>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24 }}>
-        <div>
+      {/* Two-column design layout: left = form + export, right = results + analysis tabs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
+
+        {/* LEFT PANEL — always visible */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <SizingForm
             onResult={(result, curvePoints, lossData, stressData, op) => {
               setSizing(result); setCurves(curvePoints)
@@ -209,12 +184,20 @@ export default function App() {
             loading={loading}
             setLoading={setLoading}
           />
+          <ExportPanel sizing={sizing} op={sizing ? opPoint : null} />
         </div>
 
+        {/* RIGHT PANEL — results area */}
         <div>
           {sizing ? (
             <>
-              {tab === 'results' && <ResultsView sizing={sizing} />}
+              {/* Results + reference comparison always visible in results tab */}
+              {tab === 'results' && (
+                <>
+                  <ResultsView sizing={sizing} />
+                  <ReferencePanel sizing={sizing} />
+                </>
+              )}
               {tab === 'curves' && (
                 <>
                   <CurvesChart points={curves} designFlow={opPoint.flowRate / 3600} designHead={opPoint.head} />
@@ -242,8 +225,23 @@ export default function App() {
               {tab === 'spanwise' && <SpanwiseLoadingChart sizing={sizing} />}
             </>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, color: 'var(--text-muted)', fontSize: 14 }}>
-              {t.enterOperatingPoint}
+            /* Empty state — shown before first sizing run */
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', height: 420, gap: 12,
+              color: 'var(--text-muted)', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 48, lineHeight: 1 }}>&#9889;</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Pronto para projetar
+              </div>
+              <div style={{ fontSize: 13, maxWidth: 300, lineHeight: 1.6 }}>
+                Preencha os dados à esquerda e clique em{' '}
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                  "Executar Dimensionamento"
+                </span>{' '}
+                para começar.
+              </div>
             </div>
           )}
         </div>

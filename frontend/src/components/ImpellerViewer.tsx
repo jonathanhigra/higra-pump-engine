@@ -586,9 +586,9 @@ function Scene({
 
   return (
     <>
-      {/* TURBOdesign-style: looking into the eye from above-front, pulled back */}
-      <PerspectiveCamera makeDefault position={[1.2, 1.0, 4.5]} fov={32} />
-      <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.0} maxDistance={12} />
+      {/* 3/4 elevated view — similar to TURBOdesign Suite post-processing */}
+      <PerspectiveCamera makeDefault position={[2.8, 2.2, 3.0]} fov={34} />
+      <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
       <ClipController clipZ={clipZ} />
 

@@ -11,5 +11,6 @@ Usage:
 """
 
 from hpe.ai.surrogate.predictor import SurrogatePredictor
+from hpe.ai.surrogate.eta_predictor import EtaSurrogate
 
-__all__ = ["SurrogatePredictor"]
+__all__ = ["SurrogatePredictor", "EtaSurrogate"]

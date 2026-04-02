@@ -40,6 +40,9 @@ dependencies = [
 
     # Logging
     "structlog>=24.1",
+
+    # PDF report generation (#18)
+    "fpdf2>=2.7",
 ]
 
 [project.optional-dependencies]

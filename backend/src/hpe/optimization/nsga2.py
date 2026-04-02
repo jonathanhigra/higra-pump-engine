@@ -27,6 +27,9 @@ class OptimizationResult:
     best_npsh: dict[str, Any] | None = None  # Best design by NPSH
 
 
+from typing import Callable, Optional  # noqa: E402  (already at top via Any)
+
+
 def run_nsga2(
     problem: OptimizationProblem,
     pop_size: int = 40,
@@ -34,6 +37,7 @@ def run_nsga2(
     crossover_prob: float = 0.9,
     mutation_prob: float = 0.2,
     seed: int | None = None,
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
 ) -> OptimizationResult:
     """Run NSGA-II optimization.
 
@@ -44,10 +48,14 @@ def run_nsga2(
         crossover_prob: Crossover probability.
         mutation_prob: Mutation probability per gene.
         seed: Random seed for reproducibility.
+        progress_callback: Optional callable called after each generation with
+            a dict ``{gen, n_gen, n_pareto, eta_max, npsh_min, elapsed_s}``.
 
     Returns:
         OptimizationResult with Pareto front and statistics.
     """
+    import time
+    _t0 = time.monotonic()
     if seed is not None:
         random.seed(seed)
 
@@ -133,6 +141,29 @@ def run_nsga2(
 
         # Select next generation
         pop = toolbox.select(pop + offspring, pop_size)
+
+        # Emit progress callback
+        if progress_callback is not None:
+            current_pareto = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
+            obj_name_list = list(problem.objectives.keys())
+            eta_vals = [ind.fitness.values[obj_name_list.index("efficiency")]
+                        for ind in current_pareto
+                        if ind.fitness.values[obj_name_list.index("efficiency")] > 0]
+            npsh_vals = [ind.fitness.values[obj_name_list.index("npsh_r")]
+                         for ind in current_pareto
+                         if ind.fitness.values[obj_name_list.index("npsh_r")] > 0]
+            try:
+                progress_callback({
+                    "gen": gen + 1,
+                    "n_gen": n_gen,
+                    "n_pareto": len(current_pareto),
+                    "eta_max": max(eta_vals) if eta_vals else 0.0,
+                    "npsh_min": min(npsh_vals) if npsh_vals else 0.0,
+                    "elapsed_s": round(time.monotonic() - _t0, 2),
+                    "total_evals": total_evals,
+                })
+            except Exception:
+                pass  # never let callback break the optimizer
 
     # Extract Pareto front
     pareto = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]

@@ -20,20 +20,27 @@ from hpe.core.models import SizingResult
 from hpe.geometry.models import RunnerGeometryParams
 from hpe.geometry.runner.blade import generate_blade_profile
 from hpe.geometry.runner.meridional import generate_meridional_channel
+from hpe.geometry.runner.meridional_channel_cad import generate_closed_channel_solid
 
 
 def generate_runner(
     params: RunnerGeometryParams,
     with_shroud: bool = False,
+    use_closed_channel: bool = True,
 ) -> cq.Workplane:
     """Generate a 3D centrifugal impeller.
 
     Creates an open impeller (hub + blades) by default.
     Set with_shroud=True for a closed impeller (adds shroud disk).
 
+    The ``use_closed_channel=True`` (default) uses the parametric
+    meridional channel curves to build accurate hub/shroud solids (#13).
+    Set to False to fall back to the legacy simplified approximation.
+
     Args:
         params: Runner geometry parameters.
         with_shroud: Whether to include the shroud disk.
+        use_closed_channel: Use proper meridional channel solid (#13).
 
     Returns:
         CadQuery Workplane containing the impeller solid.
@@ -42,8 +49,17 @@ def generate_runner(
     channel = generate_meridional_channel(params)
     blade_profile = generate_blade_profile(params)
 
-    # 1. Create hub disk
-    hub = _create_hub_disk(params, channel)
+    if use_closed_channel:
+        # #13 — build hub/shroud from actual (r,z) profile
+        try:
+            # disk_t = 10% of b2 in metres, min 2 mm
+            disk_t = max(0.002, params.b2 * 0.10)
+            hub = generate_closed_channel_solid(channel, disk_t=disk_t, unit="m")
+        except Exception:
+            # Graceful fallback if CadQuery revolve fails
+            hub = _create_hub_disk(params, channel)
+    else:
+        hub = _create_hub_disk(params, channel)
 
     # 2. Create blades and add to hub
     result = _add_blades_to_hub(hub, params, blade_profile, channel)

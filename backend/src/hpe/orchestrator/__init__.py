@@ -1,17 +1,15 @@
-"""HPE Orchestrator — Pipeline management, queues, and project versioning.
+"""HPE Orchestrator — Celery task queue for async computation.
 
-Manages the execution pipeline, controls simulation queues, coordinates
-batch runs, and ensures traceability for each project.
+Manages background execution of expensive tasks: CFD, optimization,
+batch parametric studies. Uses Celery + Redis for reliable queuing.
 
-Features:
-- Pipeline management (sizing -> geometry -> CFD -> post)
-- Batch simulation execution for parametric studies
-- Execution queue control (local, cluster, cloud)
-- Project versioning and parameter traceability
-- Completion notification and failure alerts
+Usage:
+    from hpe.orchestrator.tasks import run_sizing_task, run_optimization_task
 
-Skills required:
-- Celery + Redis task queue management
-- PostgreSQL for project metadata
-- Docker container orchestration
+    result = run_sizing_task.delay(flow_rate=0.05, head=30.0, rpm=1750)
+    print(result.get(timeout=30))
 """
+
+from hpe.orchestrator.celery_app import celery_app
+
+__all__ = ["celery_app"]

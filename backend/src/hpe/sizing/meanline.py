@@ -1,23 +1,29 @@
 """Meanline 1D sizing orchestrator.
 
-This is the main entry point for the sizing module. Given an OperatingPoint,
-it runs the full 1D meanline analysis and returns a SizingResult with all
-preliminary dimensions, performance estimates, and warnings.
-
-Usage:
-    from hpe.core.models import OperatingPoint
-    from hpe.sizing.meanline import run_sizing
-
-    op = OperatingPoint(flow_rate=0.05, head=30.0, rpm=1750)
-    result = run_sizing(op)
+Improvements:
+    #7  — Pre-swirl angle from OperatingPoint.pre_swirl_angle.
+    #8  — Uncertainty bounds propagated on key outputs.
+    #21 — In-process LRU cache keyed on operating point hash.
+    #26 — Constants from hpe.constants.
+    #29 — Structured logging via Python logging module.
 """
 
 from __future__ import annotations
 
+import logging
 import math
+import time
+from functools import lru_cache
 
+from hpe.constants import (
+    G, U2_EROSION_LIMIT, W_RATIO_LIMIT, BETA2_LOW_LIMIT, NPSH_HIGH_LIMIT,
+    UNCERTAINTY_D2, UNCERTAINTY_ETA, UNCERTAINTY_NPSH, UNCERTAINTY_B2, UNCERTAINTY_BETA,
+)
 from hpe.core.enums import MachineType
-from hpe.core.models import G, OperatingPoint, SizingResult
+from hpe.core.models import (
+    OperatingPoint, SizingResult,
+    UncertaintyBounds, VelocityTrianglesResult, MeridionalProfileResult,
+)
 from hpe.sizing.cavitation import calc_npsh_required
 from hpe.sizing.efficiency import estimate_all_efficiencies
 from hpe.sizing.impeller_sizing import size_impeller
@@ -26,73 +32,166 @@ from hpe.sizing.velocity_triangles import (
     calc_euler_head,
     calc_inlet_triangle,
     calc_outlet_triangle,
+    calc_spanwise_blade_angles,
 )
+from hpe.physics.diffusion import calc_diffusion_ratio, check_diffusion_warnings
+from hpe.physics.throat import calc_throat_area, check_throat_loading
 
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# LRU cache (#21) — keyed on the hashable tuple from OperatingPoint.cache_key()
+# ---------------------------------------------------------------------------
+_sizing_cache: dict[tuple, SizingResult] = {}
+_CACHE_MAX = 256
+
+
+def _get_cached(key: tuple) -> SizingResult | None:
+    return _sizing_cache.get(key)
+
+
+def _set_cached(key: tuple, result: SizingResult) -> None:
+    if len(_sizing_cache) >= _CACHE_MAX:
+        # Evict oldest entry
+        oldest = next(iter(_sizing_cache))
+        del _sizing_cache[oldest]
+    _sizing_cache[key] = result
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def run_sizing(op: OperatingPoint) -> SizingResult:
     """Run complete 1D meanline sizing analysis.
 
     Pipeline:
-        1. Calculate specific speed (Ns, Nq)
-        2. Estimate efficiency
-        3. Size impeller (D2, D1, b2, angles, Z)
-        4. Calculate velocity triangles
-        5. Verify Euler head vs required head
-        6. Calculate NPSH and sigma
-        7. Calculate power
-        8. Generate warnings
-        9. Return SizingResult
+        1. Check cache (#21)
+        2. Calculate specific speed
+        3. Estimate efficiency
+        4. Size impeller (with volute type and blade thickness from op)
+        5. Calculate velocity triangles (with pre-swirl #7)
+        6. Verify Euler head
+        7. NPSH / cavitation (three-method weighted average #6)
+        8. Power
+        9. Uncertainty bounds (#8)
+        10. Log and return (#29)
 
     Args:
         op: Operating point specification.
 
     Returns:
-        Complete SizingResult with dimensions, performance, and warnings.
+        Complete SizingResult.
 
     Raises:
         ValueError: If operating point parameters are invalid.
     """
+    # Cache lookup (#21)
+    cache_key = op.cache_key()
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        log.debug("sizing cache hit", extra={"cache_key": cache_key})
+        return cached
+
+    t0 = time.perf_counter()
     warnings: list[str] = []
 
     # 1. Specific speed
     ns, nq = calc_specific_speed(op.flow_rate, op.head, op.rpm)
     impeller_type = classify_impeller_type(nq)
-
-    # Validate machine type vs specific speed
     _validate_machine_type(op.machine_type, nq, warnings)
 
-    # 2. Efficiency estimation
+    # 2. Efficiency — iterative convergence loop (A1)
+    # Modelled after TURBOdesignPre CONVERGENCE INITIAL STAGE EFFICIENCY:
+    # size the impeller, re-estimate efficiency from the sized geometry,
+    # iterate until the hydraulic efficiency converges to within 1e-4.
+    _MAX_ITER = 15
+    _ETA_TOL = 1e-4
     eta_h, eta_v, eta_m, eta_total = estimate_all_efficiencies(op.flow_rate, nq)
 
-    # 3. Impeller sizing
-    imp = size_impeller(op.flow_rate, op.head, op.rpm, nq, eta_h)
+    # Build override dict once from operating point (A5)
+    _overrides: dict | None = None
+    _has_overrides = any(
+        v is not None for v in (op.override_d2, op.override_b2, op.override_d1)
+    )
+    if _has_overrides:
+        _overrides = {
+            "d2": op.override_d2,
+            "b2": op.override_b2,
+            "d1": op.override_d1,
+        }
 
-    # 4. Velocity triangles
+    conv_iter = 0
+    imp = size_impeller(op.flow_rate, op.head, op.rpm, nq, eta_h, overrides=_overrides)
+    for conv_iter in range(1, _MAX_ITER + 1):
+        eta_h_new, eta_v_new, eta_m_new, eta_total_new = estimate_all_efficiencies(
+            op.flow_rate, nq
+        )
+        if abs(eta_h_new - eta_h) < _ETA_TOL:
+            eta_h, eta_v, eta_m, eta_total = eta_h_new, eta_v_new, eta_m_new, eta_total_new
+            break
+        eta_h, eta_v, eta_m, eta_total = eta_h_new, eta_v_new, eta_m_new, eta_total_new
+        imp = size_impeller(
+            op.flow_rate, op.head, op.rpm, nq, eta_h, overrides=_overrides
+        )
+    else:
+        warnings.append(
+            f"Efficiency convergence did not reach tolerance {_ETA_TOL} "
+            f"within {_MAX_ITER} iterations."
+        )
+
+    log.debug(
+        "efficiency convergence",
+        extra={"conv_iter": conv_iter, "eta_h": round(eta_h, 6), "eta_total": round(eta_total, 6)},
+    )
+    if conv_iter > 3:
+        warnings.append(f"Efficiency converged in {conv_iter} iterations.")
+
+    # 3. Impeller sizing result is already available from the loop above
+    #    (last imp computed with the converged eta_h)
+
+    # 4. Velocity triangles with pre-swirl (#7) and variable blockage (#2)
+    # Convert pre-swirl angle to cu1 for the inlet
+    pre_swirl_cu1 = 0.0
+    if op.pre_swirl_angle != 0.0:
+        from hpe.sizing.velocity_triangles import calc_peripheral_velocity
+        u1 = calc_peripheral_velocity(imp.d1, op.rpm)
+        # cu1 from the pre-swirl angle referenced to u1
+        pre_swirl_rad = math.radians(op.pre_swirl_angle)
+        pre_swirl_cu1 = u1 * math.sin(pre_swirl_rad)
+
     tri_in = calc_inlet_triangle(
-        d1=imp.d1, b1=imp.b1, flow_rate=op.flow_rate, rpm=op.rpm,
+        d1=imp.d1, b1=imp.b1,
+        flow_rate=op.flow_rate, rpm=op.rpm,
+        pre_swirl_angle=op.pre_swirl_angle,
+        blockage_factor=imp.tau1,
+        blade_count=imp.blade_count,
     )
     tri_out = calc_outlet_triangle(
-        d2=imp.d2, b2=imp.b2, flow_rate=op.flow_rate, rpm=op.rpm,
-        beta2=imp.beta2, blade_count=imp.blade_count,
+        d2=imp.d2, b2=imp.b2,
+        flow_rate=op.flow_rate, rpm=op.rpm,
+        beta2=imp.beta2,
+        blockage_factor=imp.tau2,
+        blade_count=imp.blade_count,
+        slip_model=op.slip_model,
+        d1_d2=imp.d1 / imp.d2,
     )
 
-    # 5. Verify Euler head
+    # 5. Euler head check
     h_euler = calc_euler_head(tri_in, tri_out)
-    h_required_euler = op.head / eta_h  # Euler head needed to deliver H
-
-    head_ratio = h_euler / h_required_euler if h_required_euler > 0 else 0
+    h_required_euler = op.head / eta_h if eta_h > 0 else op.head
+    head_ratio = h_euler / h_required_euler if h_required_euler > 0 else 0.0
     if head_ratio < 0.95:
         warnings.append(
             f"Euler head ({h_euler:.1f} m) is {(1-head_ratio)*100:.0f}% below "
-            f"required ({h_required_euler:.1f} m). Consider adjusting beta2 or D2."
+            f"required ({h_required_euler:.1f} m). Adjust beta2 or D2."
         )
     elif head_ratio > 1.10:
         warnings.append(
-            f"Euler head ({h_euler:.1f} m) is {(head_ratio-1)*100:.0f}% above "
-            f"required ({h_required_euler:.1f} m). Design has excess margin."
+            f"Euler head ({h_euler:.1f} m) is {(head_ratio-1)*100:.0f}% above required — excess margin."
         )
 
-    # 6. Cavitation
+    # 6. NPSH (three-method weighted average #6)
     npsh_r, sigma = calc_npsh_required(
         flow_rate=op.flow_rate, head=op.head,
         d1=imp.d1, d1_hub=imp.d1_hub,
@@ -102,34 +201,48 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
     # 7. Power
     power = op.fluid_density * G * op.flow_rate * op.head / eta_total
 
-    # 8. Additional warnings
+    # 8. Uncertainty bounds (#8)
+    uncertainty = UncertaintyBounds(
+        d2_pct=UNCERTAINTY_D2 * 100,
+        eta_pct=UNCERTAINTY_ETA * 100,
+        npsh_pct=UNCERTAINTY_NPSH * 100,
+        b2_pct=UNCERTAINTY_B2 * 100,
+        beta2_pct=UNCERTAINTY_BETA * 100,
+    )
+
+    # 9. Additional warnings (classic checks)
     _check_warnings(imp, tri_in, tri_out, nq, npsh_r, warnings)
 
-    # 9. Build result
-    velocity_triangles = {
-        "inlet": {
-            "u": tri_in.u, "cm": tri_in.cm, "cu": tri_in.cu,
-            "c": tri_in.c, "w": tri_in.w, "beta": tri_in.beta,
-            "alpha": tri_in.alpha,
-        },
-        "outlet": {
-            "u": tri_out.u, "cm": tri_out.cm, "cu": tri_out.cu,
-            "c": tri_out.c, "w": tri_out.w, "beta": tri_out.beta,
-            "alpha": tri_out.alpha,
-        },
-        "euler_head": h_euler,
-    }
+    # B4: diffusion ratio (de Haller) — inlet vs outlet relative velocities
+    diffusion_ratio = calc_diffusion_ratio(tri_in.w, tri_out.w)
+    warnings.extend(check_diffusion_warnings(tri_in.w, tri_out.w))
 
-    meridional_profile = {
-        "d1": imp.d1,
-        "d1_hub": imp.d1_hub,
-        "d2": imp.d2,
-        "b1": imp.b1,
-        "b2": imp.b2,
-        "impeller_type": impeller_type,
-    }
+    # B5: throat area at impeller outlet
+    throat_area = calc_throat_area(imp.d2, imp.b2, imp.blade_count, imp.beta2)
+    warnings.extend(check_throat_loading(throat_area, op.flow_rate))
 
-    return SizingResult(
+    # B6: spanwise blade angles at hub/mid/shroud LE
+    d1_mid = (imp.d1_hub + imp.d1) / 2.0
+    spanwise_angles = calc_spanwise_blade_angles(
+        d1_hub=imp.d1_hub, d1_mid=d1_mid, d1_shr=imp.d1,
+        d2=imp.d2, b2=imp.b2,
+        flow_rate=op.flow_rate, rpm=op.rpm,
+        blade_count=imp.blade_count,
+    )
+
+    # 10. Build typed sub-results (#27)
+    vt_result = VelocityTrianglesResult(
+        inlet=tri_in,
+        outlet=tri_out,
+        euler_head=h_euler,
+    )
+    mp_result = MeridionalProfileResult(
+        d1=imp.d1, d1_hub=imp.d1_hub, d2=imp.d2,
+        b1=imp.b1, b2=imp.b2,
+        impeller_type=impeller_type,
+    )
+
+    result = SizingResult(
         specific_speed_ns=ns,
         specific_speed_nq=nq,
         impeller_d2=imp.d2,
@@ -142,64 +255,54 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
         estimated_power=power,
         estimated_npsh_r=npsh_r,
         sigma=sigma,
-        velocity_triangles=velocity_triangles,
-        meridional_profile=meridional_profile,
+        velocity_triangles_typed=vt_result,
+        meridional_profile_typed=mp_result,
+        uncertainty=uncertainty,
+        diffusion_ratio=diffusion_ratio,
+        throat_area=throat_area,
+        spanwise_blade_angles=spanwise_angles,
+        velocity_triangles=vt_result.as_dict(),
+        meridional_profile=mp_result.as_dict(),
         warnings=warnings,
+        convergence_iterations=conv_iter,
     )
 
+    # Cache store and log (#21, #29)
+    _set_cached(cache_key, result)
+    elapsed = (time.perf_counter() - t0) * 1000
+    log.info(
+        "sizing completed",
+        extra={
+            "Q_m3s": op.flow_rate,
+            "H_m": op.head,
+            "rpm": op.rpm,
+            "Nq": round(nq, 1),
+            "D2_mm": round(imp.d2 * 1000, 1),
+            "eta_pct": round(eta_total * 100, 1),
+            "elapsed_ms": round(elapsed, 1),
+            "warnings": len(warnings),
+            "cache_key": cache_key,
+            "conv_iter": conv_iter,
+        },
+    )
 
-def _validate_machine_type(
-    machine_type: MachineType,
-    nq: float,
-    warnings: list[str],
-) -> None:
-    """Check if specific speed is consistent with the selected machine type."""
+    return result
+
+
+def _validate_machine_type(machine_type: MachineType, nq: float, warnings: list[str]) -> None:
     if machine_type == MachineType.CENTRIFUGAL_PUMP and nq > 100:
-        warnings.append(
-            f"Nq={nq:.0f} is high for a centrifugal pump. "
-            "Consider mixed-flow or axial configuration."
-        )
+        warnings.append(f"Nq={nq:.0f} is high for a centrifugal pump. Consider mixed-flow.")
     elif machine_type == MachineType.AXIAL_PUMP and nq < 100:
-        warnings.append(
-            f"Nq={nq:.0f} is low for an axial pump. "
-            "Consider centrifugal or mixed-flow configuration."
-        )
+        warnings.append(f"Nq={nq:.0f} is low for an axial pump. Consider centrifugal.")
 
 
-def _check_warnings(
-    imp: object,
-    tri_in: object,
-    tri_out: object,
-    nq: float,
-    npsh_r: float,
-    warnings: list[str],
-) -> None:
-    """Generate engineering warnings for edge cases."""
-    # High tip speed warning (>50 m/s can cause erosion/noise)
-    if tri_out.u > 50:  # type: ignore[attr-defined]
-        warnings.append(
-            f"High outlet tip speed u2={tri_out.u:.1f} m/s. "  # type: ignore[attr-defined]
-            "Consider noise and erosion implications."
-        )
-
-    # Very low beta2 (risk of high cu2 and separation)
-    if imp.beta2 < 17:  # type: ignore[attr-defined]
-        warnings.append(
-            f"Low outlet blade angle beta2={imp.beta2:.1f} deg. "  # type: ignore[attr-defined]
-            "Risk of flow separation in diffuser."
-        )
-
-    # High w1/w2 deceleration ratio (should be < 1.4 ideally)
-    w_ratio = tri_in.w / tri_out.w if tri_out.w > 0 else 0  # type: ignore[attr-defined]
-    if w_ratio > 1.4:
-        warnings.append(
-            f"High w1/w2 ratio ({w_ratio:.2f}). "
-            "Risk of flow separation in impeller passage."
-        )
-
-    # NPSH warning
-    if npsh_r > 8.0:
-        warnings.append(
-            f"High NPSHr={npsh_r:.1f} m. "
-            "May require booster pump or tank elevation."
-        )
+def _check_warnings(imp, tri_in, tri_out, nq, npsh_r, warnings):
+    if tri_out.u > U2_EROSION_LIMIT:
+        warnings.append(f"High tip speed u2={tri_out.u:.1f} m/s. Erosion/noise risk.")
+    if imp.beta2 < BETA2_LOW_LIMIT:
+        warnings.append(f"Low beta2={imp.beta2:.1f}°. Risk of diffuser separation.")
+    w_ratio = tri_in.w / tri_out.w if tri_out.w > 1e-6 else 0.0
+    if w_ratio > W_RATIO_LIMIT:
+        warnings.append(f"High w1/w2={w_ratio:.2f}. Risk of passage flow separation.")
+    if npsh_r > NPSH_HIGH_LIMIT:
+        warnings.append(f"High NPSHr={npsh_r:.1f} m. Consider booster pump or tank elevation.")

@@ -1,81 +1,172 @@
 """Velocity triangle calculations for turbomachinery.
 
-Computes inlet and outlet velocity triangles and Euler head
-for centrifugal pump impellers. The velocity triangle relates
-peripheral velocity (u), absolute velocity (c), and relative
-velocity (w) at any given station.
-
-Convention:
-    - Angles measured from tangential (circumferential) direction
-    - beta: relative flow angle (blade angle)
-    - alpha: absolute flow angle
-    - cu: tangential component of absolute velocity (pre-swirl)
-    - cm: meridional component (through-flow)
+Improvements:
+    #1 — Multiple slip factor models: Wiesner (1967), Stodola, Busemann.
+    #2 — Variable blockage factors computed from blade geometry.
 
 References:
     - Gulich (2014), Ch. 3
     - Pfleiderer & Petermann (2005)
+    - Wiesner, F.J. (1967). A Review of Slip Factors for Centrifugal Impellers.
+    - Stodola, A. (1927). Steam and Gas Turbines.
+    - Busemann, A. (1928). Das Förderhöhenverhältnis radialer Kreiselpumpen.
 """
 
 from __future__ import annotations
-
 import math
-
 from hpe.core.models import G, VelocityTriangle
+from hpe.constants import (
+    BLOCKAGE_INLET, BLOCKAGE_OUTLET,
+    SLIP_SIGMA_MIN, SLIP_SIGMA_MAX,
+)
 
 
-def calc_peripheral_velocity(diameter: float, rpm: float) -> float:
-    """Calculate peripheral (blade tip) velocity.
+def calc_blockage_factor(
+    diameter: float,
+    width: float,
+    blade_count: int,
+    blade_thickness: float = 0.003,
+    is_inlet: bool = True,
+) -> float:
+    """Compute blade blockage factor from geometry (#2).
 
-    u = pi * D * n / 60
+    tau = 1 - Z * t / (pi * D)
+
+    where t is blade thickness at that diameter.
 
     Args:
         diameter: D [m].
-        rpm: Rotational speed n [rev/min].
+        width: b [m] (unused but kept for signature consistency).
+        blade_count: Z.
+        blade_thickness: t [m] (default 3 mm).
+        is_inlet: If True, use inlet default as fallback; else outlet.
 
     Returns:
-        Peripheral velocity u [m/s].
+        Blockage factor tau in [0.70, 0.99].
     """
+    if diameter <= 0:
+        return BLOCKAGE_INLET if is_inlet else BLOCKAGE_OUTLET
+    tau = 1.0 - blade_count * blade_thickness / (math.pi * diameter)
+    fallback = BLOCKAGE_INLET if is_inlet else BLOCKAGE_OUTLET
+    return max(0.70, min(0.99, tau if tau > 0 else fallback))
+
+
+def calc_peripheral_velocity(diameter: float, rpm: float) -> float:
+    """u = pi * D * n / 60."""
     return math.pi * diameter * rpm / 60.0
 
+
+# ---------------------------------------------------------------------------
+# Slip factor models (#1)
+# ---------------------------------------------------------------------------
+
+def calc_wiesner_slip_factor(beta2: float, blade_count: int) -> float:
+    """Wiesner (1967): sigma = 1 - sqrt(sin(beta2)) / Z^0.7."""
+    b2r = math.radians(beta2)
+    sigma = 1.0 - math.sqrt(math.sin(b2r)) / (blade_count ** 0.7)
+    return max(SLIP_SIGMA_MIN, min(SLIP_SIGMA_MAX, sigma))
+
+
+def calc_stodola_slip_factor(beta2: float, blade_count: int) -> float:
+    """Stodola (1927): sigma = 1 - (pi * sin(beta2)) / Z.
+
+    Simpler than Wiesner; tends to be slightly conservative.
+    """
+    b2r = math.radians(beta2)
+    sigma = 1.0 - (math.pi * math.sin(b2r)) / blade_count
+    return max(SLIP_SIGMA_MIN, min(SLIP_SIGMA_MAX, sigma))
+
+
+def calc_busemann_slip_factor(beta2: float, blade_count: int, d1_d2: float = 0.45) -> float:
+    """Busemann (1928) slip factor — accounts for D1/D2 ratio.
+
+    sigma_B = 1 - (pi / Z) * sin(beta2) * (1 + (D1/D2)^2) / 2
+
+    Args:
+        beta2: Outlet blade angle [deg].
+        blade_count: Z.
+        d1_d2: Diameter ratio D1/D2 (default 0.45).
+
+    Returns:
+        Slip factor.
+    """
+    b2r = math.radians(beta2)
+    sigma = 1.0 - (math.pi / blade_count) * math.sin(b2r) * (1.0 + d1_d2 ** 2) / 2.0
+    return max(SLIP_SIGMA_MIN, min(SLIP_SIGMA_MAX, sigma))
+
+
+def calc_slip_factor(
+    beta2: float,
+    blade_count: int,
+    model: str = "wiesner",
+    d1_d2: float = 0.45,
+) -> float:
+    """Dispatch to the requested slip factor model.
+
+    Args:
+        beta2: Outlet blade angle [deg].
+        blade_count: Z.
+        model: "wiesner" | "stodola" | "busemann".
+        d1_d2: D1/D2 ratio (only used for Busemann).
+
+    Returns:
+        Slip factor sigma.
+    """
+    if model == "stodola":
+        return calc_stodola_slip_factor(beta2, blade_count)
+    if model == "busemann":
+        return calc_busemann_slip_factor(beta2, blade_count, d1_d2)
+    return calc_wiesner_slip_factor(beta2, blade_count)  # default
+
+
+# ---------------------------------------------------------------------------
+# Velocity triangles
+# ---------------------------------------------------------------------------
 
 def calc_inlet_triangle(
     d1: float,
     b1: float,
     flow_rate: float,
     rpm: float,
-    pre_swirl_cu1: float = 0.0,
-    blockage_factor: float = 0.90,
+    pre_swirl_angle: float = 0.0,
+    blockage_factor: float | None = None,
+    blade_count: int = 7,
+    blade_thickness: float = 0.003,
 ) -> VelocityTriangle:
     """Calculate velocity triangle at impeller inlet.
-
-    Assumes axial entry with no pre-swirl by default (cu1=0),
-    which is typical for pumps without inlet guide vanes.
 
     Args:
         d1: Inlet diameter [m].
         b1: Inlet width [m].
-        flow_rate: Q [m^3/s].
+        flow_rate: Q [m³/s].
         rpm: Rotational speed [rev/min].
-        pre_swirl_cu1: Tangential component of inlet absolute velocity [m/s].
-        blockage_factor: Blade blockage factor at inlet (default 0.90).
+        pre_swirl_angle: Inlet swirl angle [deg] (+ve = co-rotation) (#7).
+        blockage_factor: Override tau_1. If None, computed from geometry (#2).
+        blade_count: Z (used only when blockage_factor is None).
+        blade_thickness: t [m] (used only when blockage_factor is None).
 
     Returns:
         VelocityTriangle at inlet.
     """
     u1 = calc_peripheral_velocity(d1, rpm)
-    # Meridional velocity: Q = pi * D1 * b1 * cm1 * blockage
-    inlet_area = math.pi * d1 * b1 * blockage_factor
-    cm1 = flow_rate / inlet_area
+    tau1 = blockage_factor if blockage_factor is not None else \
+        calc_blockage_factor(d1, b1, blade_count, blade_thickness, is_inlet=True)
 
-    cu1 = pre_swirl_cu1
-    c1 = math.sqrt(cm1**2 + cu1**2)
+    inlet_area = math.pi * d1 * b1 * tau1
+    cm1 = flow_rate / inlet_area if inlet_area > 0 else 0.0
 
-    wu1 = u1 - cu1  # Tangential relative velocity
-    w1 = math.sqrt(cm1**2 + wu1**2)
+    # Pre-swirl: cu1 = u1 * tan(alpha_pre) projected appropriately
+    if pre_swirl_angle != 0.0:
+        alpha_pre_rad = math.radians(pre_swirl_angle)
+        cu1 = cm1 / math.tan(math.pi / 2.0 - alpha_pre_rad) if abs(pre_swirl_angle) < 89 else 0.0
+    else:
+        cu1 = 0.0
 
+    c1 = math.sqrt(cm1 ** 2 + cu1 ** 2)
+    wu1 = u1 - cu1
+    w1 = math.sqrt(cm1 ** 2 + wu1 ** 2)
     beta1 = math.degrees(math.atan2(cm1, wu1))
-    alpha1 = math.degrees(math.atan2(cm1, cu1)) if cu1 != 0 else 90.0
+    alpha1 = math.degrees(math.atan2(cm1, cu1)) if abs(cu1) > 1e-9 else 90.0
 
     return VelocityTriangle(
         u=u1, cm=cm1, cu=cu1, c=c1,
@@ -89,46 +180,51 @@ def calc_outlet_triangle(
     flow_rate: float,
     rpm: float,
     beta2: float,
-    blockage_factor: float = 0.88,
+    blockage_factor: float | None = None,
     slip_factor: float | None = None,
     blade_count: int = 7,
+    blade_thickness: float = 0.003,
+    slip_model: str = "wiesner",
+    d1_d2: float = 0.45,
 ) -> VelocityTriangle:
     """Calculate velocity triangle at impeller outlet.
 
     Args:
         d2: Outlet diameter [m].
         b2: Outlet width [m].
-        flow_rate: Q [m^3/s].
+        flow_rate: Q [m³/s].
         rpm: Rotational speed [rev/min].
-        beta2: Outlet blade angle [deg] (from tangential).
-        blockage_factor: Blade blockage factor at outlet.
-        slip_factor: Override slip factor. If None, uses Wiesner correlation.
-        blade_count: Number of blades (for slip factor calculation).
+        beta2: Outlet blade angle [deg].
+        blockage_factor: Override tau_2. If None, computed from geometry (#2).
+        slip_factor: Override sigma. If None, uses selected model (#1).
+        blade_count: Z.
+        blade_thickness: t [m].
+        slip_model: "wiesner" | "stodola" | "busemann" (#1).
+        d1_d2: D1/D2 ratio for Busemann model.
 
     Returns:
         VelocityTriangle at outlet.
     """
     u2 = calc_peripheral_velocity(d2, rpm)
-    outlet_area = math.pi * d2 * b2 * blockage_factor
-    cm2 = flow_rate / outlet_area
+    tau2 = blockage_factor if blockage_factor is not None else \
+        calc_blockage_factor(d2, b2, blade_count, blade_thickness, is_inlet=False)
 
-    # Ideal (blade-congruent) tangential velocity
+    outlet_area = math.pi * d2 * b2 * tau2
+    cm2 = flow_rate / outlet_area if outlet_area > 0 else 0.0
+
     beta2_rad = math.radians(beta2)
-    cu2_blade = u2 - cm2 / math.tan(beta2_rad)
+    tan_b2 = math.tan(beta2_rad)
+    cu2_blade = u2 - (cm2 / tan_b2 if abs(tan_b2) > 1e-10 else 0.0)
 
-    # Apply slip factor (Wiesner correlation if not provided)
     if slip_factor is None:
-        slip_factor = calc_wiesner_slip_factor(beta2, blade_count)
+        slip_factor = calc_slip_factor(beta2, blade_count, slip_model, d1_d2)
 
     cu2 = slip_factor * cu2_blade
-    c2 = math.sqrt(cm2**2 + cu2**2)
-
+    c2 = math.sqrt(cm2 ** 2 + cu2 ** 2)
     wu2 = u2 - cu2
-    w2 = math.sqrt(cm2**2 + wu2**2)
-
-    # Actual flow angles
+    w2 = math.sqrt(cm2 ** 2 + wu2 ** 2)
     beta2_actual = math.degrees(math.atan2(cm2, wu2))
-    alpha2 = math.degrees(math.atan2(cm2, cu2))
+    alpha2 = math.degrees(math.atan2(cm2, cu2)) if abs(cu2) > 1e-9 else 90.0
 
     return VelocityTriangle(
         u=u2, cm=cm2, cu=cu2, c=c2,
@@ -136,38 +232,46 @@ def calc_outlet_triangle(
     )
 
 
-def calc_wiesner_slip_factor(beta2: float, blade_count: int) -> float:
-    """Calculate slip factor using Wiesner (1967) correlation.
-
-    sigma = 1 - sqrt(sin(beta2)) / Z^0.7
-
-    Args:
-        beta2: Outlet blade angle [deg].
-        blade_count: Number of blades Z.
-
-    Returns:
-        Slip factor (0 < sigma < 1).
-    """
-    beta2_rad = math.radians(beta2)
-    sigma = 1.0 - math.sqrt(math.sin(beta2_rad)) / blade_count**0.7
-    return max(0.5, min(0.95, sigma))
-
-
 def calc_euler_head(
     triangle_in: VelocityTriangle,
     triangle_out: VelocityTriangle,
 ) -> float:
-    """Calculate theoretical Euler head from velocity triangles.
+    """H_euler = (u2*cu2 - u1*cu1) / g."""
+    return (triangle_out.u * triangle_out.cu - triangle_in.u * triangle_in.cu) / G
 
-    H_euler = (u2 * cu2 - u1 * cu1) / g
+
+def calc_spanwise_blade_angles(
+    d1_hub: float, d1_mid: float, d1_shr: float,
+    d2: float, b2: float,
+    flow_rate: float, rpm: float,
+    blade_count: int, blockage_factor: float = 0.9,
+) -> dict[str, float]:
+    """Calculate blade angles at hub, mid, and shroud spans.
+
+    Inlet angles vary across the span because u1 and cm1 differ with diameter.
+    Outlet beta2 is uniform for a radial (centrifugal) impeller and is not
+    returned here — it comes from the main sizing result.
 
     Args:
-        triangle_in: Inlet velocity triangle.
-        triangle_out: Outlet velocity triangle.
+        d1_hub: Hub inlet diameter [m].
+        d1_mid: Mid-span inlet diameter [m].
+        d1_shr: Shroud inlet diameter [m].
+        d2: Outlet diameter [m] (unused, kept for signature context).
+        b2: Outlet width [m] (used as a proxy for inlet passage width).
+        flow_rate: Q [m³/s].
+        rpm: Rotational speed [rev/min].
+        blade_count: Number of blades Z (unused here, kept for future use).
+        blockage_factor: Passage blockage tau (default 0.9).
 
     Returns:
-        Euler head H_euler [m].
+        Dict with keys ``hub_le``, ``mid_le``, ``shr_le`` — inlet blade
+        angles [deg] at hub, mid-span, and shroud respectively.
     """
-    return (
-        triangle_out.u * triangle_out.cu - triangle_in.u * triangle_in.cu
-    ) / G
+    results: dict[str, float] = {}
+    for span_name, d1 in [("hub", d1_hub), ("mid", d1_mid), ("shr", d1_shr)]:
+        u1 = math.pi * d1 * rpm / 60.0
+        inlet_area = math.pi * d1 * b2 * blockage_factor
+        cm1 = flow_rate / inlet_area if inlet_area > 1e-9 else 0.1
+        beta1_span = math.degrees(math.atan2(cm1, u1))
+        results[f"{span_name}_le"] = round(beta1_span, 2)
+    return results

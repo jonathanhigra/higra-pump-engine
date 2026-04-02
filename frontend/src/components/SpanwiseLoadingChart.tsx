@@ -16,7 +16,7 @@ export default function SpanwiseLoadingChart({ sizing }: Props) {
   const spa = sizing.spanwise_blade_angles || {}
   const beta1_hub = spa.beta1_hub ?? sizing.beta1 ?? 25
   const beta1_mid = spa.beta1_mid ?? sizing.beta1 ?? 25
-  const beta1_shr = spa.beta1_shr ?? sizing.beta1 * 0.9 ?? 22
+  const beta1_shr = spa.beta1_shr ?? (sizing.beta1 != null ? sizing.beta1 * 0.9 : 22)
   const beta2 = sizing.beta2 ?? 22
   const eta = sizing.estimated_efficiency ?? 0.8
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import Sidebar from './Sidebar'
 
-type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare' | 'assistant' | 'optimize'
+type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure' | 'multispeed' | 'meridional-editor' | 'spanwise'
 
 interface Props {
   page: 'projects' | 'design'

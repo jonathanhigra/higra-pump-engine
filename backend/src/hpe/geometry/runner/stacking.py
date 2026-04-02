@@ -213,6 +213,61 @@ def _interpolate_custom(
     return pts[-1][1]
 
 
+def calc_stacking_angles_from_control_points(
+    control_points: list[tuple[float, float]],
+    query_spans: list[float] | None = None,
+    n_spans: int = 11,
+) -> list[tuple[float, float]]:
+    """Compute lean angle vs span via cubic spline (or linear) interpolation.
+
+    Takes a list of control points [(span_fraction, lean_angle_deg)] and
+    returns smooth interpolated lean angles at ``n_spans`` uniformly-spaced
+    span stations (or at the explicit ``query_spans`` positions).
+
+    Falls back to piecewise linear interpolation when scipy is not available.
+
+    Args:
+        control_points: List of (span_fraction, lean_angle_deg) anchors.
+            span_fraction must be in [0, 1].
+            At least 2 points required; 4+ recommended for cubic spline.
+        query_spans: Optional explicit list of span fractions to evaluate.
+            If None, ``n_spans`` evenly-spaced stations from 0 to 1 are used.
+        n_spans: Number of output stations when ``query_spans`` is None.
+
+    Returns:
+        List of (span_fraction, lean_angle_deg) tuples — one per station.
+
+    Raises:
+        ValueError: If fewer than 2 control points are provided.
+    """
+    if len(control_points) < 2:
+        raise ValueError(
+            f"At least 2 control points required, got {len(control_points)}."
+        )
+
+    # Sort by span fraction
+    pts = sorted(control_points, key=lambda p: p[0])
+
+    # Build query positions
+    if query_spans is not None:
+        spans_out = list(query_spans)
+    else:
+        spans_out = [i / (n_spans - 1) for i in range(n_spans)] if n_spans > 1 else [0.5]
+
+    # Try cubic spline via scipy
+    try:
+        from scipy.interpolate import CubicSpline  # type: ignore
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        cs = CubicSpline(xs, ys, bc_type="not-a-knot")
+        result = [(s, float(cs(s))) for s in spans_out]
+    except Exception:
+        # Fallback: piecewise linear interpolation
+        result = [(s, _interpolate_custom(pts, s)) for s in spans_out]
+
+    return result
+
+
 def _calc_le_sweep_angle(offsets: list[float], spans: list[float]) -> float:
     """Calculate LE sweep angle from hub to shroud."""
     if len(offsets) < 2:

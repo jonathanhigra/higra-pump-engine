@@ -403,6 +403,66 @@ def inducer_endpoint(
     }
 
 
+@router.get("/sizing/multi_speed")
+def sizing_multi_speed(
+    flow_rate: float,
+    head: float,
+    rpm: float,
+    speed_factors: str = "0.8,0.9,1.0,1.1,1.2",
+) -> dict:
+    """Affinity-law family of curves at multiple speeds (B11).
+
+    Given a design point, scales Q, H, N by k, k², k respectively
+    and computes full curves for each speed.
+    Returns a list of speed-curve datasets for plotting.
+
+    Args:
+        flow_rate: Design flow rate [m³/s].
+        head: Design head [m].
+        rpm: Design speed [RPM].
+        speed_factors: Comma-separated speed scaling factors (default 0.8,0.9,1.0,1.1,1.2).
+
+    Returns:
+        Dict with ``families`` list and ``n_speeds`` count.
+    """
+    from hpe.physics.curves import generate_curves
+    from hpe.sizing import run_sizing
+
+    _validate_op(flow_rate, head, rpm)
+
+    factors = [float(f) for f in speed_factors.split(",") if f.strip()]
+    op_base = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    sizing_base = run_sizing(op_base)
+
+    families = []
+    for k in factors:
+        q_k = flow_rate * k
+        h_k = head * k ** 2
+        n_k = rpm * k
+        try:
+            op_k = OperatingPoint(flow_rate=q_k, head=h_k, rpm=n_k)
+            s_k = run_sizing(op_k)
+            curves_k = generate_curves(s_k, q_min_ratio=0.1, q_max_ratio=1.5, n_points=20)
+            families.append({
+                "speed_factor": round(k, 2),
+                "rpm": round(n_k, 0),
+                "points": [
+                    {
+                        "flow_m3h": round(curves_k.flow_rates[i] * 3600, 2),
+                        "head": round(curves_k.heads[i], 2),
+                        "efficiency": round(curves_k.efficiencies[i], 4),
+                    }
+                    for i in range(len(curves_k.flow_rates))
+                ],
+                "design_flow_m3h": round(q_k * 3600, 2),
+                "design_head": round(h_k, 2),
+            })
+        except Exception:
+            pass
+
+    return {"families": families, "n_speeds": len(families)}
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 def optimize_endpoint(req: OptimizeRequest) -> OptimizeResponse:
     """Run multi-objective optimization."""

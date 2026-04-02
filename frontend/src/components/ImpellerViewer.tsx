@@ -448,10 +448,108 @@ function ParticleSystem({
   )
 }
 
+// ─── Volute geometry builder ──────────────────────────────────────────────────
+
+function buildVoluteGeo(d2Mm: number): THREE.BufferGeometry {
+  /**
+   * Archimedean spiral volute in the Z=0 plane.
+   * r(θ) = r2 + (r_collector - r2) * θ/(2π)   — spiral from tongue to discharge
+   * Cross-section: circle of radius growing from 0 at tongue to r_max at 2π
+   */
+  const r2 = d2Mm / 2           // impeller outlet radius [mm]
+  const gap = r2 * 0.06         // radial gap between impeller and tongue
+  const r_tongue = r2 + gap     // tongue radius
+  const r_collector = r2 * 1.60 // outer scroll radius at 360°
+  const b_volute = r2 * 0.55    // axial width of volute (slightly wider than b2)
+
+  const N_THETA = 48            // circumferential divisions
+  const N_SECT = 10             // cross-section divisions (tube segments)
+
+  const pos: number[] = []
+
+  for (let i = 0; i < N_THETA; i++) {
+    const theta0 = (i / N_THETA) * Math.PI * 2
+    const theta1 = ((i + 1) / N_THETA) * Math.PI * 2
+
+    // For each theta station, build a ring cross-section
+    const getRing = (theta: number): Array<[number, number, number]> => {
+      const frac = theta / (Math.PI * 2)
+      const r_center = r_tongue + (r_collector - r_tongue) * frac
+      const sect_r = (r_collector - r_tongue) * frac * 0.5 + gap * 0.5
+      // Cross-section in the r-z plane around center (r_center, 0)
+      const ring: Array<[number, number, number]> = []
+      for (let j = 0; j <= N_SECT; j++) {
+        const phi = (j / N_SECT) * Math.PI * 2
+        const dr = sect_r * Math.cos(phi)
+        const dz = sect_r * Math.sin(phi) * (b_volute / (sect_r * 2 + 1e-3))
+        const r = r_center + dr
+        const x = r * Math.cos(theta)
+        const y = r * Math.sin(theta)
+        const z = dz
+        ring.push([x, y, z])
+      }
+      return ring
+    }
+
+    const ring0 = getRing(theta0)
+    const ring1 = getRing(theta1)
+
+    // Connect rings with quads
+    for (let j = 0; j < N_SECT; j++) {
+      const [x00, y00, z00] = ring0[j]
+      const [x01, y01, z01] = ring0[j + 1]
+      const [x10, y10, z10] = ring1[j]
+      const [x11, y11, z11] = ring1[j + 1]
+      pos.push(x00, y00, z00, x10, y10, z10, x01, y01, z01)
+      pos.push(x10, y10, z10, x11, y11, z11, x01, y01, z01)
+    }
+  }
+
+  // Discharge nozzle: a short cylinder tangent to the scroll at 360°
+  const r_exit = r_collector
+  const nozzle_len = r2 * 0.8
+  const nozzle_r = (r_collector - r_tongue) * 0.5
+  const N_CIRC = 16
+  for (let j = 0; j < N_CIRC; j++) {
+    const phi0 = (j / N_CIRC) * Math.PI * 2
+    const phi1 = ((j + 1) / N_CIRC) * Math.PI * 2
+    // Nozzle along +x direction from (r_exit, 0, 0) for nozzle_len
+    const x0 = r_exit + nozzle_r * Math.cos(phi0)
+    const z0 = nozzle_r * Math.sin(phi0)
+    const x1 = r_exit + nozzle_r * Math.cos(phi1)
+    const z1 = nozzle_r * Math.sin(phi1)
+    // Along Y (tangential exit)
+    pos.push(x0, 0, z0, x0, nozzle_len, z0, x1, 0, z1)
+    pos.push(x0, nozzle_len, z0, x1, nozzle_len, z1, x1, 0, z1)
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  geo.computeVertexNormals()
+  return geo
+}
+
+function VoluteMesh({ d2Mm }: { d2Mm: number }) {
+  const geo = useMemo(() => buildVoluteGeo(d2Mm), [d2Mm])
+  return (
+    <mesh geometry={geo}>
+      <meshStandardMaterial
+        color="#1e293b"
+        metalness={0.4}
+        roughness={0.6}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={0.55}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, showColormap, showParticles,
+  data, paused, rpm, showSplitters, clipZ, showColormap, showParticles, showVolute,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -460,6 +558,7 @@ function Scene({
   clipZ: number | null
   showColormap: boolean
   showParticles: boolean
+  showVolute: boolean
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -485,6 +584,12 @@ function Scene({
         </group>
       </RotatingGroup>
 
+      {showVolute && (
+        <group scale={[scale, scale, scale]}>
+          <VoluteMesh d2Mm={data.d2 * 1000} />
+        </group>
+      )}
+
       <ParticleSystem data={data} active={showParticles} paused={paused} />
 
       {/* Floor grid */}
@@ -507,6 +612,7 @@ export default function ImpellerViewer({
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
   const [showParticles, setShowParticles] = useState(false)
+  const [showVolute, setShowVolute] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -566,7 +672,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#090d12' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} showVolute={showVolute} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -607,6 +713,7 @@ export default function ImpellerViewer({
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+          <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <button
             onClick={() => setClipZ(c => c === null ? 0 : null)}
             style={{
@@ -701,6 +808,7 @@ export default function ImpellerViewer({
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+          <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
 
           {/* Clip plane slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

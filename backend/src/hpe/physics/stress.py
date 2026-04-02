@@ -258,6 +258,33 @@ def calc_blade_natural_frequency(
     return f1
 
 
+def calc_abladek3(
+    blade_count: int,
+    d2: float,
+    b2: float,
+    blade_thickness: float = 0.004,
+    hub_ratio: float = 0.35,
+) -> float:
+    """Blade stress geometric factor ABladek3 (TURBOdesign1 equivalent).
+
+    This factor accounts for the blade geometry effect on bending stress.
+    Proportional to blade area and inversely to section modulus.
+
+    ABladek3 = (π*D2*b2) / (Z * t² / 6)  [simplified section factor]
+
+    Returns:
+        Geometric stress factor [1/m²].
+    """
+    if blade_count <= 0 or blade_thickness < 1e-6:
+        return 0.0
+
+    blade_area = math.pi * d2 * b2 / blade_count  # Per blade [m²]
+    section_modulus = blade_thickness**2 / 6  # [m²] rectangular section
+
+    abladek3 = blade_area / section_modulus if section_modulus > 0 else 0.0
+    return round(abladek3, 3)
+
+
 def analyze_stress(
     sizing: SizingResult,
     rpm: float,

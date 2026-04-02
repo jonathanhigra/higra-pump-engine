@@ -356,6 +356,72 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
 
 
 # ---------------------------------------------------------------------------
+# Blade quality endpoint (B9)
+# ---------------------------------------------------------------------------
+
+@router.get("/geometry/quality")
+def get_geometry_quality(
+    flow_rate: float,
+    head: float,
+    rpm: float,
+    wrap_hub: float = 0.0,
+    wrap_shr: float = 0.0,
+) -> dict:
+    """Return blade geometric quality metrics for a design point (B9).
+
+    Runs 1D sizing to obtain impeller geometry, then evaluates blade
+    quality indicators: wrap variation, minimum passage, curvature
+    coefficient, LE bow, sweep, lean angles, and a composite score.
+
+    Args:
+        flow_rate: Q [m³/s].
+        head: H [m].
+        rpm: Rotational speed [RPM].
+        wrap_hub: Wrap angle at hub [deg] (0 = auto-estimated from geometry).
+        wrap_shr: Wrap angle at shroud [deg] (0 = auto-estimated).
+
+    Returns:
+        BladeQualityMetrics fields plus impeller geometry context.
+    """
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing.meanline import run_sizing
+    from hpe.geometry.runner.quality import calc_blade_quality
+
+    op = OperatingPoint(flow_rate=flow_rate, head=head, rpm=rpm)
+    sizing = run_sizing(op)
+
+    metrics = calc_blade_quality(
+        d2=sizing.impeller_d2,
+        d1=sizing.impeller_d1,
+        b2=sizing.impeller_b2,
+        blade_count=sizing.blade_count,
+        beta2=sizing.beta2,
+        beta1=sizing.beta1,
+        wrap_hub=wrap_hub,
+        wrap_shr=wrap_shr,
+    )
+
+    return {
+        "wrap_angle_variation_deg": metrics.wrap_angle_variation,
+        "channel_min_distance_m": metrics.channel_min_distance,
+        "curvature_variation_coeff": metrics.curvature_variation_coeff,
+        "le_bow_ratio": metrics.le_bow_ratio,
+        "le_sweep_deg": metrics.le_sweep_deg,
+        "max_lean_deg": metrics.max_lean_deg,
+        "avg_lean_deg": metrics.avg_lean_deg,
+        "quality_score": metrics.quality_score,
+        "warnings": metrics.warnings,
+        # Context
+        "d2_m": sizing.impeller_d2,
+        "d1_m": sizing.impeller_d1,
+        "b2_m": sizing.impeller_b2,
+        "blade_count": sizing.blade_count,
+        "beta1_deg": sizing.beta1,
+        "beta2_deg": sizing.beta2,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Meridional Bezier endpoint (A3)
 # ---------------------------------------------------------------------------
 
@@ -413,6 +479,95 @@ def meridional_bezier_endpoint(req: BezierMeridionalRequest) -> BezierMeridional
     shroud_pts = [{"r": r, "z": z} for r, z in bm.shroud_curve()]
 
     return BezierMeridionalResponse(hub_curve=hub_pts, shroud_curve=shroud_pts)
+
+
+# ---------------------------------------------------------------------------
+# Volute 2D flow solver endpoint (D1–D5)
+# ---------------------------------------------------------------------------
+
+class VolSolveRequest(BaseModel):
+    """Request body for the volute flow solver."""
+    # VoluteGeometry fields
+    r2: float = Field(..., gt=0, description="Impeller outlet radius [m]")
+    b2: float = Field(..., gt=0, description="Impeller outlet width [m]")
+    r3: float = Field(..., gt=0, description="Cutwater (tongue) radius [m]")
+    section_type: str = Field("SEMICIRCLE", description="Cross-section type: SEMICIRCLE | ELLIPSE | RECTANGLE | TRAPEZOID")
+    volute_type: str = Field("single_radial", description="Volute type: single_radial | single_tangential | double | semi_double | asymmetric_ext | double_entry | axial_entry")
+    semi_major: float = Field(0.0, ge=0, description="Ellipse major axis [m]")
+    semi_minor: float = Field(0.0, ge=0, description="Ellipse minor axis [m]")
+    rect_width: float = Field(0.0, ge=0, description="Rectangle width [m]")
+    rect_height: float = Field(0.0, ge=0, description="Rectangle height [m]")
+    tongue_radius: float = Field(0.002, gt=0, description="Tongue fillet radius [m]")
+    tube_length: float = Field(0.2, gt=0, description="Discharge tube length [m]")
+    tube_diameter: float = Field(0.08, gt=0, description="Discharge tube diameter [m]")
+    tube_angle_deg: float = Field(0.0, description="Discharge tube angle [deg]")
+    rho: float = Field(998.0, gt=0, description="Fluid density [kg/m³]")
+    # Operating point
+    flow_rate: float = Field(..., gt=0, description="Flow rate Q [m³/s]")
+    head: float = Field(..., gt=0, description="Pump head H [m]")
+    rpm: float = Field(..., gt=0, description="Rotational speed [rpm]")
+
+
+@router.post("/geometry/volute/solve")
+def solve_volute_endpoint(req: VolSolveRequest) -> dict:
+    """Solve volute 2D flow and compute performance (Gülich 2014 §7.5).
+
+    Returns total head loss, static pressure recovery coefficient,
+    throat area, angular section velocities, and loss coefficient.
+    Supports SEMICIRCLE, ELLIPSE, RECTANGLE, and TRAPEZOID cross-sections,
+    and all seven volute types (single/double/tangential/axial-entry, etc.).
+    """
+    from hpe.physics.volute_solver import (
+        CrossSectionType, VoluteGeometry, VoluteType, solve_volute,
+    )
+
+    try:
+        section_type = CrossSectionType(req.section_type.upper())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown section_type '{req.section_type}'. "
+                   f"Choose from: {[e.value for e in CrossSectionType]}",
+        )
+
+    try:
+        volute_type = VoluteType(req.volute_type.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown volute_type '{req.volute_type}'. "
+                   f"Choose from: {[e.value for e in VoluteType]}",
+        )
+
+    geom = VoluteGeometry(
+        r2=req.r2,
+        b2=req.b2,
+        r3=req.r3,
+        section_type=section_type,
+        volute_type=volute_type,
+        semi_major=req.semi_major,
+        semi_minor=req.semi_minor,
+        rect_width=req.rect_width,
+        rect_height=req.rect_height,
+        tongue_radius=req.tongue_radius,
+        tube_length=req.tube_length,
+        tube_diameter=req.tube_diameter,
+        tube_angle_deg=req.tube_angle_deg,
+        rho=req.rho,
+    )
+
+    result = solve_volute(volute=geom, flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+
+    return {
+        "total_head_loss_m": result.total_head_loss_m,
+        "static_pressure_recovery": result.static_pressure_recovery,
+        "throat_area_m2": result.throat_area_m2,
+        "scroll_exit_area_m2": result.scroll_exit_area_m2,
+        "mean_velocity_ms": result.mean_velocity_ms,
+        "discharge_velocity_ms": result.discharge_velocity_ms,
+        "loss_coefficient": result.loss_coefficient,
+        "sections": result.sections,
+    }
 
 
 # ---------------------------------------------------------------------------

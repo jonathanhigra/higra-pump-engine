@@ -55,6 +55,48 @@ class AdvancedLossBreakdown:
     loss_coefficient: float  # Total loss / Euler head
 
 
+def calc_profile_loss_ps(w_ps_mean: float, w_ref: float, chord: float, thickness: float) -> float:
+    """Profile loss coefficient on pressure side (boundary layer drag).
+
+    Based on Drela/Denton formulation: loss ∝ (w/w_ref)³ × thickness/chord.
+    """
+    if w_ref < 1e-6:
+        return 0.0
+    cf = 0.005  # skin friction coefficient (turbulent BL)
+    loss_ps = cf * (w_ps_mean / w_ref) ** 3 * (thickness / chord if chord > 0 else 0.01)
+    return max(0.0, loss_ps)
+
+
+def calc_profile_loss_ss(
+    w_ss_mean: float,
+    w_ref: float,
+    chord: float,
+    thickness: float,
+    diffusion_ratio: float = 1.0,
+) -> float:
+    """Profile loss coefficient on suction side.
+
+    Higher than PS due to adverse pressure gradient.
+    Increases with diffusion ratio (w2/w1 < 1 = deceleration = more loss).
+    """
+    if w_ref < 1e-6:
+        return 0.0
+    cf = 0.008  # higher CF on SS
+    separation_factor = max(1.0, 1.0 + 3.0 * (0.7 - diffusion_ratio))  # penalty if DH < 0.7
+    loss_ss = (
+        cf
+        * (w_ss_mean / w_ref) ** 3
+        * (thickness / chord if chord > 0 else 0.01)
+        * separation_factor
+    )
+    return max(0.0, loss_ss)
+
+
+def calc_profile_loss_total(loss_ps: float, loss_ss: float) -> float:
+    """Total profile loss = PS + SS contribution."""
+    return loss_ps + loss_ss
+
+
 def calc_profile_loss(
     tri_in: VelocityTriangle,
     tri_out: VelocityTriangle,
@@ -388,6 +430,76 @@ def calc_advanced_losses(
         total_head_loss=total,
         loss_coefficient=loss_coeff,
     )
+
+
+def calc_endwall_loss_denton(
+    cm: float,          # Meridional velocity [m/s]
+    u: float,           # Blade speed [m/s]
+    b: float,           # Channel height [m]
+    delta_star: float = 0.002,  # Displacement thickness [m]
+    rho: float = 998.0,
+) -> float:
+    """Denton (1993) end-wall loss from momentum deficit.
+
+    End-wall loss coefficient based on inlet boundary layer momentum thickness.
+    θ*/b typically 0.005–0.02 for turbomachinery.
+
+    Denton (1993), Eq. 3.15 (simplified for pumps):
+        ζ_ew = 2 * (θ*/b) * (cm/w_mid)³ * (1 + (u/cm)²)^(3/2)
+
+    Returns loss coefficient (dimensionless).
+    """
+    if b < 1e-6 or cm < 1e-6:
+        return 0.0
+
+    theta_star = delta_star * 0.3  # momentum thickness ≈ 0.3 × displacement thickness
+    w_mid = math.sqrt(cm**2 + u**2)
+
+    if w_mid < 1e-6:
+        return 0.0
+
+    zeta_ew = 2.0 * (theta_star / b) * (cm / w_mid)**3 * (1 + (u / cm)**2)**1.5
+    return max(0.0, zeta_ew)
+
+
+def calc_leakage_loss(
+    d2: float,          # Outlet diameter [m]
+    d1: float,          # Inlet diameter [m]
+    b2: float,          # Outlet width [m]
+    head: float,        # Pump head [m]
+    blade_count: int,
+    gap_ratio: float = 0.001,  # Radial gap / D2
+    rho: float = 998.0,
+) -> float:
+    """Leakage loss coefficient from front/back wearing ring gaps.
+
+    Uses Gülich (2014) §3.6.3 simplified model.
+    Loss = (Q_leak/Q)² × eta_h
+
+    Returns:
+        Leakage head loss [m] (not normalized).
+    """
+    from hpe.constants import G
+
+    # Wearing ring gap area
+    gap = d1 * gap_ratio
+    A_gap = math.pi * d1 * gap  # annular gap area [m²]
+
+    # Pressure difference across wearing ring (≈ 0.6 × H for single stage)
+    delta_p = 0.6 * rho * G * head
+
+    # Leakage velocity (CD ≈ 0.6)
+    cd = 0.6
+    v_leak = cd * math.sqrt(2 * delta_p / rho) if delta_p > 0 else 0.0
+
+    # Leakage flow
+    q_leak = A_gap * v_leak
+
+    # Leakage loss as extra head required
+    q_through = 0.05  # nominal, will be normalized by caller
+    h_leak_loss = rho * G * head * (q_leak / max(q_through, 1e-6))**0.5 * 0.01
+
+    return round(max(0.0, h_leak_loss), 3)
 
 
 def _skin_friction_coefficient(

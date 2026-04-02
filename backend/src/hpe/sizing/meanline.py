@@ -221,6 +221,54 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
     throat_area = calc_throat_area(imp.d2, imp.b2, imp.blade_count, imp.beta2)
     warnings.extend(check_throat_loading(throat_area, op.flow_rate))
 
+    # C4: Denton end-wall loss (dimensionless coefficient)
+    from hpe.physics.advanced_losses import calc_endwall_loss_denton
+    cm_mid = (tri_in.cm + tri_out.cm) / 2.0
+    u_mid = (tri_in.u + tri_out.u) / 2.0
+    endwall_loss = calc_endwall_loss_denton(cm=cm_mid, u=u_mid, b=imp.b2)
+
+    # C5: Leakage loss from wearing ring gaps [m]
+    from hpe.physics.advanced_losses import calc_leakage_loss
+    leakage_loss_m = calc_leakage_loss(
+        d2=imp.d2, d1=imp.d1, b2=imp.b2,
+        head=op.head, blade_count=imp.blade_count,
+    )
+
+    # C6: ABladek3 geometric stress factor [1/m²]
+    from hpe.physics.stress import calc_abladek3
+    from hpe.constants import BLADE_THICKNESS_RATIO
+    _bt = max(0.002, min(0.008, imp.d2 * BLADE_THICKNESS_RATIO))
+    abladek3 = calc_abladek3(
+        blade_count=imp.blade_count, d2=imp.d2, b2=imp.b2,
+        blade_thickness=_bt,
+    )
+
+    # B7: profile losses — PS and SS separated
+    from hpe.physics.advanced_losses import calc_profile_loss_ps, calc_profile_loss_ss, calc_profile_loss_total
+    _chord_b7 = math.pi * imp.d2 / imp.blade_count * 0.8   # chord ≈ π*d2/Z*0.8
+    _thick_b7 = 0.04 * _chord_b7                             # thickness ≈ 4% chord
+    _w_ref = max(tri_in.w, tri_out.w, 1e-6)
+    _w_ps = (tri_in.w + tri_out.w) / 2.0 * 0.85             # PS mean velocity
+    _w_ss = max(tri_in.w, (tri_in.w + tri_out.w) / 2.0 * 1.2)  # SS peak velocity
+    b7_ps = calc_profile_loss_ps(_w_ps, _w_ref, _chord_b7, _thick_b7)
+    b7_ss = calc_profile_loss_ss(_w_ss, _w_ref, _chord_b7, _thick_b7,
+                                  diffusion_ratio=diffusion_ratio)
+    b7_total = calc_profile_loss_total(b7_ps, b7_ss)
+
+    # C1: minimum static pressure in impeller
+    from hpe.physics.pmin import calc_pmin
+    pmin_pa = calc_pmin(
+        flow_rate=op.flow_rate,
+        rpm=op.rpm,
+        d1=imp.d1,
+        d1_hub=imp.d1_hub,
+        p_inlet=101325.0,
+    )
+
+    # C3: slip factor (Wiesner)
+    from hpe.sizing.velocity_triangles import calc_wiesner_slip_factor
+    slip_factor_val = calc_wiesner_slip_factor(imp.beta2, imp.blade_count)
+
     # B6: spanwise blade angles at hub/mid/shroud LE
     d1_mid = (imp.d1_hub + imp.d1) / 2.0
     spanwise_angles = calc_spanwise_blade_angles(
@@ -269,6 +317,14 @@ def run_sizing(op: OperatingPoint) -> SizingResult:
         meridional_profile=mp_result.as_dict(),
         warnings=warnings,
         convergence_iterations=conv_iter,
+        endwall_loss=endwall_loss,
+        leakage_loss_m=leakage_loss_m,
+        abladek3=abladek3,
+        profile_loss_ps=b7_ps,
+        profile_loss_ss=b7_ss,
+        profile_loss_total=b7_total,
+        pmin_pa=pmin_pa,
+        slip_factor=slip_factor_val,
     )
 
     # Cache store and log (#21, #29)

@@ -175,6 +175,20 @@ class SizingResult:
     meridional_profile: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     convergence_iterations: int = 0  # Number of η convergence iterations (A1)
+    # C4: Denton end-wall loss coefficient (dimensionless)
+    endwall_loss: float = 0.0
+    # C5: Leakage head loss from wearing ring gaps [m]
+    leakage_loss_m: float = 0.0
+    # C6: ABladek3 geometric stress factor [1/m²]
+    abladek3: float = 0.0
+    # B7: profile losses — PS and SS separated (dimensionless coefficients)
+    profile_loss_ps: float = 0.0
+    profile_loss_ss: float = 0.0
+    profile_loss_total: float = 0.0
+    # C1: minimum static pressure in impeller [Pa absolute]
+    pmin_pa: float = 0.0
+    # C3: slip factor (Wiesner default)
+    slip_factor: float = 0.0
 
 
 # ---------------------------------------------------------------------------

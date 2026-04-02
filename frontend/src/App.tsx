@@ -9,6 +9,7 @@ import LossBreakdownChart from './components/LossBreakdownChart'
 import StressView from './components/StressView'
 import ImpellerViewer from './components/ImpellerViewer'
 import DesignComparison from './components/DesignComparison'
+import AssistantChat from './components/AssistantChat'
 
 export interface SizingResult {
   specific_speed_nq: number
@@ -37,7 +38,7 @@ export interface CurvePoint {
 }
 
 type Page = 'login' | 'projects' | 'design'
-type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare'
+type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare' | 'assistant'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -93,6 +94,7 @@ export default function App() {
     { key: 'losses', label: 'Losses' },
     { key: 'stress', label: 'Stress' },
     { key: 'compare', label: 'Compare' },
+    { key: 'assistant', label: 'Assistant' },
   ]
 
   if (page === 'login') {
@@ -186,6 +188,7 @@ export default function App() {
               {tab === 'losses' && <LossBreakdownChart losses={losses} />}
               {tab === 'stress' && <StressView stress={stress} />}
               {tab === 'compare' && <DesignComparison />}
+              {tab === 'assistant' && <AssistantChat sizing={sizing} />}
             </>
           )}
 

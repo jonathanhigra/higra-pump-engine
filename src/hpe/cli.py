@@ -46,6 +46,14 @@ def main() -> None:
     sp_cfd.add_argument("--procs", type=int, default=4, help="Number of processors")
     sp_cfd.add_argument("--run", action="store_true", help="Attempt to run OpenFOAM")
 
+    # --- optimize ---
+    sp_opt = subparsers.add_parser("optimize", help="Run multi-objective optimization")
+    _add_operating_point_args(sp_opt)
+    sp_opt.add_argument("--method", choices=["nsga2", "bayesian"], default="nsga2", help="Optimization method")
+    sp_opt.add_argument("--pop", type=int, default=40, help="Population size (NSGA-II)")
+    sp_opt.add_argument("--gen", type=int, default=50, help="Generations (NSGA-II) or trials (Bayesian)")
+    sp_opt.add_argument("--seed", type=int, default=42, help="Random seed")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -60,6 +68,8 @@ def main() -> None:
         _cmd_analyze(args)
     elif args.command == "cfd":
         _cmd_cfd(args)
+    elif args.command == "optimize":
+        _cmd_optimize(args)
 
 
 def _add_operating_point_args(parser: argparse.ArgumentParser) -> None:
@@ -208,6 +218,63 @@ def _cmd_analyze(args: argparse.Namespace) -> None:
         print("  Warnings")
         for w in analysis.warnings:
             print(f"    ! {w}")
+
+    print()
+
+
+def _cmd_optimize(args: argparse.Namespace) -> None:
+    from hpe.optimization.problem import OptimizationProblem
+
+    op = _make_operating_point(args)
+
+    print("=" * 60)
+    print("  HIGRA PUMP ENGINE — Multi-Objective Optimization")
+    print("=" * 60)
+    print()
+    print(f"  Input: Q={op.flow_rate*3600:.1f} m3/h, H={op.head:.1f} m, n={op.rpm:.0f} rpm")
+    print(f"  Method: {args.method}")
+    print()
+
+    problem = OptimizationProblem.default(op.flow_rate, op.head, op.rpm)
+
+    if args.method == "nsga2":
+        from hpe.optimization.nsga2 import run_nsga2
+
+        print(f"  Running NSGA-II (pop={args.pop}, gen={args.gen})...")
+        result = run_nsga2(problem, pop_size=args.pop, n_gen=args.gen, seed=args.seed)
+
+        print(f"  Evaluations: {result.all_evaluations}")
+        print(f"  Pareto front: {len(result.pareto_front)} designs")
+        print()
+
+        if result.best_efficiency:
+            b = result.best_efficiency
+            print("  Best by Efficiency:")
+            for k, v in b["variables"].items():
+                print(f"    {k} = {v:.2f}" if not isinstance(v, int) else f"    {k} = {v}")
+            print(f"    eta = {b['objectives']['efficiency']:.1%}")
+            print(f"    NPSHr = {b['objectives']['npsh_r']:.2f} m")
+            print(f"    Robustness = {b['objectives']['robustness']:.1%}")
+
+        if result.best_npsh:
+            b = result.best_npsh
+            print()
+            print("  Best by NPSH (lowest cavitation risk):")
+            for k, v in b["variables"].items():
+                print(f"    {k} = {v:.2f}" if not isinstance(v, int) else f"    {k} = {v}")
+            print(f"    eta = {b['objectives']['efficiency']:.1%}")
+            print(f"    NPSHr = {b['objectives']['npsh_r']:.2f} m")
+
+    elif args.method == "bayesian":
+        from hpe.optimization.bayesian import run_bayesian
+
+        print(f"  Running Bayesian optimization ({args.gen} trials)...")
+        result = run_bayesian(problem, n_trials=args.gen, seed=args.seed)
+
+        print(f"  Best efficiency: {result['best_value']:.1%}")
+        print(f"  Best parameters:")
+        for k, v in result["best_params"].items():
+            print(f"    {k} = {v:.2f}" if isinstance(v, float) else f"    {k} = {v}")
 
     print()
 

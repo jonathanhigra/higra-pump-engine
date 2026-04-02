@@ -1,23 +1,13 @@
 """HPE Optimization — Multi-objective design optimization with AI acceleration.
 
-Combines classical algorithms with AI to efficiently explore the design space.
+Usage:
+    from hpe.optimization import run_optimization
+    from hpe.optimization.problem import OptimizationProblem
 
-Algorithms:
-- Evolutionary (NSGA-II, NSGA-III) for multi-objective optimization
-- Bayesian Optimization for expensive search spaces (each eval = 1 CFD)
-- Gradient (adjoint) via SU2 for continuous shape optimization
-- Surrogate-assisted: AI models replace CFD for fast candidate evaluation
-
-Objectives:
-- Maximize design-point efficiency
-- Minimize cavitation risk (maximize NPSH margin)
-- Maximize robustness (multi-point performance)
-- Minimize radial forces and pressure pulsations
-- Meet manufacturing constraints (min thickness, draft angles)
-
-Skills required:
-- DEAP (NSGA-II/III)
-- Optuna (Bayesian optimization)
-- PyTorch (surrogate models)
-- Multi-objective optimization theory
+    problem = OptimizationProblem.default(flow_rate=0.05, head=30.0, rpm=1750)
+    result = run_optimization(problem, method="nsga2", pop_size=40, n_gen=50)
 """
+
+from hpe.optimization.optimizer import run_optimization
+
+__all__ = ["run_optimization"]

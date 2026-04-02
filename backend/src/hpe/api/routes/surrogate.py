@@ -12,7 +12,7 @@ import functools
 import logging
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["surrogate"])
@@ -46,6 +46,8 @@ class TrainRequest(BaseModel):
 
 
 class TrainResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     r2_train: float
     r2_cv: float
     mae_cv: float
@@ -64,6 +66,8 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     eta_predicted: float
     eta_pct: float
     model_trained: bool
@@ -71,6 +75,8 @@ class PredictResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     trained: bool
     metrics: dict[str, float]
     model_path: str

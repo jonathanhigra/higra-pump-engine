@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hpe.optimization.doe import DoEConfig, DoEResult, generate_lhs
 from hpe.optimization.rsm import RSMModel, fit_rsm, predict_rsm
@@ -99,6 +99,8 @@ _rsm_registry: dict[str, RSMModel] = {}
 class RSMFitRequest(BaseModel):
     """Request body for fitting an RSM."""
 
+    model_config = ConfigDict(protected_namespaces=())
+
     model_id: str = Field(..., description="Unique identifier to store and retrieve this model")
     X: list[list[float]] = Field(..., description="Design matrix [n_points × n_variables]")
     y: list[float] = Field(..., description="Response values [n_points]")
@@ -109,6 +111,8 @@ class RSMFitRequest(BaseModel):
 
 class RSMFitResponse(BaseModel):
     """Response body after fitting an RSM."""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     model_id: str
     n_variables: int
@@ -155,12 +159,16 @@ def rsm_fit(req: RSMFitRequest) -> RSMFitResponse:
 class RSMPredictRequest(BaseModel):
     """Request body for RSM prediction."""
 
+    model_config = ConfigDict(protected_namespaces=())
+
     model_id: str = Field(..., description="Model ID returned by /rsm/fit")
     x: list[float] = Field(..., description="Design point [n_variables]")
 
 
 class RSMPredictResponse(BaseModel):
     """Response body for RSM prediction."""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     model_id: str
     x: list[float]

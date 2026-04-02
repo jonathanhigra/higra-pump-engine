@@ -1,9 +1,11 @@
 """Sizing API routes — with sensitivity, operating_range and validation (#22, #23, #24)."""
 
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, HTTPException
 from hpe.api.schemas.sizing import (
     CurvePoint, CurvesRequest, CurvesResponse,
+    MultiPointRequest, MultiPointResponse,
     OptimizeRequest, OptimizeResponse,
     SizingRequest, SizingResponse,
 )
@@ -32,6 +34,9 @@ def run_sizing_endpoint(req: SizingRequest) -> SizingResponse:
         head=req.head,
         rpm=req.rpm,
         machine_type=MachineType(req.machine_type),
+        override_d2=req.override_d2,
+        override_b2=req.override_b2,
+        override_d1=req.override_d1,
     )
     result = run_sizing(op)
 
@@ -55,6 +60,67 @@ def run_sizing_endpoint(req: SizingRequest) -> SizingResponse:
         warnings=result.warnings,
         uncertainty=uncertainty,
     )
+
+
+@router.post("/sizing/multi_point", response_model=MultiPointResponse)
+async def run_multi_point_endpoint(req: MultiPointRequest) -> MultiPointResponse:
+    """Run 1D sizing concurrently for multiple operating points (A2).
+
+    Each entry in `req.points` must contain flow_rate, head, rpm.
+    Optional per-point keys: machine_type, override_d2, override_b2, override_d1.
+    Results are returned in the same order as the input points.
+    """
+    from hpe.sizing import run_sizing
+
+    def _size_one(point: dict) -> dict:
+        flow_rate = float(point["flow_rate"])
+        head = float(point["head"])
+        rpm = float(point["rpm"])
+        machine_type_str = point.get("machine_type", "centrifugal_pump")
+        _validate_op(flow_rate, head, rpm)
+        op = OperatingPoint(
+            flow_rate=flow_rate,
+            head=head,
+            rpm=rpm,
+            machine_type=MachineType(machine_type_str),
+            override_d2=point.get("override_d2"),
+            override_b2=point.get("override_b2"),
+            override_d1=point.get("override_d1"),
+        )
+        result = run_sizing(op)
+        uncertainty = result.uncertainty.as_dict() if result.uncertainty else {}
+        return {
+            # Echo back input
+            "flow_rate": flow_rate,
+            "head": head,
+            "rpm": rpm,
+            "machine_type": machine_type_str,
+            # Sizing outputs
+            "specific_speed_nq": result.specific_speed_nq,
+            "impeller_type": result.meridional_profile.get("impeller_type", "unknown"),
+            "impeller_d2": result.impeller_d2,
+            "impeller_d1": result.impeller_d1,
+            "impeller_b2": result.impeller_b2,
+            "blade_count": result.blade_count,
+            "beta1": result.beta1,
+            "beta2": result.beta2,
+            "estimated_efficiency": result.estimated_efficiency,
+            "estimated_power": result.estimated_power,
+            "estimated_npsh_r": result.estimated_npsh_r,
+            "sigma": result.sigma,
+            "convergence_iterations": result.convergence_iterations,
+            "warnings": result.warnings,
+            "uncertainty": uncertainty,
+        }
+
+    loop = asyncio.get_event_loop()
+    tasks = [
+        loop.run_in_executor(None, _size_one, point)
+        for point in req.points
+    ]
+    results = await asyncio.gather(*tasks)
+
+    return MultiPointResponse(results=list(results))
 
 
 @router.post("/curves", response_model=CurvesResponse)

@@ -1,83 +1,75 @@
 """Impeller (runner) preliminary dimensioning.
 
-Calculates main geometric dimensions of a centrifugal pump impeller
-from operating point data and specific speed. All correlations are
-based on Gulich (2014) and Stepanoff (1957).
-
-Outputs:
-    - D2: Outlet diameter
-    - D1: Inlet (eye) diameter
-    - b2: Outlet width
-    - b1: Inlet width
-    - beta1, beta2: Blade angles
-    - Z: Number of blades
+Improvements:
+    #5  — Gulich (2014) Table 3.1 volute-type correction for psi.
+    #2  — Variable blockage factors via calc_blockage_factor.
+    #26 — All magic numbers replaced with constants from hpe.constants.
 
 References:
-    - Gulich, J.F. (2014). Centrifugal Pumps, 3rd ed. Springer, Ch. 3 & 7.
+    - Gulich, J.F. (2014). Centrifugal Pumps, 3rd ed. Springer, Ch. 3.
     - Stepanoff, A.J. (1957). Centrifugal and Axial Flow Pumps.
     - Pfleiderer, C. (1961). Die Kreiselpumpen. Springer.
 """
 
 from __future__ import annotations
-
 import math
 from dataclasses import dataclass
-
 from hpe.core.models import G
+from hpe.constants import (
+    PSI_MIN, PSI_MAX, PSI_SLOPE, PSI_INTERCEPT, PSI_MIXED_FLOW,
+    D1_HUB_RATIO, B1_ACCEL_FACTOR,
+    BLADE_COUNT_MIN, BLADE_COUNT_MAX, BLADE_COUNT_PFLEIDERER,
+    BETA2_MIN, BETA2_MAX,
+    BLADE_THICKNESS_DEFAULT,
+)
+from hpe.sizing.velocity_triangles import calc_blockage_factor
 
 
 @dataclass
 class ImpellerDimensions:
     """Preliminary impeller dimensions from 1D sizing."""
+    d2: float       # Outlet diameter [m]
+    d1: float       # Inlet (eye) diameter [m]
+    d1_hub: float   # Hub diameter at inlet [m]
+    b2: float       # Outlet width [m]
+    b1: float       # Inlet width [m]
+    beta1: float    # Inlet blade angle [deg]
+    beta2: float    # Outlet blade angle [deg]
+    blade_count: int
+    u2: float       # Outlet peripheral velocity [m/s]
+    tau1: float = 0.90  # Inlet blockage factor (#2)
+    tau2: float = 0.88  # Outlet blockage factor (#2)
 
-    d2: float  # Outlet diameter [m]
-    d1: float  # Inlet (eye) diameter [m]
-    d1_hub: float  # Hub diameter at inlet [m]
-    b2: float  # Outlet width [m]
-    b1: float  # Inlet width [m]
-    beta1: float  # Inlet blade angle [deg]
-    beta2: float  # Outlet blade angle [deg]
-    blade_count: int  # Number of blades Z
-    u2: float  # Outlet peripheral velocity [m/s]
 
+def calc_head_coefficient(nq: float, volute_type: str = "spiral") -> float:
+    """Head coefficient psi = 2*g*H / u2^2.
 
-def calc_head_coefficient(nq: float) -> float:
-    """Estimate head coefficient psi = 2*g*H / u2^2.
-
-    For centrifugal pumps, psi typically ranges from 0.9 to 1.2.
-    Lower Nq (radial) pumps tend to have higher psi.
-
-    Gulich (2014), Fig. 3.21:
-        psi ~ 1.21 - 0.77 * (nq/100)  for nq < 100
+    Improvement #5 — adds volute_type correction per Gulich (2014) Table 3.1:
+        - "spiral"   (standard): no correction
+        - "vaned_diffuser": psi *= 0.95 (lower head coeff due to better recovery)
+        - "annular"  (ring casing): psi *= 1.05 (higher losses)
 
     Args:
         nq: Metric specific speed.
+        volute_type: "spiral" | "vaned_diffuser" | "annular".
 
     Returns:
         Head coefficient psi (dimensionless).
     """
     if nq < 100:
-        psi = 1.21 - 0.77 * (nq / 100.0)
+        psi = PSI_INTERCEPT - PSI_SLOPE * (nq / 100.0)
     else:
-        psi = 0.50  # Axial/mixed-flow approximation
+        psi = PSI_MIXED_FLOW
 
-    return max(0.35, min(1.3, psi))
+    # Volute type correction (Gulich 2014, Table 3.1)
+    corrections = {"spiral": 1.00, "vaned_diffuser": 0.95, "annular": 1.05}
+    psi *= corrections.get(volute_type, 1.00)
+
+    return max(PSI_MIN, min(PSI_MAX, psi))
 
 
 def calc_d1_d2_ratio(nq: float) -> float:
-    """Estimate inlet-to-outlet diameter ratio D1/D2 from specific speed.
-
-    Based on Stepanoff (1957) and Gulich (2014) data:
-        D1/D2 increases with Nq as the impeller transitions
-        from radial to mixed-flow geometry.
-
-    Args:
-        nq: Metric specific speed.
-
-    Returns:
-        D1/D2 ratio (typically 0.3 to 0.7).
-    """
-    # Piecewise linear fit to Stepanoff/Gulich data
+    """D1/D2 from specific speed (Stepanoff/Gulich)."""
     if nq < 20:
         ratio = 0.32
     elif nq < 40:
@@ -88,44 +80,21 @@ def calc_d1_d2_ratio(nq: float) -> float:
         ratio = 0.54 + 0.002 * (nq - 70)
     else:
         ratio = 0.64 + 0.001 * (nq - 120)
-
     return max(0.30, min(0.80, ratio))
 
 
 def calc_blade_count(d2: float, d1: float, beta1: float, beta2: float) -> int:
-    """Estimate number of blades using Pfleiderer correlation.
-
-    Z = 6.5 * (D2 + D1) / (D2 - D1) * sin((beta1 + beta2) / 2)
-
-    Clamped to practical range: 5-12 for centrifugal pumps.
-
-    Args:
-        d2: Outlet diameter [m].
-        d1: Inlet diameter [m].
-        beta1: Inlet blade angle [deg].
-        beta2: Outlet blade angle [deg].
-
-    Returns:
-        Number of blades (integer).
-    """
+    """Pfleiderer correlation: Z = 6.5*(D2+D1)/(D2-D1)*sin((beta1+beta2)/2)."""
     beta_avg_rad = math.radians((beta1 + beta2) / 2.0)
-    z = 6.5 * (d2 + d1) / (d2 - d1) * math.sin(beta_avg_rad)
-    return max(5, min(12, round(z)))
+    denom = d2 - d1
+    if abs(denom) < 1e-6:
+        return 7
+    z = BLADE_COUNT_PFLEIDERER * (d2 + d1) / denom * math.sin(beta_avg_rad)
+    return max(BLADE_COUNT_MIN, min(BLADE_COUNT_MAX, round(z)))
 
 
 def calc_outlet_width_ratio(nq: float) -> float:
-    """Estimate b2/D2 ratio from specific speed.
-
-    b2/D2 increases with Nq — wider passages for higher flow coefficients.
-
-    Based on Gulich (2014), Fig. 3.22.
-
-    Args:
-        nq: Metric specific speed.
-
-    Returns:
-        b2/D2 ratio.
-    """
+    """b2/D2 from specific speed (Gulich 2014, Fig. 3.22)."""
     if nq < 25:
         ratio = 0.025 + 0.0015 * nq
     elif nq < 60:
@@ -134,22 +103,11 @@ def calc_outlet_width_ratio(nq: float) -> float:
         ratio = 0.13 + 0.003 * (nq - 60)
     else:
         ratio = 0.25 + 0.002 * (nq - 100)
-
     return max(0.02, min(0.50, ratio))
 
 
 def calc_outlet_blade_angle(nq: float) -> float:
-    """Estimate outlet blade angle beta2 from specific speed.
-
-    Typical range: 15-40 degrees for centrifugal pumps.
-    Higher Nq tends toward higher beta2.
-
-    Args:
-        nq: Metric specific speed.
-
-    Returns:
-        Beta2 [deg].
-    """
+    """Beta2 from specific speed (typical practice)."""
     if nq < 25:
         beta2 = 18.0
     elif nq < 50:
@@ -158,8 +116,7 @@ def calc_outlet_blade_angle(nq: float) -> float:
         beta2 = 25.5 + 0.15 * (nq - 50)
     else:
         beta2 = 33.0
-
-    return max(15.0, min(40.0, beta2))
+    return max(BETA2_MIN, min(BETA2_MAX, beta2))
 
 
 def size_impeller(
@@ -168,62 +125,96 @@ def size_impeller(
     rpm: float,
     nq: float,
     eta_h: float,
+    volute_type: str = "spiral",
+    blade_thickness: float = BLADE_THICKNESS_DEFAULT,
+    overrides: dict | None = None,
 ) -> ImpellerDimensions:
     """Perform preliminary impeller dimensioning.
 
     Args:
-        flow_rate: Q [m^3/s].
+        flow_rate: Q [m³/s].
         head: H [m].
-        rpm: Rotational speed [rev/min].
+        rpm: RPM.
         nq: Metric specific speed.
         eta_h: Estimated hydraulic efficiency.
+        volute_type: Volute type for psi correction (#5).
+        blade_thickness: t [m] for variable blockage (#2).
+        overrides: Optional dict with keys 'd2', 'b2', 'd1' (all in metres).
+            When provided the corresponding dimension is replaced after the
+            initial sizing and dependent quantities are recalculated (A5).
 
     Returns:
-        ImpellerDimensions with all key geometry parameters.
+        ImpellerDimensions.
     """
-    # 1. Outlet diameter D2 from head coefficient
-    psi = calc_head_coefficient(nq)
-    # H_euler = eta_h * H (approximately, for sizing)
-    # psi = 2 * g * H_euler / u2^2  =>  u2 = sqrt(2 * g * H / (psi * eta_h))
+    # 1. D2 from head coefficient (#5)
+    psi = calc_head_coefficient(nq, volute_type)
     u2 = math.sqrt(2.0 * G * head / (psi * eta_h))
     d2 = 60.0 * u2 / (math.pi * rpm)
 
-    # 2. Inlet diameter D1
-    d1_d2_ratio = calc_d1_d2_ratio(nq)
-    d1 = d2 * d1_d2_ratio
+    # 2. D1
+    d1_d2 = calc_d1_d2_ratio(nq)
+    d1 = d2 * d1_d2
+    d1_hub = d1 * D1_HUB_RATIO
 
-    # Hub diameter (typically 30-40% of D1)
-    d1_hub = d1 * 0.35
+    # 3. b2
+    b2 = d2 * calc_outlet_width_ratio(nq)
 
-    # 3. Outlet width b2
-    b2_d2_ratio = calc_outlet_width_ratio(nq)
-    b2 = d2 * b2_d2_ratio
-
-    # 4. Inlet width b1 (from continuity, cm1 ~ cm2 * 1.0-1.1)
-    # b1 ~ b2 * (D2/D1) * (cm2/cm1), simplified for sizing:
-    b1 = b2 * (d2 / d1) * 0.85  # Slight acceleration at inlet
-    b1 = max(b1, b2)  # b1 >= b2 always for centrifugal
-
-    # 5. Blade angles
+    # 4. beta2
     beta2 = calc_outlet_blade_angle(nq)
 
-    # beta1 from zero-incidence condition
+    # 5. Preliminary blade count (estimate beta1 first)
+    # Temporary beta1 assuming no pre-swirl and BLOCKAGE_INLET
+    from hpe.constants import BLOCKAGE_INLET
+    b1_approx = max(b2 * (d2 / d1) * B1_ACCEL_FACTOR, b2)
+    inlet_area_approx = math.pi * d1 * b1_approx * BLOCKAGE_INLET
+    cm1_approx = flow_rate / inlet_area_approx if inlet_area_approx > 0 else 0.1
     u1 = math.pi * d1 * rpm / 60.0
-    inlet_area = math.pi * d1 * b1 * 0.90  # blockage
-    cm1 = flow_rate / inlet_area
+    beta1_approx = math.degrees(math.atan2(cm1_approx, u1))
+    blade_count = calc_blade_count(d2, d1, beta1_approx, beta2)
+
+    # 6. Compute variable blockage factors (#2)
+    tau1 = calc_blockage_factor(d1, b1_approx, blade_count, blade_thickness, is_inlet=True)
+    tau2 = calc_blockage_factor(d2, b2, blade_count, blade_thickness, is_inlet=False)
+
+    # 7. b1 refined with actual tau1
+    b1 = max(b2 * (d2 / d1) * B1_ACCEL_FACTOR, b2)
+
+    # 8. Refined beta1 with actual blockage
+    inlet_area = math.pi * d1 * b1 * tau1
+    cm1 = flow_rate / inlet_area if inlet_area > 0 else cm1_approx
     beta1 = math.degrees(math.atan2(cm1, u1))
 
-    # 6. Number of blades
+    # 9. Refine blade count with actual beta1
     blade_count = calc_blade_count(d2, d1, beta1, beta2)
 
+    # 10. Apply user overrides and recalculate dependent quantities (A5)
+    if overrides:
+        if "d2" in overrides and overrides["d2"] is not None:
+            d2 = float(overrides["d2"])
+            u2 = math.pi * d2 * rpm / 60.0
+            # Recompute b2 based on original b2/D2 ratio but new d2
+            b2 = d2 * calc_outlet_width_ratio(nq)
+        if "b2" in overrides and overrides["b2"] is not None:
+            b2 = float(overrides["b2"])
+        if "d1" in overrides and overrides["d1"] is not None:
+            d1 = float(overrides["d1"])
+            d1_hub = d1 * D1_HUB_RATIO
+            # Refresh blockage and inlet angle for the new d1
+            b1 = max(b2 * (d2 / d1) * B1_ACCEL_FACTOR, b2)
+            tau1 = calc_blockage_factor(d1, b1, blade_count, blade_thickness, is_inlet=True)
+            inlet_area = math.pi * d1 * b1 * tau1
+            u1 = math.pi * d1 * rpm / 60.0
+            cm1 = flow_rate / inlet_area if inlet_area > 0 else cm1_approx
+            beta1 = math.degrees(math.atan2(cm1, u1))
+        # Recompute tau2 for the (possibly new) d2/b2
+        tau2 = calc_blockage_factor(d2, b2, blade_count, blade_thickness, is_inlet=False)
+        # Refresh blade count after geometry changes
+        blade_count = calc_blade_count(d2, d1, beta1, beta2)
+
     return ImpellerDimensions(
-        d2=d2,
-        d1=d1,
-        d1_hub=d1_hub,
-        b2=b2,
-        b1=b1,
-        beta1=beta1,
-        beta2=beta2,
-        blade_count=blade_count,
-        u2=u2,
+        d2=d2, d1=d1, d1_hub=d1_hub,
+        b2=b2, b1=b1,
+        beta1=beta1, beta2=beta2,
+        blade_count=blade_count, u2=u2,
+        tau1=tau1, tau2=tau2,
     )

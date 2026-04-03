@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Sidebar, { type Tab } from './Sidebar'
+import SubTabBar from './SubTabBar'
 
 interface Props {
   page: 'projects' | 'design'
@@ -36,6 +37,13 @@ export default function Layout({ page, activeTab, userName, onNavigate, onLogout
         onLogout={onLogout}
       />
       <div className={`main-content${isCollapsed ? ' collapsed' : ''}${noPad ? ' no-pad' : ''}`}>
+        {/* Horizontal sub-tabs within each section */}
+        {page === 'design' && activeTab && !noPad && (
+          <SubTabBar
+            activeTab={activeTab}
+            onTabChange={(tab) => onNavigate('design', tab)}
+          />
+        )}
         {children}
       </div>
     </>

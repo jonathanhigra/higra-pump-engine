@@ -871,13 +871,46 @@ def multistage_endpoint(
             "outlet_pressure_kpa": round(s.outlet_pressure / 1000, 1),
         })
 
+    # Also run enhanced MultiStageDesigner for extra per-stage detail
+    from hpe.sizing.multistage import MultiStageDesigner
+    designer = MultiStageDesigner(
+        total_head=total_head,
+        flow_rate=flow_rate,
+        rpm=rpm,
+        n_stages=n_stages,
+    )
+    enhanced = designer.design()
+
+    enhanced_stages = []
+    for sd in enhanced.stages:
+        enhanced_stages.append({
+            "stage": sd.stage_number,
+            "head_gross_m": round(sd.head, 3),
+            "head_net_m": round(sd.net_head, 3),
+            "efficiency": round(sd.efficiency, 4),
+            "d2_mm": round(sd.d2 * 1000, 1),
+            "nq": round(sd.nq, 1),
+            "power_kw": round(sd.power / 1000, 2),
+            "interstage_head_loss_m": round(sd.interstage_head_loss, 4),
+            "seal_leakage_m3s": round(sd.seal_leakage_flow, 6),
+            "disc_friction_kw": round(sd.disc_friction_power / 1000, 3),
+            "inlet_pressure_kpa": round(sd.inlet_pressure / 1000, 1),
+            "outlet_pressure_kpa": round(sd.outlet_pressure / 1000, 1),
+            "temperature_rise_k": round(sd.temperature_rise, 3),
+        })
+
     return {
         "n_stages": ms.n_stages,
         "total_head_m": ms.total_head,
         "total_power_kw": round(ms.total_power / 1000, 2),
         "overall_efficiency": round(ms.overall_efficiency, 4),
         "stages": stages_out,
-        "warnings": ms.warnings,
+        "enhanced_stages": enhanced_stages,
+        "mechanical_efficiency": round(enhanced.mechanical_efficiency, 4),
+        "seal_efficiency": round(enhanced.seal_efficiency, 4),
+        "enhanced_overall_efficiency": round(enhanced.overall_efficiency, 4),
+        "stage_count_optimization": enhanced.stage_count_optimization,
+        "warnings": ms.warnings + enhanced.warnings,
     }
 
 

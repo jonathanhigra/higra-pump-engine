@@ -26,8 +26,16 @@ class GeometryRequest(BaseModel):
     flow_rate: float = Field(..., gt=0)
     head: float = Field(..., gt=0)
     rpm: float = Field(..., gt=0)
-    n_blade_points: int = Field(40, ge=10, le=100)
-    n_span_points: int = Field(8, ge=3, le=20)
+    n_blade_points: int = Field(60, ge=20, le=200)
+    n_span_points: int = Field(16, ge=4, le=64)
+    resolution_preset: Optional[str] = Field(
+        None,
+        description=(
+            "Resolution preset: 'low' (30x8), 'medium' (60x16), "
+            "'high' (120x32), 'ultra' (200x64). "
+            "Overrides n_blade_points and n_span_points when set."
+        ),
+    )
     # Advanced geometry parameters
     target_wrap_angle: Optional[float] = Field(None, description="Target blade wrap angle [deg] (#9). Typical 100-160.")
     blade_profile: str = Field("logarithmic", description="Blade camber profile: 'logarithmic' | 'bezier' (#10)")
@@ -380,8 +388,18 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)
 
-    n_chord = req.n_blade_points
-    n_span = req.n_span_points
+    # Resolution presets override explicit n_blade_points / n_span_points
+    _RESOLUTION_PRESETS: dict[str, tuple[int, int]] = {
+        "low": (30, 8),
+        "medium": (60, 16),
+        "high": (120, 32),
+        "ultra": (200, 64),
+    }
+    if req.resolution_preset and req.resolution_preset in _RESOLUTION_PRESETS:
+        n_chord, n_span = _RESOLUTION_PRESETS[req.resolution_preset]
+    else:
+        n_chord = req.n_blade_points
+        n_span = req.n_span_points
 
     hub_rz, shroud_rz = _meridional_curves(r1, r1_hub, r2, b1, b2, n_chord)
     hub_rz_visual = _hub_with_shaft(hub_rz, r1_hub)
@@ -777,6 +795,60 @@ def export_bladegen_endpoint(flow_rate: float, head: float, rpm: float) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# BladeGen .bgd export (full format with hub/shroud/blade sections)
+# ---------------------------------------------------------------------------
+
+class BladgenBgdRequest(BaseModel):
+    flow_rate: float = Field(..., gt=0, description="Q [m³/s]")
+    head: float = Field(..., gt=0, description="H [m]")
+    rpm: float = Field(..., gt=0, description="RPM")
+    n_blade_points: int = Field(40, ge=10, le=100)
+    n_span_points: int = Field(8, ge=3, le=20)
+
+
+@router.post("/geometry/export/bladegen")
+def export_bladegen_bgd(req: BladgenBgdRequest) -> dict:
+    """Export impeller geometry in ANSYS BladeGen .bgd format.
+
+    Runs 1D sizing and generates full 3D geometry, then converts to
+    the .bgd text format with hub/shroud profiles, blade sections in
+    cylindrical coordinates, and thickness distribution.
+
+    Args:
+        req: Request with operating point and discretisation settings.
+
+    Returns:
+        Dict with 'bgd' (file content string) and 'format' = "bgd".
+    """
+    from hpe.core.models import OperatingPoint
+    from hpe.geometry.runner.bladegen_export import export_bladegen
+    from hpe.sizing.meanline import run_sizing
+
+    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+    sizing = run_sizing(op)
+
+    # Build geometry using the existing route helper
+    geom_req = GeometryRequest(
+        flow_rate=req.flow_rate,
+        head=req.head,
+        rpm=req.rpm,
+        n_blade_points=req.n_blade_points,
+        n_span_points=req.n_span_points,
+    )
+    geom = _build_impeller_geometry(geom_req, sizing)
+
+    bgd_content = export_bladegen(
+        sizing_result=sizing,
+        blade_surfaces=geom.blade_surfaces,
+        hub_profile=geom.hub_profile,
+        shroud_profile=geom.shroud_profile,
+        blade_count=geom.blade_count,
+    )
+
+    return {"bgd": bgd_content, "format": "bgd"}
+
+
+# ---------------------------------------------------------------------------
 # Export endpoint (unchanged)
 # ---------------------------------------------------------------------------
 
@@ -906,3 +978,71 @@ def export_gltf(req: GltfExportRequest) -> dict:
     }
 
     return {"gltf": json.dumps(gltf, separators=(",", ":")), "filename": "impeller.gltf"}
+
+
+# ---------------------------------------------------------------------------
+# IGES export endpoint
+# ---------------------------------------------------------------------------
+
+class IGESExportRequest(BaseModel):
+    flow_rate: float = Field(..., gt=0, description="Flow rate [m3/s]")
+    head: float = Field(..., gt=0, description="Head [m]")
+    rpm: float = Field(..., gt=0, description="RPM")
+
+
+@router.post("/geometry/export/iges")
+def export_iges(req: IGESExportRequest):
+    """Export impeller geometry as IGES 5.3 file.
+
+    Generates blade surfaces and hub/shroud profiles, then writes them
+    as Type 128 (B-Spline Surface) and Type 126 (B-Spline Curve) IGES
+    entities. Returns the .igs file as a binary download.
+    """
+    import numpy as np
+
+    from hpe.geometry.runner.iges_export import write_iges
+
+    # Generate geometry using the existing impeller endpoint logic
+    geo_req = GeometryRequest(
+        flow_rate=req.flow_rate,
+        head=req.head,
+        rpm=req.rpm,
+        resolution_preset="high",  # use high resolution for CAD export
+    )
+    impeller = get_impeller_geometry(geo_req)
+
+    # Convert blade surfaces to numpy arrays (shape: n_span x n_chord x 3)
+    blade_surfaces: list[dict[str, np.ndarray]] = []
+    for surf in impeller.blade_surfaces:
+        ps_grid = np.array([
+            [[pt.x, pt.y, pt.z] for pt in row]
+            for row in surf.ps
+        ])
+        ss_grid = np.array([
+            [[pt.x, pt.y, pt.z] for pt in row]
+            for row in surf.ss
+        ])
+        blade_surfaces.append({"ps": ps_grid, "ss": ss_grid})
+
+    # Convert profiles to numpy arrays
+    hub_arr = np.array([[p.x, p.y, p.z] for p in impeller.hub_profile])
+    shroud_arr = np.array([[p.x, p.y, p.z] for p in impeller.shroud_profile])
+
+    # Write to temp file
+    tmp = tempfile.NamedTemporaryFile(suffix=".igs", delete=False)
+    tmp.close()
+
+    write_iges(
+        blade_surfaces=blade_surfaces,
+        hub_profile=hub_arr,
+        shroud_profile=shroud_arr,
+        filepath=tmp.name,
+        author="HPE",
+        description=f"Impeller Q={req.flow_rate:.4f} H={req.head:.1f}",
+    )
+
+    return FileResponse(
+        path=tmp.name,
+        filename=f"impeller_Q{req.flow_rate:.4f}_H{req.head:.1f}.igs",
+        media_type="application/octet-stream",
+    )

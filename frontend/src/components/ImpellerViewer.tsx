@@ -635,6 +635,7 @@ export default function ImpellerViewer({
   const [showParticles, setShowParticles] = useState(false)
   const [showVolute, setShowVolute] = useState(false)
   const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
+  const [resolution, setResolution] = useState<string>('medium')
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -653,8 +654,7 @@ export default function ImpellerViewer({
         flow_rate: flowRate / 3600,
         head,
         rpm,
-        n_blade_points: 60,   // increased from 40
-        n_span_points: 16,    // increased from 8
+        resolution_preset: resolution,
         add_splitters: showSplitters,
         splitter_start: 0.4,
       }),
@@ -663,7 +663,7 @@ export default function ImpellerViewer({
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [flowRate, head, rpm, showSplitters])
+  }, [flowRate, head, rpm, showSplitters, resolution])
 
   const handleExport = async (format: string) => {
     try {
@@ -771,6 +771,21 @@ export default function ImpellerViewer({
           >
             {clipZ !== null ? 'Corte ON' : 'Corte'}
           </button>
+          <select
+            value={resolution}
+            onChange={e => setResolution(e.target.value)}
+            style={{
+              fontSize: 10, padding: '3px 6px', borderRadius: 4,
+              border: '1px solid var(--border-primary)',
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="ultra">Ultra</option>
+          </select>
           {['STEP', 'STL'].map(fmt => (
             <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
@@ -892,6 +907,21 @@ export default function ImpellerViewer({
             </button>
           </div>
 
+          <select
+            value={resolution}
+            onChange={e => setResolution(e.target.value)}
+            style={{
+              fontSize: 10, padding: '3px 6px', borderRadius: 4,
+              border: '1px solid var(--border-primary)',
+              background: 'rgba(10,15,20,0.7)', color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="ultra">Ultra</option>
+          </select>
           {['STEP', 'STL'].map(fmt => (
             <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
               className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}

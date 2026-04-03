@@ -11,6 +11,9 @@ class MachineType(str, Enum):
     MIXED_FLOW_PUMP = "mixed_flow_pump"
     FRANCIS_TURBINE = "francis_turbine"
     PUMP_TURBINE = "pump_turbine"
+    RADIAL_TURBINE = "radial_turbine"
+    AXIAL_FAN = "axial_fan"
+    SIROCCO_FAN = "sirocco_fan"
 
 
 class FluidType(str, Enum):

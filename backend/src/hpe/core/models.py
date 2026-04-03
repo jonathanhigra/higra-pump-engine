@@ -7,6 +7,9 @@ from typing import Any
 
 from hpe.core.enums import FluidType, MachineType
 
+# Lazy import to avoid circular dependency at module level
+# FluidProperties is imported at runtime in methods that need it.
+
 G = 9.80665  # m/s^2 — standard gravity
 
 
@@ -122,6 +125,8 @@ class OperatingPoint:
     override_d2: float | None = None  # m - user override for outlet diameter
     override_b2: float | None = None  # m - user override for outlet width
     override_d1: float | None = None  # m - user override for inlet diameter
+    # Optional typed fluid properties (overrides fluid_density when set)
+    fluid_props: Any | None = None  # hpe.physics.fluid_properties.FluidProperties
 
     def cache_key(self) -> tuple:
         """Hashable key for LRU cache (#21)."""

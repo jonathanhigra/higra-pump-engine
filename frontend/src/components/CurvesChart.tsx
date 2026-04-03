@@ -89,7 +89,7 @@ export default function CurvesChart({ points, designFlow, designHead }: Props) {
           onClick={() => setShowNpsh(s => !s)}
           style={{ marginLeft: 'auto', background: showNpsh ? 'rgba(255,213,79,0.15)' : 'none', border: '1px solid var(--border-primary)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-muted)', padding: '3px 10px', fontSize: 11 }}
         >
-          NPSHr {showNpsh ? '✓' : ''}
+          NPSHr {showNpsh ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}><path d="M20 6L9 17l-5-5" /></svg> : ''}
         </button>
         {unstableRects.length > 0 && (
           <span className="unstable-badge">Zona instável detectada</span>
@@ -178,7 +178,7 @@ export default function CurvesChart({ points, designFlow, designHead }: Props) {
             <div>η = <b style={{ color: '#4caf50' }}>{(hp.efficiency * 100).toFixed(1)}%</b></div>
             <div>P = <b>{(hp.power / 1000).toFixed(1)} kW</b></div>
             {showNpsh && <div>NPSHr = <b style={{ color: '#FFD54F' }}>{hp.npsh_required.toFixed(1)} m</b></div>}
-            {hp.is_unstable && <div style={{ color: 'var(--accent-danger)', marginTop: 4 }}>⚠ Zona instável</div>}
+            {hp.is_unstable && <div style={{ color: 'var(--accent-danger)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4m0 4h.01M10.29 3.86l-8.6 14.88A1 1 0 002.56 20h16.88a1 1 0 00.87-1.26l-8.6-14.88a1 1 0 00-1.42 0z" /></svg> Zona instável</div>}
           </div>
         )}
       </div>

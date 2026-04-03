@@ -337,7 +337,10 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
               </svg>
               Calculando...
             </span>
-          : '⚡ Executar Dimensionamento'}
+          : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              Executar Dimensionamento
+            </span>}
       </button>
 
       {error && (

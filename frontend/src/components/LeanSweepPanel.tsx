@@ -81,7 +81,7 @@ export default function LeanSweepPanel({
   return (
     <div style={{ marginBottom: 30 }}>
       <h3 style={{ color: 'var(--accent)', fontSize: 15, margin: '0 0 16px' }}>
-        Analise Lean / Sweep / Bow
+        Análise Lean / Sweep / Bow
       </h3>
 
       {/* Inputs */}
@@ -123,7 +123,7 @@ export default function LeanSweepPanel({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                  <th style={thStyle}>Parametro</th>
+                  <th style={thStyle}>Parâmetro</th>
                   <th style={thStyle}>Hub</th>
                   <th style={thStyle}>Mid</th>
                   <th style={thStyle}>Shroud</th>
@@ -152,7 +152,7 @@ export default function LeanSweepPanel({
           {data.recommendations.length > 0 && (
             <div className="card" style={{ padding: '10px 14px' }}>
               <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>
-                Recomendacoes
+                Recomendações
               </div>
               {data.recommendations.map((r, i) => (
                 <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid var(--border-primary)' }}>
@@ -166,7 +166,7 @@ export default function LeanSweepPanel({
 
       {!data && !running && !error && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: 'var(--text-muted)', fontSize: 13, border: '1px dashed var(--border-primary)', borderRadius: 8 }}>
-          Informe os parametros e clique em Analisar
+          Informe os parâmetros e clique em Analisar
         </div>
       )}
     </div>

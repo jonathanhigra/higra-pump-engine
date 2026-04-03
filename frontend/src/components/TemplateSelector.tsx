@@ -135,11 +135,11 @@ const CATEGORY_COLORS: Record<MachineCategory, string> = {
   compressor: '#f97316', // orange
 }
 
-const CATEGORY_ICONS: Record<MachineCategory, string> = {
-  pump: '\u2699\uFE0F',       // gear
-  turbine: '\u26A1',          // lightning
-  fan: '\uD83D\uDCA8',        // wind
-  compressor: '\uD83C\uDF00', // cyclone
+const CATEGORY_ICON_PATHS: Record<MachineCategory, string> = {
+  pump: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2',       // clock/pump
+  turbine: 'M13 10V3L4 14h7v7l9-11h-7z',          // lightning
+  fan: 'M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1011 16H22m-8-6a2 2 0 012-2h8m-12 4a2 2 0 00-2 2H2',        // wind
+  compressor: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', // hexagon
 }
 
 const CATEGORY_LABELS: Record<MachineCategory, string> = {
@@ -227,7 +227,7 @@ export default function TemplateSelector({ onSelect }: Props) {
         {filtered.map(t => {
           const cat = getCategory(t)
           const color = CATEGORY_COLORS[cat]
-          const icon = CATEGORY_ICONS[cat]
+          const iconPath = CATEGORY_ICON_PATHS[cat]
           const isSelected = selectedKey === t.key
 
           return (
@@ -248,7 +248,11 @@ export default function TemplateSelector({ onSelect }: Props) {
                 borderLeft: `3px solid ${color}`,
               }}
             >
-              <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+              <div style={{ marginBottom: 4 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={iconPath} />
+                </svg>
+              </div>
               <div style={{
                 fontSize: 11,
                 fontWeight: 600,

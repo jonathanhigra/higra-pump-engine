@@ -281,15 +281,15 @@ export default function DoEPanel({
 
       {/* Base operating point */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <FieldInput label="Vazao Q [m3/h]" value={fQ} onChange={setFQ} disabled={runState === 'running'} />
+        <FieldInput label="Vazão Q [m³/h]" value={fQ} onChange={setFQ} disabled={runState === 'running'} />
         <FieldInput label="Altura H [m]" value={fH} onChange={setFH} disabled={runState === 'running'} />
-        <FieldInput label="Rotacao [rpm]" value={fN} onChange={setFN} disabled={runState === 'running'} />
+        <FieldInput label="Rotação [rpm]" value={fN} onChange={setFN} disabled={runState === 'running'} />
       </div>
 
       {/* Variable definitions */}
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Variaveis de projeto</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Variáveis de projeto</span>
           <button
             className="btn-primary"
             onClick={addVariable}
@@ -368,7 +368,7 @@ export default function DoEPanel({
                   fontSize: 14,
                   padding: 0,
                 }}
-                title="Remover variavel"
+                title="Remover variável"
               >
                 x
               </button>
@@ -381,7 +381,7 @@ export default function DoEPanel({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
         <label style={{ display: 'block' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-            Metodo DoE
+            Método DoE
           </span>
           <select
             className="input"
@@ -530,7 +530,7 @@ export default function DoEPanel({
 
             {/* Color legend */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-              <span>Eficiencia:</span>
+              <span>Eficiência:</span>
               <div style={{
                 width: 80,
                 height: 8,
@@ -625,7 +625,7 @@ export default function DoEPanel({
           border: '1px dashed var(--border-primary)',
           borderRadius: 8,
         }}>
-          Defina as variaveis e clique em Gerar DoE
+          Defina as variáveis e clique em Gerar DoE
         </div>
       )}
     </div>

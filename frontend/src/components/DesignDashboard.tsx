@@ -1,6 +1,13 @@
 import React, { useState } from 'react'
 import type { SizingResult, Tab } from '../App'
 
+/* ── Inline SVG icon helper ────────────────────────────────────────────── */
+const SvgIcon = ({ d, size = 18 }: { d: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+)
+
 interface Props {
   sizing: SizingResult | null
   opPoint: { flowRate: number; head: number; rpm: number }
@@ -92,7 +99,11 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', minHeight: 420, gap: 24, padding: 24,
       }}>
-        <div style={{ fontSize: 40, lineHeight: 1, opacity: 0.6 }}>&#9881;</div>
+        <div style={{ opacity: 0.6 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+          </svg>
+        </div>
         <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
           Comece seu projeto
         </div>
@@ -121,7 +132,9 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
               ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
             }}
           >
-            <div style={{ fontSize: 28, marginBottom: 8 }}>&#128196;</div>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
+              <SvgIcon d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" size={28} />
+            </div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Templates</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               Escolha um ponto de partida
@@ -149,7 +162,9 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
               ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
             }}
           >
-            <div style={{ fontSize: 28, marginBottom: 8 }}>&#9889;</div>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
+              <SvgIcon d="M13 10V3L4 14h7v7l9-11h-7z" size={28} />
+            </div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
               Dimensionamento R\u00E1pido
             </div>
@@ -168,7 +183,9 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
             background: 'var(--card-bg)', border: '1px dashed var(--border-primary)',
             borderRadius: 10, padding: 20, textAlign: 'center', opacity: 0.5,
           }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>&#128230;</div>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
+              <SvgIcon d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" size={28} />
+            </div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
               Importar Projeto
             </div>
@@ -185,42 +202,42 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
   const deHaller = sizing.velocity_triangles?.de_haller ?? null
 
   const metrics: {
-    icon: string; label: string; value: string; unit: string
+    iconPath: string; label: string; value: string; unit: string
     status: 'green' | 'yellow' | 'red'; badge?: string
   }[] = [
     {
-      icon: '\u{1F300}', label: 'Nq', value: sizing.specific_speed_nq.toFixed(1), unit: '',
+      iconPath: 'M3 12h4l3-9 4 18 3-9h4', label: 'Nq', value: sizing.specific_speed_nq.toFixed(1), unit: '',
       status: 'green', badge: nqTypeLabel(sizing.specific_speed_nq),
     },
     {
-      icon: '\u{2699}', label: '\u03B7 total', value: `${(sizing.estimated_efficiency * 100).toFixed(1)}`, unit: '%',
+      iconPath: 'M22 12h-4l-3 9-4-18-3 9H4', label: '\u03B7 total', value: `${(sizing.estimated_efficiency * 100).toFixed(1)}`, unit: '%',
       status: etaStatus(sizing.estimated_efficiency),
     },
     {
-      icon: '\u{1F4A7}', label: 'NPSHr', value: sizing.estimated_npsh_r.toFixed(1), unit: 'm',
+      iconPath: 'M12 2.69l5.66 5.66a8 8 0 11-11.31 0z', label: 'NPSHr', value: sizing.estimated_npsh_r.toFixed(1), unit: 'm',
       status: npshStatus(sizing.estimated_npsh_r),
     },
     {
-      icon: '\u26A1', label: 'Pot\u00EAncia', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW',
+      iconPath: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Pot\u00EAncia', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW',
       status: 'green',
     },
     {
-      icon: '\u2B55', label: 'D2', value: (sizing.impeller_d2 * 1000).toFixed(0), unit: 'mm',
+      iconPath: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', label: 'D2', value: (sizing.impeller_d2 * 1000).toFixed(0), unit: 'mm',
       status: 'green',
     },
     {
-      icon: '\u{1F6E1}', label: 'De Haller',
+      iconPath: 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z', label: 'De Haller',
       value: deHaller != null ? deHaller.toFixed(3) : '--',
       unit: '',
       status: deHaller != null ? deHallerStatus(deHaller) : 'yellow',
     },
   ]
 
-  const quickActions: { icon: string; label: string; tab: Tab }[] = [
-    { icon: '\u{1F4D0}', label: 'Ver Geometria 3D', tab: '3d' },
-    { icon: '\u{1F4C8}', label: 'Curvas de Desempenho', tab: 'curves' },
-    { icon: '\u{1F50D}', label: 'An\u00E1lise de Perdas', tab: 'losses' },
-    { icon: '\u26A1', label: 'Otimizar Design', tab: 'optimize' },
+  const quickActions: { iconPath: string; label: string; tab: Tab }[] = [
+    { iconPath: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', label: 'Ver Geometria 3D', tab: '3d' },
+    { iconPath: 'M3 12h4l3-9 4 18 3-9h4', label: 'Curvas de Desempenho', tab: 'curves' },
+    { iconPath: 'M1 12s4-8 11-8 11 8-4 8-11 8-11-8z', label: 'An\u00E1lise de Perdas', tab: 'losses' },
+    { iconPath: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Otimizar Design', tab: 'optimize' },
   ]
 
   return (
@@ -236,7 +253,7 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
             borderLeft: `3px solid ${statusColor(m.status)}`,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 16 }}>{m.icon}</span>
+              <SvgIcon d={m.iconPath} size={16} />
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
                 {m.label}
               </span>
@@ -286,7 +303,7 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
               ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
             }}
           >
-            <span style={{ fontSize: 22 }}>{a.icon}</span>
+            <SvgIcon d={a.iconPath} size={22} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               {a.label}
             </span>
@@ -303,7 +320,9 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
               borderRadius: 6, padding: '8px 14px', fontSize: 12,
               color: 'var(--accent-warning)', display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <span style={{ fontSize: 14 }}>&#9888;</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4m0 4h.01M10.29 3.86l-8.6 14.88A1 1 0 002.56 20h16.88a1 1 0 00.87-1.26l-8.6-14.88a1 1 0 00-1.42 0z" />
+              </svg>
               {w}
             </div>
           ))}

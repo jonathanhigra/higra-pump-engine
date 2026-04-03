@@ -7,8 +7,8 @@ const SECTION_CATEGORY: Record<Section, string> = {
   templates: 'Templates',
   design: 'Design',
   geometry: 'Geometria',
-  analysis: 'Analise',
-  optimization: 'Otimizacao',
+  analysis: 'Análise',
+  optimization: 'Otimização',
   assistant: 'Assistente',
 }
 

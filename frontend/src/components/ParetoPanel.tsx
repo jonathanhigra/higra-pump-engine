@@ -15,9 +15,9 @@ interface ParetoDesign {
 type ObjectiveKey = 'efficiency' | 'npsh_r' | 'power' | 'd2'
 
 const OBJECTIVE_LABELS: Record<ObjectiveKey, string> = {
-  efficiency: 'Eficiencia \u03b7',
+  efficiency: 'Eficiência \u03b7',
   npsh_r: 'NPSHr',
-  power: 'Potencia',
+  power: 'Potência',
   d2: 'D2',
 }
 
@@ -186,9 +186,9 @@ export default function ParetoPanel({
 
       {/* Axis selectors + sliders */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-        <FieldInput label="Vazao Q [m\u00b3/h]" value={fQ} onChange={setFQ} disabled={running} />
+        <FieldInput label="Vazão Q [m\u00b3/h]" value={fQ} onChange={setFQ} disabled={running} />
         <FieldInput label="Altura H [m]" value={fH} onChange={setFH} disabled={running} />
-        <FieldInput label="Rotacao [rpm]" value={fN} onChange={setFN} disabled={running} />
+        <FieldInput label="Rotação [rpm]" value={fN} onChange={setFN} disabled={running} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
@@ -208,7 +208,7 @@ export default function ParetoPanel({
         </label>
         <label style={{ display: 'block' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-            Populacao: {popSize}
+            População: {popSize}
           </span>
           <input type="range" min={20} max={200} step={10} value={popSize}
             onChange={e => setPopSize(+e.target.value)} disabled={running}
@@ -216,7 +216,7 @@ export default function ParetoPanel({
         </label>
         <label style={{ display: 'block' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-            Geracoes: {nGen}
+            Gerações: {nGen}
           </span>
           <input type="range" min={10} max={100} step={5} value={nGen}
             onChange={e => setNGen(+e.target.value)} disabled={running}
@@ -298,7 +298,7 @@ export default function ParetoPanel({
               </div>
               <KV label={`\u03b7`} value={`${(getObjValue(sel, 'efficiency')).toFixed(1)}%`} />
               <KV label="NPSHr" value={`${(getObjValue(sel, 'npsh_r')).toFixed(2)} m`} />
-              <KV label="Potencia" value={`${(getObjValue(sel, 'power')).toFixed(2)} kW`} />
+              <KV label="Potência" value={`${(getObjValue(sel, 'power')).toFixed(2)} kW`} />
               <KV label="D2" value={`${(getObjValue(sel, 'd2')).toFixed(1)} mm`} />
               <KV label="Nq" value={`${(sel.objectives.nq ?? sel.variables.nq ?? 0).toFixed(1)}`} />
               {onApplyDesign && (
@@ -321,7 +321,7 @@ export default function ParetoPanel({
                 <ThSort col="rank" label="Rank" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
                 <ThSort col="efficiency" label="\u03b7 (%)" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
                 <ThSort col="npsh_r" label="NPSHr (m)" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
-                <ThSort col="power" label="Potencia (kW)" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                <ThSort col="power" label="Potência (kW)" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
                 <ThSort col="d2" label="D2 (mm)" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
               </tr>
             </thead>
@@ -354,7 +354,7 @@ export default function ParetoPanel({
 
       {designs.length === 0 && !running && !error && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160, color: 'var(--text-muted)', fontSize: 13, border: '1px dashed var(--border-primary)', borderRadius: 8 }}>
-          Configure os parametros e clique em Executar NSGA-II
+          Configure os parâmetros e clique em Executar NSGA-II
         </div>
       )}
     </div>

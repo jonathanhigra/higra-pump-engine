@@ -1,5 +1,11 @@
 import React, { useState } from 'react'
 
+const SvgIcon = ({ d, size = 14 }: { d: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+)
+
 interface Props {
   sizing: any
   op: { flowRate: number; head: number; rpm: number } | null
@@ -27,7 +33,7 @@ export default function ExportPanel({ sizing, op }: Props) {
 
   const exports = [
     {
-      id: 'pdf', label: 'Relatório PDF', icon: '\uD83D\uDCC4', ext: '.pdf',
+      id: 'pdf', label: 'Relatório PDF', iconPath: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z', ext: '.pdf',
       action: async () => {
         const res = await fetch('/api/v1/report/pdf', {
           method: 'POST',
@@ -38,7 +44,7 @@ export default function ExportPanel({ sizing, op }: Props) {
       },
     },
     {
-      id: 'hpe', label: 'Projeto .hpe', icon: '\uD83D\uDCBE', ext: '.hpe',
+      id: 'hpe', label: 'Projeto .hpe', iconPath: 'M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z', ext: '.hpe',
       action: async () => {
         const res = await fetch('/api/v1/project/save', {
           method: 'POST',
@@ -58,7 +64,7 @@ export default function ExportPanel({ sizing, op }: Props) {
       },
     },
     {
-      id: 'geo', label: 'Blade .geo', icon: '\uD83D\uDD37', ext: '.geo',
+      id: 'geo', label: 'Blade .geo', iconPath: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', ext: '.geo',
       action: async () => {
         const res = await fetch(`/api/v1/geometry/export/geo?flow_rate=${q}&head=${h}&rpm=${n}`)
         const data = await res.json()
@@ -66,7 +72,7 @@ export default function ExportPanel({ sizing, op }: Props) {
       },
     },
     {
-      id: 'bladegen', label: 'BladeGen .inf', icon: '\uD83D\uDD39', ext: '.inf',
+      id: 'bladegen', label: 'BladeGen .inf', iconPath: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z', ext: '.inf',
       action: async () => {
         const res = await fetch(`/api/v1/geometry/export/bladegen?flow_rate=${q}&head=${h}&rpm=${n}`)
         const data = await res.json()
@@ -77,7 +83,7 @@ export default function ExportPanel({ sizing, op }: Props) {
       },
     },
     {
-      id: 'ptd', label: 'Arquivo PTD', icon: '\uD83D\uDCCA', ext: '.td1',
+      id: 'ptd', label: 'Arquivo PTD', iconPath: 'M3 12h4l3-9 4 18 3-9h4', ext: '.td1',
       action: async () => {
         const res = await fetch('/api/v1/io/td1_perfdata', {
           method: 'POST',
@@ -115,7 +121,7 @@ export default function ExportPanel({ sizing, op }: Props) {
               transition: 'all 0.15s',
             }}
           >
-            <span style={{ fontSize: 14 }}>{ex.icon}</span>
+            <SvgIcon d={ex.iconPath} />
             {busy === ex.id ? 'Gerando...' : ex.label}
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{ex.ext}</span>
           </button>

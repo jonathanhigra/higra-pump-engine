@@ -181,7 +181,10 @@ export default function ResultsView({ sizing: s }: Props) {
       {/* Warnings */}
       {s.warnings?.length > 0 && (
         <div style={{ padding: 12, background: 'rgba(255,213,79,0.08)', border: '1px solid rgba(255,213,79,0.25)', borderRadius: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-warning)', marginBottom: 6 }}>⚠ AVISOS ({s.warnings.length})</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-warning)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4m0 4h.01M10.29 3.86l-8.6 14.88A1 1 0 002.56 20h16.88a1 1 0 00.87-1.26l-8.6-14.88a1 1 0 00-1.42 0z" /></svg>
+            AVISOS ({s.warnings.length})
+          </div>
           {s.warnings.map((w: string, i: number) => (
             <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>• {w}</div>
           ))}

@@ -30,6 +30,10 @@ import MeridionalDragEditor from './components/MeridionalDragEditor'
 import TemplateSelector from './components/TemplateSelector'
 import StatusBar from './components/StatusBar'
 import DesignDashboard from './components/DesignDashboard'
+import CommandPalette from './components/CommandPalette'
+import Toast from './components/Toast'
+import { useToast } from './hooks/useToast'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
 
 /* Simple inline panels for Noise and Batch until full components are built */
@@ -157,6 +161,9 @@ export default function App() {
   const [advancedMode, setAdvancedMode] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false)
+  const { toasts, toast, dismiss } = useToast()
 
   useEffect(() => {
     const saved = localStorage.getItem('hpe_token')
@@ -204,8 +211,10 @@ export default function App() {
       const r = await fetch(`/api/v1/projects/${currentProject.id}/designs`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      if (r.ok) { const d = await r.json(); setSavedId(d.id) }
-    } finally { setSaving(false) }
+      if (r.ok) { const d = await r.json(); setSavedId(d.id); toast('Design salvo no projeto', 'success') }
+      else { toast('Erro ao salvar design', 'error') }
+    } catch { toast('Erro ao salvar design', 'error') }
+    finally { setSaving(false) }
   }
 
   // Full sizing run — sequential to avoid BaseHTTPMiddleware concurrency deadlock
@@ -228,10 +237,41 @@ export default function App() {
 
       const stressData = await runStressAnalysis(qm3s, h, n).catch(() => null)
       setStress(stressData)
+
+      toast('Dimensionamento concluido', 'success')
+    } catch {
+      toast('Erro ao calcular', 'error')
     } finally {
       setLoading(false)
     }
   }
+
+  // Keyboard shortcuts
+  const handleRunSizingShortcut = useCallback(() => {
+    if (sizing || opPoint) handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm)
+  }, [opPoint, sizing])
+
+  useKeyboardShortcuts({
+    onRunSizing: handleRunSizingShortcut,
+    onSave: handleSaveDesign,
+    onCmdPalette: () => setCmdOpen(true),
+    onNavigate: handleNavigate,
+    onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false) },
+  })
+
+  /* Shared overlay elements rendered in all authenticated pages */
+  const overlays = (
+    <>
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onNavigate={handleNavigate}
+        onRunSizing={handleRunSizingShortcut}
+      />
+      <Toast messages={toasts} onDismiss={dismiss} />
+      {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
+    </>
+  )
 
   // === LOGIN ===
   if (page === 'login') {
@@ -244,7 +284,8 @@ export default function App() {
       <Layout page="projects" activeTab={null} userName={user?.name || t.user}
         onNavigate={handleNavigate} onLogout={handleLogout}>
         <ProjectsPage onSelectProject={handleSelectProject} token={token} />
-        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
+        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        {overlays}
       </Layout>
     )
   }
@@ -263,7 +304,8 @@ export default function App() {
           sizing={sizing}
           onRunSizing={handleRunSizing}
         />
-        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
+        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        {overlays}
       </Layout>
     )
   }
@@ -443,7 +485,65 @@ export default function App() {
           )}
         </div>
       </div>
-      <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
+      <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+      {overlays}
     </Layout>
+  )
+}
+
+/* ── Shortcuts Help Modal ─────────────────────────────────────────────────── */
+function ShortcutsHelpModal({ onClose }: { onClose: () => void }) {
+  const shortcuts = [
+    { keys: 'Ctrl+K', desc: 'Abrir command palette' },
+    { keys: 'Ctrl+S', desc: 'Salvar design' },
+    { keys: 'F5 / Ctrl+Enter', desc: 'Executar dimensionamento' },
+    { keys: '1-7', desc: 'Navegar entre secoes' },
+    { keys: 'Esc', desc: 'Fechar modal/palette' },
+  ]
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 2100,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: 360, background: 'var(--bg-elevated)',
+          borderRadius: 12, border: '1px solid var(--border-primary)',
+          boxShadow: 'var(--shadow-md)', padding: 24,
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 style={{ margin: '0 0 16px', fontSize: 16, color: 'var(--text-primary)' }}>Atalhos de Teclado</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {shortcuts.map(s => (
+            <div key={s.keys} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{s.desc}</span>
+              <kbd style={{
+                fontSize: 11, padding: '2px 8px',
+                background: 'var(--bg-surface)', borderRadius: 4,
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text-muted)', fontFamily: 'var(--font-family)',
+              }}>{s.keys}</kbd>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            marginTop: 20, width: '100%', padding: '8px 0',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+            borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer',
+            fontSize: 13, fontFamily: 'var(--font-family)',
+          }}
+        >
+          Fechar (Esc)
+        </button>
+      </div>
+    </div>
   )
 }

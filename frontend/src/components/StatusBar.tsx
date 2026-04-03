@@ -5,6 +5,7 @@ interface Props {
   sizing: SizingResult | null
   opPoint?: { flowRate: number; head: number; rpm: number }
   savedId?: string | null
+  onShortcutsHelp?: () => void
 }
 
 interface Pill {
@@ -12,7 +13,7 @@ interface Pill {
   value: string
 }
 
-export default function StatusBar({ sizing, opPoint, savedId }: Props) {
+export default function StatusBar({ sizing, opPoint, savedId, onShortcutsHelp }: Props) {
   const pills: Pill[] = sizing
     ? [
         { label: 'Nq', value: sizing.specific_speed_nq.toFixed(1) },
@@ -83,6 +84,24 @@ export default function StatusBar({ sizing, opPoint, savedId }: Props) {
             {savedId ? 'Salvo' : 'N\u00E3o salvo'}
           </span>
         </span>
+        {onShortcutsHelp && (
+          <button
+            onClick={onShortcutsHelp}
+            title="Atalhos de teclado"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 4,
+              width: 20, height: 20,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-family)',
+              padding: 0,
+            }}
+          >
+            ?
+          </button>
+        )}
       </div>
     </div>
   )

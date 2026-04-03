@@ -272,11 +272,11 @@ void pressureColor
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-// TURBOdesign-style metallic palette
-const BLADE_COLOR = '#b0b8c4'    // blade — brushed steel
-const BLADE_COLOR_ALT = '#8a929c' // blade backside — slightly darker
-const HUB_COLOR = '#6b7280'      // hub — medium steel
-const SPLITTER_COLOR = '#9ca3af'  // splitter — lighter steel
+// TURBOdesign-style metallic palette — brushed aluminum/steel
+const BLADE_COLOR = '#c8cdd4'    // blade PS — bright brushed steel
+const BLADE_COLOR_ALT = '#a0a8b2' // blade SS — slightly darker
+const HUB_COLOR = '#8890a0'      // hub — darker steel
+const SPLITTER_COLOR = '#b0b8c4'  // splitter — same family
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
@@ -778,7 +778,7 @@ export default function ImpellerViewer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(true)
-  const [showSplitters, setShowSplitters] = useState(false)
+  const [showSplitters, setShowSplitters] = useState(true)  // splitters on by default
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
   const [showLoadingMap, setShowLoadingMap] = useState(false)
@@ -786,7 +786,7 @@ export default function ImpellerViewer({
   const [showParticles, setShowParticles] = useState(false)
   const [showVolute, setShowVolute] = useState(false)
   const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
-  const [resolution, setResolution] = useState<string>('medium')
+  const [resolution, setResolution] = useState<string>('high')
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -873,7 +873,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows style={{ width: '100%', height: '100%', background: '#1a1f2e' }}>
+    <Canvas shadows style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
@@ -913,7 +913,7 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: '#1a1f2e', position: 'relative' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)', position: 'relative' }}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -974,7 +974,7 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: '#1a1f2e' }}>
+      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)' }}>
         {canvasEl}
       </div>
 

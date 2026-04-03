@@ -1048,3 +1048,121 @@ def export_iges(req: IGESExportRequest):
         filename=f"impeller_Q{req.flow_rate:.4f}_H{req.head:.1f}.igs",
         media_type="application/octet-stream",
     )
+
+
+# ---------------------------------------------------------------------------
+# Blade loading field (rVθ contours)
+# ---------------------------------------------------------------------------
+
+class BladeLoadingRequest(BaseModel):
+    flow_rate: float = Field(..., gt=0, description="Volume flow rate [m³/s]")
+    head: float = Field(..., gt=0, description="Total head [m]")
+    rpm: float = Field(..., gt=0, description="Rotational speed [RPM]")
+    n_blade_points: int = Field(60, ge=20, le=200)
+    n_span_points: int = Field(16, ge=4, le=64)
+
+
+class BladeLoadingField(BaseModel):
+    """Per-blade rVθ field normalised to [0,1] for colormap rendering."""
+    ps_rvtheta: List[List[float]]  # [n_span][n_chord] normalised rVθ
+    ss_rvtheta: List[List[float]]
+
+
+class BladeLoadingResponse(BaseModel):
+    blade_loading: List[BladeLoadingField]
+    rvtheta_min: float  # physical min rVθ [m²/s]
+    rvtheta_max: float  # physical max rVθ [m²/s]
+
+
+@router.post("/geometry/blade_loading_field", response_model=BladeLoadingResponse)
+def get_blade_loading_field(req: BladeLoadingRequest) -> BladeLoadingResponse:
+    """Compute per-vertex rVθ (angular momentum) on blade surfaces.
+
+    For each blade surface point at (span, chord), the angular momentum is:
+        rVθ = r * cu
+    where cu is the tangential component of absolute velocity interpolated
+    from the inlet/outlet velocity triangles along the meridional coordinate.
+
+    The field is normalised to [0,1] for direct use as a diverging colormap.
+    """
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing.meanline import run_sizing
+
+    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+    sizing = run_sizing(op)
+
+    mp = sizing.meridional_profile
+    d1 = sizing.impeller_d1
+    d2 = sizing.impeller_d2
+    b2 = sizing.impeller_b2
+    b1 = float(mp.get("b1", b2 * 1.2))
+    r1 = d1 / 2.0
+    r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
+    r2 = d2 / 2.0
+
+    n_chord = req.n_blade_points
+    n_span = req.n_span_points
+
+    hub_rz, shroud_rz = _meridional_curves(r1, r1_hub, r2, b1, b2, n_chord)
+
+    # Velocity triangle data
+    vt = sizing.velocity_triangles
+    cu1 = float(vt.get("inlet", {}).get("cu", 0.0))
+    cu2 = float(vt.get("outlet", {}).get("cu", 0.0))
+
+    # Build rVθ for each span/chord station
+    all_rvtheta: list[list[list[float]]] = []  # [blade][span][chord]
+
+    for _blade in range(sizing.blade_count):
+        blade_ps: list[list[float]] = []
+        blade_ss: list[list[float]] = []
+        for k in range(n_span):
+            s = k / max(1, n_span - 1)
+            ps_row: list[float] = []
+            ss_row: list[float] = []
+            for i in range(n_chord):
+                t = i / max(1, n_chord - 1)
+                # Interpolate r along meridional path for this span
+                r_h = hub_rz[i][0]
+                r_s = shroud_rz[i][0]
+                r = r_h + s * (r_s - r_h)
+                # Interpolate cu linearly from inlet to outlet along chord
+                cu = cu1 + t * (cu2 - cu1)
+                rv_theta = r * cu
+                ps_row.append(rv_theta)
+                # SS has slightly different loading (lower near LE, higher near TE)
+                cu_ss = cu1 + t * (cu2 - cu1) * (1.0 + 0.15 * math.sin(math.pi * t))
+                ss_row.append(r * cu_ss)
+            blade_ps.append(ps_row)
+            blade_ss.append(ss_row)
+        all_rvtheta.append([blade_ps, blade_ss])
+
+    # Find global min/max for normalisation
+    flat_vals: list[float] = []
+    for blade_data in all_rvtheta:
+        for surface in blade_data:
+            for row in surface:
+                flat_vals.extend(row)
+
+    rv_min = min(flat_vals) if flat_vals else 0.0
+    rv_max = max(flat_vals) if flat_vals else 1.0
+    rv_range = rv_max - rv_min if rv_max > rv_min else 1.0
+
+    # Normalise to [0,1]
+    loading_fields: list[BladeLoadingField] = []
+    for blade_data in all_rvtheta:
+        ps_norm = [
+            [round((v - rv_min) / rv_range, 4) for v in row]
+            for row in blade_data[0]
+        ]
+        ss_norm = [
+            [round((v - rv_min) / rv_range, 4) for v in row]
+            for row in blade_data[1]
+        ]
+        loading_fields.append(BladeLoadingField(ps_rvtheta=ps_norm, ss_rvtheta=ss_norm))
+
+    return BladeLoadingResponse(
+        blade_loading=loading_fields,
+        rvtheta_min=round(rv_min, 4),
+        rvtheta_max=round(rv_max, 4),
+    )

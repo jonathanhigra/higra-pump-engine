@@ -12,6 +12,15 @@ interface BladeSurface {
   ps_pressure?: number[][]
   ss_pressure?: number[][]
 }
+interface BladeLoadingField {
+  ps_rvtheta: number[][]
+  ss_rvtheta: number[][]
+}
+interface BladeLoadingData {
+  blade_loading: BladeLoadingField[]
+  rvtheta_min: number
+  rvtheta_max: number
+}
 interface ImpellerData {
   blade_surfaces: BladeSurface[]
   splitter_surfaces?: BladeSurface[]
@@ -93,6 +102,53 @@ function buildQuadGeoWithColors(grid: BladePoint[][], pressureGrid: number[][]):
       const pr11 = pressureGrid?.[s + 1]?.[c + 1] ?? 0.5
       addTri(p00, p10, p01, pr00, pr10, pr01)
       addTri(p10, p11, p01, pr10, pr11, pr01)
+    }
+  }
+
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  g.computeVertexNormals()
+  return g
+}
+
+/** Diverging colormap: blue (0) → white (0.5) → red (1) for rVθ loading. */
+function buildQuadGeoWithDivergingColors(grid: BladePoint[][], valueGrid: number[][]): THREE.BufferGeometry {
+  const nSpan = grid.length
+  const nChord = grid[0]?.length ?? 0
+  const pos: number[] = []
+  const colors: number[] = []
+
+  const divColor = (v: number): [number, number, number] => {
+    // Blue (0) → White (0.5) → Red (1)
+    if (v <= 0.5) {
+      const t = v / 0.5
+      return [t, t, 1.0]  // blue to white
+    } else {
+      const t = (v - 0.5) / 0.5
+      return [1.0, 1.0 - t, 1.0 - t]  // white to red
+    }
+  }
+
+  const addTri = (
+    p0: BladePoint, p1: BladePoint, p2: BladePoint,
+    v0: number, v1: number, v2: number,
+  ) => {
+    pos.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z)
+    const c0 = divColor(v0), c1 = divColor(v1), c2 = divColor(v2)
+    colors.push(...c0, ...c1, ...c2)
+  }
+
+  for (let s = 0; s < nSpan - 1; s++) {
+    for (let c = 0; c < nChord - 1; c++) {
+      const p00 = grid[s][c], p10 = grid[s + 1][c]
+      const p01 = grid[s][c + 1], p11 = grid[s + 1][c + 1]
+      const v00 = valueGrid?.[s]?.[c] ?? 0.5
+      const v10 = valueGrid?.[s + 1]?.[c] ?? 0.5
+      const v01 = valueGrid?.[s]?.[c + 1] ?? 0.5
+      const v11 = valueGrid?.[s + 1]?.[c + 1] ?? 0.5
+      addTri(p00, p10, p01, v00, v10, v01)
+      addTri(p10, p11, p01, v10, v11, v01)
     }
   }
 
@@ -198,32 +254,39 @@ function ClipController({ clipZ }: { clipZ: number | null }) {
 // ─── Scene components ─────────────────────────────────────────────────────────
 
 function BladeSurfaceMesh({
-  surface, idx, showColormap, onSelect, isSelected,
+  surface, idx, showColormap, showLoadingMap, loadingField, onSelect, isSelected,
 }: {
   surface: BladeSurface
   idx: number
   showColormap: boolean
+  showLoadingMap?: boolean
+  loadingField?: BladeLoadingField | null
   onSelect: (idx: number) => void
   isSelected: boolean
 }) {
   const [hovered, setHovered] = useState(false)
 
   const psGeo = useMemo(
-    () => showColormap && surface.ps_pressure
-      ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
-      : buildQuadGeo(surface.ps),
-    [surface, showColormap],
+    () => showLoadingMap && loadingField?.ps_rvtheta
+      ? buildQuadGeoWithDivergingColors(surface.ps, loadingField.ps_rvtheta)
+      : showColormap && surface.ps_pressure
+        ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
+        : buildQuadGeo(surface.ps),
+    [surface, showColormap, showLoadingMap, loadingField],
   )
   const ssGeo = useMemo(
-    () => showColormap && surface.ss_pressure
-      ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
-      : buildQuadGeo(surface.ss),
-    [surface, showColormap],
+    () => showLoadingMap && loadingField?.ss_rvtheta
+      ? buildQuadGeoWithDivergingColors(surface.ss, loadingField.ss_rvtheta)
+      : showColormap && surface.ss_pressure
+        ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
+        : buildQuadGeo(surface.ss),
+    [surface, showColormap, showLoadingMap, loadingField],
   )
 
+  const useVertexColors = showColormap || showLoadingMap
   const highlight = isSelected || hovered
-  const psColor = showColormap ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
-  const ssColor = showColormap ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
+  const psColor = useVertexColors ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
+  const ssColor = useVertexColors ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
   const emissive = isSelected ? '#1a2530' : hovered ? '#0f1a22' : '#000000'
 
   return (
@@ -234,7 +297,7 @@ function BladeSurfaceMesh({
         onPointerOut={() => setHovered(false)}
       >
         <meshStandardMaterial
-          vertexColors={showColormap}
+          vertexColors={useVertexColors}
           color={psColor}
           emissive={emissive}
           side={THREE.DoubleSide}
@@ -248,7 +311,7 @@ function BladeSurfaceMesh({
         onPointerOut={() => setHovered(false)}
       >
         <meshStandardMaterial
-          vertexColors={showColormap}
+          vertexColors={useVertexColors}
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
@@ -566,7 +629,7 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, showColormap, showParticles, showVolute,
+  data, paused, rpm, showSplitters, clipZ, showColormap, showLoadingMap, loadingData, showParticles, showVolute,
   selectedBlade, onSelectBlade,
 }: {
   data: ImpellerData
@@ -575,6 +638,8 @@ function Scene({
   showSplitters?: boolean
   clipZ: number | null
   showColormap: boolean
+  showLoadingMap?: boolean
+  loadingData?: BladeLoadingData | null
   showParticles: boolean
   showVolute: boolean
   selectedBlade: number | null
@@ -597,6 +662,8 @@ function Scene({
           <HubMesh profile={data.hub_profile} />
           {data.blade_surfaces.map((surf, i) => (
             <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
+              showLoadingMap={showLoadingMap}
+              loadingField={loadingData?.blade_loading?.[i] ?? null}
               onSelect={onSelectBlade} isSelected={selectedBlade === i} />
           ))}
           {showSplitters && data.splitter_surfaces?.map((surf, i) => (
@@ -632,6 +699,8 @@ export default function ImpellerViewer({
   const [showSplitters, setShowSplitters] = useState(false)
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
+  const [showLoadingMap, setShowLoadingMap] = useState(false)
+  const [loadingData, setLoadingData] = useState<BladeLoadingData | null>(null)
   const [showParticles, setShowParticles] = useState(false)
   const [showVolute, setShowVolute] = useState(false)
   const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
@@ -664,6 +733,19 @@ export default function ImpellerViewer({
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [flowRate, head, rpm, showSplitters, resolution])
+
+  // Fetch blade loading rVθ data when showLoadingMap is enabled
+  useEffect(() => {
+    if (!showLoadingMap || flowRate <= 0 || head <= 0 || rpm <= 0) return
+    fetch('/api/v1/geometry/blade_loading_field', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flow_rate: flowRate / 3600, head, rpm }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setLoadingData(d) })
+      .catch(() => {})
+  }, [flowRate, head, rpm, showLoadingMap])
 
   const handleExport = async (format: string) => {
     try {
@@ -710,7 +792,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: '#1a1f2e' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -728,7 +810,7 @@ export default function ImpellerViewer({
         </div>
         {/* Legend / colormap legend */}
         <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {!showColormap && (
+          {!showColormap && !showLoadingMap && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
@@ -739,6 +821,13 @@ export default function ImpellerViewer({
               <span>Baixa P</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #1040b0, #00a0a0, #40c040, #e0c000, #e04000)' }} />
               <span>Alta P</span>
+            </div>
+          )}
+          {showLoadingMap && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixo rVθ</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2060ff, #ffffff, #ff3030)' }} />
+              <span>Alto rVθ</span>
             </div>
           )}
         </div>
@@ -756,7 +845,8 @@ export default function ImpellerViewer({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
+          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <button
@@ -819,7 +909,7 @@ export default function ImpellerViewer({
       <div className="viewer-overlay viewer-overlay-tl">
         <div className="glass-panel" style={{ padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 12 }}>
           <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13 }}>HPE</span>
-          {!showColormap && (
+          {!showColormap && !showLoadingMap && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo" />
@@ -830,6 +920,13 @@ export default function ImpellerViewer({
               <span>Baixa P</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #1040b0, #00a0a0, #40c040, #e0c000, #e04000)' }} />
               <span>Alta P</span>
+            </div>
+          )}
+          {showLoadingMap && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixo rVθ</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2060ff, #ffffff, #ff3030)' }} />
+              <span>Alto rVθ</span>
             </div>
           )}
           {data && (
@@ -879,7 +976,8 @@ export default function ImpellerViewer({
         <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 520 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => setShowColormap(c => !c)} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
+          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
 

@@ -45,6 +45,7 @@ from hpe.api.routes.domain_routes import router as domain_router
 from hpe.api.routes.udp_routes import router as udp_router
 from hpe.api.routes.blockage_routes import router as blockage_router
 from hpe.api.routes.ansys_routes import router as ansys_router
+from hpe.api.routes.lean_sweep_routes import router as lean_sweep_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -93,6 +94,7 @@ app.include_router(domain_router)
 app.include_router(udp_router)
 app.include_router(blockage_router)
 app.include_router(ansys_router)
+app.include_router(lean_sweep_router)
 
 
 @app.get("/health")

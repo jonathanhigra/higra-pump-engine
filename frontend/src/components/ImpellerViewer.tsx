@@ -210,6 +210,53 @@ function buildHubDiscGeo(hubProfile: BladePoint[], segs = 96): THREE.BufferGeome
   return g
 }
 
+/** Build LE/TE edge caps between PS and SS to make blade look solid */
+function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.BufferGeometry {
+  const nSpan = ps.length
+  const nChord = ps[0]?.length ?? 0
+  if (nSpan < 2 || nChord < 2) return new THREE.BufferGeometry()
+  const pos: number[] = []
+
+  // Leading edge cap (chord index 0): connect PS[:,0] to SS[:,0]
+  for (let s = 0; s < nSpan - 1; s++) {
+    const ps0 = ps[s][0], ps1 = ps[s + 1][0]
+    const ss0 = ss[s][0], ss1 = ss[s + 1][0]
+    pos.push(ps0.x, ps0.y, ps0.z, ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z)
+    pos.push(ps1.x, ps1.y, ps1.z, ss1.x, ss1.y, ss1.z, ss0.x, ss0.y, ss0.z)
+  }
+
+  // Trailing edge cap (chord index nChord-1)
+  const c = nChord - 1
+  for (let s = 0; s < nSpan - 1; s++) {
+    const ps0 = ps[s][c], ps1 = ps[s + 1][c]
+    const ss0 = ss[s][c], ss1 = ss[s + 1][c]
+    pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
+    pos.push(ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z)
+  }
+
+  // Hub edge cap (span index 0): connect PS[0,:] to SS[0,:]
+  for (let c2 = 0; c2 < nChord - 1; c2++) {
+    const ps0 = ps[0][c2], ps1 = ps[0][c2 + 1]
+    const ss0 = ss[0][c2], ss1 = ss[0][c2 + 1]
+    pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
+    pos.push(ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z)
+  }
+
+  // Shroud edge cap (span index nSpan-1)
+  const sLast = nSpan - 1
+  for (let c2 = 0; c2 < nChord - 1; c2++) {
+    const ps0 = ps[sLast][c2], ps1 = ps[sLast][c2 + 1]
+    const ss0 = ss[sLast][c2], ss1 = ss[sLast][c2 + 1]
+    pos.push(ps0.x, ps0.y, ps0.z, ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z)
+    pos.push(ps1.x, ps1.y, ps1.z, ss1.x, ss1.y, ss1.z, ss0.x, ss0.y, ss0.z)
+  }
+
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.computeVertexNormals()
+  return g
+}
+
 // ─── Pressure colormap helper (used in legend) ────────────────────────────────
 
 function pressureColor(p: number): string {
@@ -283,10 +330,14 @@ function BladeSurfaceMesh({
     [surface, showColormap, showLoadingMap, loadingField],
   )
 
+  // Edge caps — close PS-SS gap to make blade look solid
+  const capsGeo = useMemo(() => buildBladeEdgeCaps(surface.ps, surface.ss), [surface])
+
   const useVertexColors = showColormap || showLoadingMap
   const highlight = isSelected || hovered
   const psColor = useVertexColors ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
   const ssColor = useVertexColors ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
+  const capColor = useVertexColors ? '#ffffff' : (highlight ? '#bcc4cc' : '#8a929c')
   const emissive = isSelected ? '#1a2530' : hovered ? '#0f1a22' : '#000000'
 
   return (
@@ -300,7 +351,7 @@ function BladeSurfaceMesh({
           vertexColors={useVertexColors}
           color={psColor}
           emissive={emissive}
-          side={THREE.DoubleSide}
+          side={THREE.FrontSide}
           metalness={0.72}
           roughness={0.22}
         />
@@ -314,9 +365,19 @@ function BladeSurfaceMesh({
           vertexColors={useVertexColors}
           color={ssColor}
           emissive={emissive}
-          side={THREE.DoubleSide}
+          side={THREE.FrontSide}
           metalness={0.72}
           roughness={0.22}
+        />
+      </mesh>
+      {/* LE/TE/hub/shroud edge caps — make blade solid */}
+      <mesh geometry={capsGeo} castShadow>
+        <meshStandardMaterial
+          color={capColor}
+          emissive={emissive}
+          side={THREE.DoubleSide}
+          metalness={0.70}
+          roughness={0.25}
         />
       </mesh>
     </>
@@ -376,6 +437,24 @@ function HubMesh({ profile }: { profile: BladePoint[] }) {
 }
 
 
+/** Transparent shroud surface — frames the blades like TURBOdesign Suite */
+function ShroudMesh({ profile }: { profile: BladePoint[] }) {
+  const geo = useMemo(() => buildRevolutionGeo(profile, 96), [profile])
+  return (
+    <mesh geometry={geo}>
+      <meshStandardMaterial
+        color="#90a0b4"
+        metalness={0.3}
+        roughness={0.4}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={0.12}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
 function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; paused?: boolean; rpm?: number }) {
   const ref = useRef<THREE.Group>(null)
   // Rotation speed: simulate ~1/10 of real RPM for visual effect
@@ -387,17 +466,19 @@ function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; p
 function SceneLights() {
   return (
     <>
-      <ambientLight intensity={0.50} />
-      {/* Key light — front-top, neutral white */}
-      <directionalLight position={[2, 3, 5]} intensity={1.8} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
-      {/* Fill light — left side, cool white */}
-      <directionalLight position={[-4, 1, 3]} intensity={0.7} color="#e8eef4" />
-      {/* Rim light — behind, subtle */}
-      <directionalLight position={[1, -2, -4]} intensity={0.35} color="#d0d8e0" />
-      {/* Under fill for blade undersides */}
-      <directionalLight position={[0, -3, 1]} intensity={0.25} color="#ffffff" />
-      {/* Point at center for blade edge definition */}
-      <pointLight position={[0, 0, 3]} intensity={0.6} distance={10} color="#f0f4f8" />
+      <ambientLight intensity={0.55} />
+      {/* Key light — front-top, strong for blade definition */}
+      <directionalLight position={[3, 4, 5]} intensity={2.0} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
+      {/* Fill light — left side, cool */}
+      <directionalLight position={[-5, 2, 3]} intensity={0.8} color="#e8eef4" />
+      {/* Rim light — behind-right for blade edge highlights */}
+      <directionalLight position={[3, -2, -4]} intensity={0.5} color="#d0d8e0" />
+      {/* Under fill — illuminate blade undersides */}
+      <directionalLight position={[0, -4, 2]} intensity={0.4} color="#ffffff" />
+      {/* Top-down light — blade top surface definition */}
+      <directionalLight position={[0, 0, 6]} intensity={0.6} color="#f0f4f8" />
+      {/* Point at center for blade passage highlights */}
+      <pointLight position={[0, 0, 2]} intensity={0.5} distance={8} color="#f0f4f8" />
     </>
   )
 }
@@ -660,6 +741,7 @@ function Scene({
       <RotatingGroup paused={paused} rpm={rpm}>
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
+          <ShroudMesh profile={data.shroud_profile} />
           {data.blade_surfaces.map((surf, i) => (
             <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
               showLoadingMap={showLoadingMap}

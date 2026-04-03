@@ -22,7 +22,86 @@ import MeridionalEditor from './components/MeridionalEditor'
 import SpanwiseLoadingChart from './components/SpanwiseLoadingChart'
 import ReferencePanel from './components/ReferencePanel'
 import ExportPanel from './components/ExportPanel'
+import DoEPanel from './components/DoEPanel'
+import ParetoPanel from './components/ParetoPanel'
+import LeanSweepPanel from './components/LeanSweepPanel'
+import LETEEditor from './components/LETEEditor'
+import MeridionalDragEditor from './components/MeridionalDragEditor'
+import TemplateSelector from './components/TemplateSelector'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
+
+/* Simple inline panels for Noise and Batch until full components are built */
+function NoisePanel({ flowRate, head, rpm, sizing }: any) {
+  const [result, setResult] = React.useState<any>(null)
+  const [loading, setLoading] = React.useState(false)
+  const run = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/v1/analysis/noise', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ flow_rate: flowRate, head, rpm }) })
+      if (r.ok) setResult(await r.json())
+    } finally { setLoading(false) }
+  }
+  return (
+    <div>
+      <button className="btn-primary" onClick={run} disabled={loading} style={{ fontSize: 13, padding: '8px 16px' }}>
+        {loading ? 'Calculando...' : 'Calcular Ruído'}
+      </button>
+      {result && (
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
+          <div>Lw total: <b style={{ color: 'var(--accent)' }}>{result.Lw_total_dB?.toFixed(1) ?? '—'} dB</b></div>
+          <div>Lw(A): <b style={{ color: 'var(--accent)' }}>{result.Lw_A_weighted_dB?.toFixed(1) ?? '—'} dBA</b></div>
+          <div>BPF: <b>{result.bpf_hz?.toFixed(0) ?? '—'} Hz</b></div>
+          <div>Fonte dominante: <b>{result.dominant_source ?? '—'}</b></div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BatchPanel({ baseFlowRate, baseHead, baseRpm }: any) {
+  const [results, setResults] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(false)
+  const [variable, setVariable] = React.useState('rpm')
+  const run = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/v1/batch/parametric', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ flow_rate: baseFlowRate, head: baseHead, rpm: baseRpm, sweep_variable: variable, n_points: 10 }) })
+      if (r.ok) { const d = await r.json(); setResults(d.results || d) }
+    } finally { setLoading(false) }
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+        <select value={variable} onChange={e => setVariable(e.target.value)} className="input" style={{ width: 160 }}>
+          <option value="rpm">RPM</option><option value="flow_rate">Vazão</option><option value="head">Altura</option>
+        </select>
+        <button className="btn-primary" onClick={run} disabled={loading} style={{ fontSize: 13, padding: '8px 16px' }}>
+          {loading ? 'Executando...' : 'Sweep Paramétrico'}
+        </button>
+      </div>
+      {results.length > 0 && (
+        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <thead><tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+            <th style={{ padding: 6, textAlign: 'left', color: 'var(--text-muted)' }}>Nq</th>
+            <th style={{ padding: 6, textAlign: 'left', color: 'var(--text-muted)' }}>D2 [mm]</th>
+            <th style={{ padding: 6, textAlign: 'left', color: 'var(--text-muted)' }}>η [%]</th>
+            <th style={{ padding: 6, textAlign: 'left', color: 'var(--text-muted)' }}>Power [kW]</th>
+          </tr></thead>
+          <tbody>{results.map((r: any, i: number) => (
+            <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <td style={{ padding: 6 }}>{(r.specific_speed_nq ?? r.nq)?.toFixed(1)}</td>
+              <td style={{ padding: 6 }}>{((r.impeller_d2 ?? r.d2) * 1000)?.toFixed(0)}</td>
+              <td style={{ padding: 6 }}>{((r.estimated_efficiency ?? r.eta) * 100)?.toFixed(1)}</td>
+              <td style={{ padding: 6 }}>{((r.estimated_power ?? r.power) / 1000)?.toFixed(1)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
+    </div>
+  )
+}
 
 export interface SizingResult {
   specific_speed_nq: number
@@ -53,7 +132,12 @@ export interface CurvePoint {
 }
 
 type Page = 'login' | 'projects' | 'design'
-export type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure' | 'multispeed' | 'meridional-editor' | 'spanwise'
+export type Tab =
+  | 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
+  | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure'
+  | 'multispeed' | 'meridional-editor' | 'spanwise'
+  | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
+  | 'meridional-drag' | 'noise' | 'batch'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -258,7 +342,16 @@ export default function App() {
 
         {/* RIGHT PANEL — results area */}
         <div>
-          {sizing ? (
+          {/* Templates tab — works without sizing */}
+          {tab === 'templates' && (
+            <TemplateSelector onSelect={(tmpl: any) => {
+              if (tmpl.flow_rate && tmpl.head && tmpl.rpm && onRunSizing) {
+                handleRunSizing(tmpl.flow_rate, tmpl.head, tmpl.rpm)
+              }
+            }} />
+          )}
+
+          {tab !== 'templates' && sizing ? (
             <>
               {/* Results + reference comparison always visible in results tab */}
               {tab === 'results' && (
@@ -292,6 +385,48 @@ export default function App() {
                 />
               )}
               {tab === 'spanwise' && <SpanwiseLoadingChart sizing={sizing} />}
+              {tab === 'doe' && <DoEPanel />}
+              {tab === 'pareto' && (
+                <ParetoPanel
+                  defaultFlowRate={opPoint.flowRate}
+                  defaultHead={opPoint.head}
+                  defaultRpm={opPoint.rpm}
+                />
+              )}
+              {tab === 'lean-sweep' && (
+                <LeanSweepPanel
+                  defaultFlowRate={opPoint.flowRate / 3600}
+                  defaultHead={opPoint.head}
+                  defaultRpm={opPoint.rpm}
+                />
+              )}
+              {tab === 'lete' && (
+                <LETEEditor
+                  nq={sizing.specific_speed_nq}
+                  flowRate={opPoint.flowRate / 3600}
+                  head={opPoint.head}
+                  rpm={opPoint.rpm}
+                />
+              )}
+              {tab === 'meridional-drag' && (
+                <MeridionalDragEditor
+                  d1={sizing.impeller_d1 * 1000}
+                  d2={sizing.impeller_d2 * 1000}
+                  b2={sizing.impeller_b2 * 1000}
+                />
+              )}
+              {tab === 'noise' && (
+                <div className="card" style={{ padding: 20 }}>
+                  <h3 style={{ color: 'var(--accent)', marginTop: 0, fontSize: 15 }}>Predição de Ruído</h3>
+                  <NoisePanel flowRate={opPoint.flowRate / 3600} head={opPoint.head} rpm={opPoint.rpm} sizing={sizing} />
+                </div>
+              )}
+              {tab === 'batch' && (
+                <div className="card" style={{ padding: 20 }}>
+                  <h3 style={{ color: 'var(--accent)', marginTop: 0, fontSize: 15 }}>Batch / Paramétrico</h3>
+                  <BatchPanel baseFlowRate={opPoint.flowRate / 3600} baseHead={opPoint.head} baseRpm={opPoint.rpm} />
+                </div>
+              )}
             </>
           ) : (
             /* Empty state — shown before first sizing run */

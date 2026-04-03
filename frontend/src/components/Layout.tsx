@@ -1,7 +1,5 @@
 import React, { useState } from 'react'
-import Sidebar from './Sidebar'
-
-type Tab = 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress' | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure' | 'multispeed' | 'meridional-editor' | 'spanwise'
+import Sidebar, { type Tab } from './Sidebar'
 
 interface Props {
   page: 'projects' | 'design'
@@ -12,6 +10,8 @@ interface Props {
   children: React.ReactNode
   noPad?: boolean
 }
+
+export type { Tab }
 
 export default function Layout({ page, activeTab, userName, onNavigate, onLogout, children, noPad }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(() => {

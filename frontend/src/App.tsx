@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import t from './i18n/pt-br'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -28,6 +28,8 @@ import LeanSweepPanel from './components/LeanSweepPanel'
 import LETEEditor from './components/LETEEditor'
 import MeridionalDragEditor from './components/MeridionalDragEditor'
 import TemplateSelector from './components/TemplateSelector'
+import StatusBar from './components/StatusBar'
+import DesignDashboard from './components/DesignDashboard'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
 
 /* Simple inline panels for Noise and Batch until full components are built */
@@ -242,6 +244,7 @@ export default function App() {
       <Layout page="projects" activeTab={null} userName={user?.name || t.user}
         onNavigate={handleNavigate} onLogout={handleLogout}>
         <ProjectsPage onSelectProject={handleSelectProject} token={token} />
+        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
       </Layout>
     )
   }
@@ -250,7 +253,7 @@ export default function App() {
   if (tab === '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-        onNavigate={handleNavigate} onLogout={handleLogout} noPad>
+        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout} noPad>
         <ImpellerViewer
           flowRate={opPoint.flowRate}
           head={opPoint.head}
@@ -260,6 +263,7 @@ export default function App() {
           sizing={sizing}
           onRunSizing={handleRunSizing}
         />
+        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
       </Layout>
     )
   }
@@ -267,7 +271,7 @@ export default function App() {
   // === DESIGN — other tabs ===
   return (
     <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-      onNavigate={handleNavigate} onLogout={handleLogout}>
+      projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
 
       <div className="content-header">
         <h1>{currentProject?.name || t.quickDesign}</h1>
@@ -429,27 +433,17 @@ export default function App() {
               )}
             </>
           ) : (
-            /* Empty state — shown before first sizing run */
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', height: 420, gap: 12,
-              color: 'var(--text-muted)', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 48, lineHeight: 1 }}>&#9889;</div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Pronto para projetar
-              </div>
-              <div style={{ fontSize: 13, maxWidth: 300, lineHeight: 1.6 }}>
-                Preencha os dados à esquerda e clique em{' '}
-                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
-                  "Executar Dimensionamento"
-                </span>{' '}
-                para começar.
-              </div>
-            </div>
+            /* Dashboard / empty state — shown before first sizing run or on results tab */
+            <DesignDashboard
+              sizing={null}
+              opPoint={opPoint}
+              onNavigate={(t) => handleNavigate('design', t)}
+              onRunSizing={handleRunSizing}
+            />
           )}
         </div>
       </div>
+      <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} />
     </Layout>
   )
 }

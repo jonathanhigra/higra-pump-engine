@@ -264,6 +264,7 @@ body {
   min-height: 100vh;
   transition: margin-left 0.3s ease;
   padding: 24px;
+  padding-bottom: 36px;
 }
 
 .main-content.collapsed {
@@ -447,3 +448,17 @@ body {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
 }
+
+/* ====== Toast Animations ====== */
+@keyframes toast-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+/* ====== Light Theme ====== */
+@import './theme-light.css';

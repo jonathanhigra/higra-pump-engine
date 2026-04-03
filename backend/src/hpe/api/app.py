@@ -40,6 +40,7 @@ from hpe.api.routes.batch_routes import router as batch_router
 from hpe.api.routes.cfd_loop_routes import router as cfd_loop_router
 from hpe.api.routes.rrs_routes import router as rrs_router
 from hpe.api.routes.blade_collision_routes import router as blade_collision_router
+from hpe.api.routes.template_routes import router as template_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -83,6 +84,7 @@ app.include_router(batch_router)
 app.include_router(cfd_loop_router)
 app.include_router(rrs_router)
 app.include_router(blade_collision_router)
+app.include_router(template_router)
 
 
 @app.get("/health")

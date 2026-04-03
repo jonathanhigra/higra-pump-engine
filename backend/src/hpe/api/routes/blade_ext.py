@@ -12,7 +12,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from hpe.geometry.runner.splitter import size_splitter
-from hpe.geometry.blade.naca_thickness import naca_thickness, ellipse_thickness, spanwise_thickness_variation
+from hpe.geometry.blade.naca_thickness import (
+    ThicknessType,
+    get_thickness,
+    naca_thickness,
+    ellipse_thickness,
+    spanwise_thickness_variation,
+)
 from hpe.geometry.blade.stacking import StackingConfig, compute_stacking, wrap_angle_from_geometry
 
 router = APIRouter(prefix="/api/v1/blade", tags=["blade"])
@@ -56,7 +62,18 @@ def size_splitter_endpoint(req: SplitterRequest) -> SplitterResponse:
 # ── Thickness ─────────────────────────────────────────────────────────────────
 
 class ThicknessRequest(BaseModel):
-    profile_type: Literal['naca', 'ellipse'] = Field('naca')
+    thickness_type: str = Field(
+        'naca_4digit',
+        description=(
+            "Thickness distribution type: naca_4digit, elliptic, biparabolic, "
+            "linear_taper, constant, dca, wedge"
+        ),
+    )
+    # Legacy field — mapped to thickness_type for backward compatibility
+    profile_type: Optional[Literal['naca', 'ellipse']] = Field(
+        None,
+        description="DEPRECATED: use thickness_type instead",
+    )
     t_max_frac: float = Field(0.08, ge=0.01, le=0.30)
     n_points: int = Field(21, ge=5, le=101)
     # NACA params
@@ -64,9 +81,14 @@ class ThicknessRequest(BaseModel):
     # Ellipse params
     le_ratio: float = Field(2.0, ge=0.5, le=5.0)
     te_ratio: float = Field(1.0, ge=0.1, le=3.0)
+    # Biparabolic / DCA params
+    s_max: float = Field(0.3, ge=0.05, le=0.95, description="Location of max thickness (0-1)")
+    # Linear taper params
+    t_min_frac: float = Field(0.02, ge=0.0, le=0.30, description="TE thickness for linear_taper")
 
 
 class ThicknessResponse(BaseModel):
+    thickness_type: str
     m_normalized: list[float]
     t_normalized: list[float]
     t_max_over_chord: float
@@ -77,12 +99,40 @@ class ThicknessResponse(BaseModel):
 
 @router.post("/thickness", response_model=ThicknessResponse)
 def compute_thickness(req: ThicknessRequest) -> ThicknessResponse:
-    """Compute blade thickness distribution (NACA or elliptical LE/TE)."""
-    if req.profile_type == 'naca':
-        r = naca_thickness(req.t_max_frac, req.n_points, req.close_te)
-    else:
-        r = ellipse_thickness(req.t_max_frac, req.le_ratio, req.te_ratio, req.n_points)
-    return ThicknessResponse(**r.__dict__)
+    """Compute blade thickness distribution.
+
+    Supports 7 types: naca_4digit, elliptic, biparabolic, linear_taper,
+    constant, dca, wedge.
+    """
+    # Backward compatibility: map legacy profile_type to thickness_type
+    tt = req.thickness_type
+    if req.profile_type is not None:
+        if req.profile_type == 'naca':
+            tt = 'naca_4digit'
+        elif req.profile_type == 'ellipse':
+            tt = 'elliptic'
+
+    try:
+        resolved_type = ThicknessType(tt)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown thickness_type '{tt}'. "
+                   f"Valid: {[t.value for t in ThicknessType]}",
+        )
+
+    r = get_thickness(
+        thickness_type=resolved_type,
+        t_max_frac=req.t_max_frac,
+        n_points=req.n_points,
+        close_te=req.close_te,
+        le_ratio=req.le_ratio,
+        te_ratio=req.te_ratio,
+        s_max=req.s_max,
+        t_min_frac=req.t_min_frac,
+    )
+    return ThicknessResponse(thickness_type=resolved_type.value, **r.__dict__)
 
 
 # ── Stacking ──────────────────────────────────────────────────────────────────

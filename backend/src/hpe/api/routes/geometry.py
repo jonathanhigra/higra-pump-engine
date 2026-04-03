@@ -820,14 +820,9 @@ def export_bladegen_bgd(req: BladgenBgdRequest) -> dict:
     Returns:
         Dict with 'bgd' (file content string) and 'format' = "bgd".
     """
-    from hpe.core.models import OperatingPoint
     from hpe.geometry.runner.bladegen_export import export_bladegen
-    from hpe.sizing.meanline import run_sizing
 
-    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
-    sizing = run_sizing(op)
-
-    # Build geometry using the existing route helper
+    # Re-use the impeller geometry endpoint to build 3D surfaces
     geom_req = GeometryRequest(
         flow_rate=req.flow_rate,
         head=req.head,
@@ -835,7 +830,14 @@ def export_bladegen_bgd(req: BladgenBgdRequest) -> dict:
         n_blade_points=req.n_blade_points,
         n_span_points=req.n_span_points,
     )
-    geom = _build_impeller_geometry(geom_req, sizing)
+    geom = get_impeller_geometry(geom_req)
+
+    # We need the SizingResult for metadata; run sizing again (cached)
+    from hpe.core.models import OperatingPoint
+    from hpe.sizing.meanline import run_sizing
+
+    op = OperatingPoint(flow_rate=req.flow_rate, head=req.head, rpm=req.rpm)
+    sizing = run_sizing(op)
 
     bgd_content = export_bladegen(
         sizing_result=sizing,

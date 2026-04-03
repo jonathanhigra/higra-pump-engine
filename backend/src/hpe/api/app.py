@@ -35,6 +35,8 @@ from hpe.api.routes.volute_routes import router as volute_router
 from hpe.api.routes.mri_routes import router as mri_router
 from hpe.api.routes.turbotype_routes import router as turbotype_router
 from hpe.api.routes.lete_routes import router as lete_router
+from hpe.api.routes.noise_routes import router as noise_router
+from hpe.api.routes.batch_routes import router as batch_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -73,6 +75,8 @@ app.include_router(volute_router)
 app.include_router(mri_router)
 app.include_router(turbotype_router)
 app.include_router(lete_router)
+app.include_router(noise_router)
+app.include_router(batch_router)
 
 
 @app.get("/health")

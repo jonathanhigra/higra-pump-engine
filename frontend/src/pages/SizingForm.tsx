@@ -39,12 +39,21 @@ function calcNq(q_m3h: number, h: number, n: number): number {
   return n * Math.sqrt(q) / Math.pow(h, 0.75)
 }
 
-function nqBadge(nq: number): { label: string; color: string } {
-  if (nq <= 0) return { label: '—', color: 'var(--text-muted)' }
-  if (nq < 15) return { label: `Nq ${nq.toFixed(0)} · Muito baixo`, color: '#ff9800' }
-  if (nq < 40) return { label: `Nq ${nq.toFixed(0)} · Centrífugo`, color: '#4caf50' }
-  if (nq < 100) return { label: `Nq ${nq.toFixed(0)} · Misto`, color: '#00A0DF' }
-  return { label: `Nq ${nq.toFixed(0)} · Axial`, color: '#9c27b0' }
+function nqBadge(nq: number): { label: string; color: string; icon: string } {
+  if (nq <= 0) return { label: '\u2014', color: 'var(--text-muted)', icon: '' }
+  if (nq < 15) return { label: `Nq \u2248 ${nq.toFixed(0)} (muito baixo)`, color: '#ef4444', icon: '\u26A0' }
+  if (nq < 30) return { label: `Nq \u2248 ${nq.toFixed(0)} (radial)`, color: '#4caf50', icon: '\u2B24' }
+  if (nq < 80) return { label: `Nq \u2248 ${nq.toFixed(0)} (radial alto)`, color: '#4caf50', icon: '\u2B24' }
+  if (nq < 160) return { label: `Nq \u2248 ${nq.toFixed(0)} (mixed-flow)`, color: '#4caf50', icon: '\u25C6' }
+  if (nq <= 200) return { label: `Nq \u2248 ${nq.toFixed(0)} (axial)`, color: '#4caf50', icon: '\u25B2' }
+  if (nq <= 400) return { label: `Nq \u2248 ${nq.toFixed(0)} (axial alto)`, color: '#FFD54F', icon: '\u25B2' }
+  return { label: `Nq \u2248 ${nq.toFixed(0)} (fora de faixa)`, color: '#ef4444', icon: '\u26A0' }
+}
+
+function rangeHint(value: number, min: number, max: number, typical: string): { text: string; warn: boolean } {
+  if (!value || value === 0) return { text: typical, warn: false }
+  if (value < min || value > max) return { text: `\u26A0 Valor fora da faixa tipica (${typical})`, warn: true }
+  return { text: typical, warn: false }
 }
 
 interface Props {
@@ -229,7 +238,7 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
         {nq > 0 && (
           <div style={{ marginBottom: 10, padding: '4px 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
             background: 'rgba(0,0,0,0.3)', border: `1px solid ${badge.color}40` }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: badge.color, flexShrink: 0 }} />
+            {badge.icon && <span style={{ fontSize: 9, color: badge.color, flexShrink: 0 }}>{badge.icon}</span>}
             <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
           </div>
         )}
@@ -265,21 +274,33 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
         )}
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Vazão Q [{unit === 'm3h' ? 'm³/h' : 'm³/s'}]</label>
+          <label style={labelStyle}>Vaz\u00E3o Q [{unit === 'm3h' ? 'm\u00B3/h' : 'm\u00B3/s'}]</label>
           <input className="input" type="number" step="any"
             value={unit === 'm3h' ? flowRate : (q_m3h / 3600).toFixed(6)}
             onChange={e => setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600))}
             placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'} />
+          {(() => {
+            const hint = rangeHint(q_m3h, 1, 10000, 'T\u00EDpico: 1-10000 m\u00B3/h')
+            return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
+          })()}
         </div>
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Altura Total H [m]</label>
           <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30" />
+          {(() => {
+            const hint = rangeHint(parseFloat(head) || 0, 1, 500, 'T\u00EDpico: 1-500 m')
+            return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
+          })()}
         </div>
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Rotação n [rpm]</label>
+          <label style={labelStyle}>Rota\u00E7\u00E3o n [rpm]</label>
           <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750" />
+          {(() => {
+            const hint = rangeHint(parseFloat(rpm) || 0, 300, 15000, 'T\u00EDpico: 300-15000 rpm')
+            return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
+          })()}
         </div>
       </div>
 

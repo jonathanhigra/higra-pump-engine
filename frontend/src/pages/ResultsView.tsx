@@ -1,8 +1,12 @@
 import React, { useState } from 'react'
 import MeridionalView from '../components/MeridionalView'
+import EngineeringTooltip from '../components/EngineeringTooltip'
+import DeltaIndicator from '../components/DeltaIndicator'
+import SmartWarnings from '../components/SmartWarnings'
 
 interface Props {
   sizing: any
+  previousSizing?: any
 }
 
 function GaugeArc({ pct, color }: { pct: number; color: string }) {
@@ -36,7 +40,7 @@ function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
   )
 }
 
-export default function ResultsView({ sizing: s }: Props) {
+export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
   const [section, setSection] = useState<'geo' | 'perf' | 'losses' | null>('geo')
   const [showMeridional, setShowMeridional] = useState(false)
 
@@ -59,8 +63,8 @@ export default function ResultsView({ sizing: s }: Props) {
     </button>
   )
 
-  const row = (label: string, value: string, pct?: number) => (
-    <tr key={label}>
+  const row = (label: React.ReactNode, value: string, pct?: number) => (
+    <tr key={typeof label === 'string' ? label : value}>
       <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>{label}</td>
       <td style={{ padding: '5px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
         {value}
@@ -74,13 +78,18 @@ export default function ResultsView({ sizing: s }: Props) {
       {/* Hero strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
         {[
-          { label: 'D2', value: `${(s.impeller_d2 * 1000).toFixed(0)}`, unit: 'mm', color: 'var(--accent)' },
-          { label: 'Nq', value: s.specific_speed_nq.toFixed(0), unit: '—', color: '#a78bfa' },
-          { label: 'Potência', value: `${(s.estimated_power / 1000).toFixed(1)}`, unit: 'kW', color: '#34d399' },
+          { label: 'D2', value: `${(s.impeller_d2 * 1000).toFixed(0)}`, unit: 'mm', color: 'var(--accent)', term: 'D2' },
+          { label: 'Nq', value: s.specific_speed_nq.toFixed(0), unit: '—', color: '#a78bfa', term: 'Nq' },
+          { label: 'Potencia', value: `${(s.estimated_power / 1000).toFixed(1)}`, unit: 'kW', color: '#34d399', term: 'Potencia' },
         ].map(m => (
           <div key={m.label} className="card" style={{ textAlign: 'center', padding: '12px 8px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{m.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: m.color, lineHeight: 1 }}>{m.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}><EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip></div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: m.color, lineHeight: 1 }}>
+              {m.value}
+              {m.label === 'D2' && ps && <DeltaIndicator current={s.impeller_d2 * 1000} previous={ps.impeller_d2 * 1000} format="mm" />}
+              {m.label === 'Nq' && ps && <DeltaIndicator current={s.specific_speed_nq} previous={ps.specific_speed_nq} format="abs" />}
+              {m.label === 'Potencia' && ps && <DeltaIndicator current={s.estimated_power / 1000} previous={ps.estimated_power / 1000} format="pct" higherIsBetter={false} />}
+            </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.unit}</div>
           </div>
         ))}
@@ -94,7 +103,7 @@ export default function ResultsView({ sizing: s }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
               <StatusDot ok={dr >= 0.7} warn={dr >= 0.6} />
-              <span style={{ color: 'var(--text-secondary)' }}>De Haller: </span>
+              <span style={{ color: 'var(--text-secondary)' }}><EngineeringTooltip term="De Haller">De Haller</EngineeringTooltip>: </span>
               <span style={{ marginLeft: 4, fontWeight: 600, color: dr >= 0.7 ? '#4caf50' : dr >= 0.6 ? '#FFD54F' : '#ef4444' }}>
                 {dr > 0 ? dr.toFixed(3) : '—'}
               </span>
@@ -106,8 +115,9 @@ export default function ResultsView({ sizing: s }: Props) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
               <StatusDot ok={s.estimated_npsh_r < 5} warn={s.estimated_npsh_r < 10} />
-              <span style={{ color: 'var(--text-secondary)' }}>NPSHr: </span>
+              <span style={{ color: 'var(--text-secondary)' }}><EngineeringTooltip term="NPSHr">NPSHr</EngineeringTooltip>: </span>
               <span style={{ marginLeft: 4, fontWeight: 600, color: 'var(--text-primary)' }}>{s.estimated_npsh_r?.toFixed(1)} m</span>
+              {ps && <DeltaIndicator current={s.estimated_npsh_r} previous={ps.estimated_npsh_r} format="pct" higherIsBetter={false} />}
             </div>
             {s.pmin_pa != null && (
               <div style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
@@ -134,12 +144,12 @@ export default function ResultsView({ sizing: s }: Props) {
       {section === 'geo' && (
         <div className="card" style={{ marginBottom: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
-            {row('D2 (saída)', `${(s.impeller_d2 * 1000).toFixed(1)} mm`, u.d2_pct)}
-            {row('D1 (entrada)', `${(s.impeller_d1 * 1000).toFixed(1)} mm`)}
-            {row('b2 (largura)', `${(s.impeller_b2 * 1000).toFixed(1)} mm`, u.b2_pct)}
+            {row(<><EngineeringTooltip term="D2">D2</EngineeringTooltip> (saida)</>, `${(s.impeller_d2 * 1000).toFixed(1)} mm`, u.d2_pct)}
+            {row(<><EngineeringTooltip term="D1">D1</EngineeringTooltip> (entrada)</>, `${(s.impeller_d1 * 1000).toFixed(1)} mm`)}
+            {row(<><EngineeringTooltip term="b2">b2</EngineeringTooltip> (largura)</>, `${(s.impeller_b2 * 1000).toFixed(1)} mm`, u.b2_pct)}
             {row('Z (pás)', `${s.blade_count}`)}
-            {row('β1', `${s.beta1?.toFixed(1)}°`, u.beta2_pct)}
-            {row('β2', `${s.beta2?.toFixed(1)}°`, u.beta2_pct)}
+            {row(<EngineeringTooltip term={'\u03B2\u2081'}>{'\u03B21'}</EngineeringTooltip>, `${s.beta1?.toFixed(1)}\u00B0`, u.beta2_pct)}
+            {row(<EngineeringTooltip term={'\u03B2\u2082'}>{'\u03B22'}</EngineeringTooltip>, `${s.beta2?.toFixed(1)}\u00B0`, u.beta2_pct)}
             {s.beta1 && s.beta2 && s.impeller_d1 && s.impeller_d2 && (() => {
               const betaMean = (s.beta1 + s.beta2) / 2 * Math.PI / 180
               const wrap = (Math.log(s.impeller_d2 / s.impeller_d1) / Math.tan(betaMean)) * 180 / Math.PI
@@ -154,13 +164,33 @@ export default function ResultsView({ sizing: s }: Props) {
       {section === 'perf' && (
         <div className="card" style={{ marginBottom: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
-            {row('Rendimento total η', `${eta.toFixed(1)}%`, u.eta_pct)}
-            {row('Potência', `${(s.estimated_power / 1000).toFixed(2)} kW`)}
-            {row('NPSHr', `${s.estimated_npsh_r?.toFixed(2)} m`, u.npsh_pct)}
-            {row('Nq', `${s.specific_speed_nq?.toFixed(1)}`)}
+            <tr>
+              <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>Rendimento total <EngineeringTooltip term={'\u03B7'}>{'\u03B7'}</EngineeringTooltip></td>
+              <td style={{ padding: '5px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+                {eta.toFixed(1)}%
+                {u.eta_pct != null && <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--accent-warning)' }}>+/-{u.eta_pct.toFixed(0)}%</span>}
+                {ps && <DeltaIndicator current={s.estimated_efficiency} previous={ps.estimated_efficiency} format="pct" higherIsBetter={true} />}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>Potencia</td>
+              <td style={{ padding: '5px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+                {(s.estimated_power / 1000).toFixed(2)} kW
+                {ps && <DeltaIndicator current={s.estimated_power / 1000} previous={ps.estimated_power / 1000} format="pct" higherIsBetter={false} />}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}><EngineeringTooltip term="NPSHr">NPSHr</EngineeringTooltip></td>
+              <td style={{ padding: '5px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+                {s.estimated_npsh_r?.toFixed(2)} m
+                {u.npsh_pct != null && <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--accent-warning)' }}>+/-{u.npsh_pct.toFixed(0)}%</span>}
+                {ps && <DeltaIndicator current={s.estimated_npsh_r} previous={ps.estimated_npsh_r} format="pct" higherIsBetter={false} />}
+              </td>
+            </tr>
+            {row(<EngineeringTooltip term="Nq">Nq</EngineeringTooltip>, `${s.specific_speed_nq?.toFixed(1)}`)}
             {row('Tipo de rotor', s.impeller_type || '—')}
-            {s.diffusion_ratio ? row('Razão de difusão (De Haller)', s.diffusion_ratio.toFixed(3)) : null}
-            {s.convergence_iterations ? row('Conv. iterações', `${s.convergence_iterations}`) : null}
+            {s.diffusion_ratio ? row('Razao de difusao (De Haller)', s.diffusion_ratio.toFixed(3)) : null}
+            {s.convergence_iterations ? row('Conv. iteracoes', `${s.convergence_iterations}`) : null}
           </tbody></table>
         </div>
       )}
@@ -178,17 +208,9 @@ export default function ResultsView({ sizing: s }: Props) {
         </div>
       )}
 
-      {/* Warnings */}
+      {/* Smart Warnings */}
       {s.warnings?.length > 0 && (
-        <div style={{ padding: 12, background: 'rgba(255,213,79,0.08)', border: '1px solid rgba(255,213,79,0.25)', borderRadius: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-warning)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4m0 4h.01M10.29 3.86l-8.6 14.88A1 1 0 002.56 20h16.88a1 1 0 00.87-1.26l-8.6-14.88a1 1 0 00-1.42 0z" /></svg>
-            AVISOS ({s.warnings.length})
-          </div>
-          {s.warnings.map((w: string, i: number) => (
-            <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>• {w}</div>
-          ))}
-        </div>
+        <SmartWarnings warnings={s.warnings} sizing={s} />
       )}
 
       {/* Meridional view */}

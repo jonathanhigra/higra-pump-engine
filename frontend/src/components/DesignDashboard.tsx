@@ -1,5 +1,9 @@
 import React, { useState } from 'react'
 import type { SizingResult, Tab } from '../App'
+import EngineeringTooltip from './EngineeringTooltip'
+import SmartWarnings from './SmartWarnings'
+import QuickCompare from './QuickCompare'
+import DeltaIndicator from './DeltaIndicator'
 
 /* ── Inline SVG icon helper ────────────────────────────────────────────── */
 const SvgIcon = ({ d, size = 18 }: { d: string; size?: number }) => (
@@ -10,6 +14,7 @@ const SvgIcon = ({ d, size = 18 }: { d: string; size?: number }) => (
 
 interface Props {
   sizing: SizingResult | null
+  previousSizing?: SizingResult | null
   opPoint: { flowRate: number; head: number; rpm: number }
   onNavigate: (tab: Tab) => void
   onRunSizing: (q: number, h: number, n: number) => void
@@ -89,7 +94,7 @@ function MiniSizingForm({ onRun }: { onRun: (q: number, h: number, n: number) =>
 }
 
 /* ── Main component ─────────────────────────────────────────────────────── */
-export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizing }: Props) {
+export default function DesignDashboard({ sizing, previousSizing, opPoint, onNavigate, onRunSizing }: Props) {
   const [showMiniForm, setShowMiniForm] = useState(false)
 
   /* ── Empty state — no sizing yet ────────────────────────────────────── */
@@ -203,33 +208,34 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
 
   const metrics: {
     iconPath: string; label: string; value: string; unit: string
-    status: 'green' | 'yellow' | 'red'; badge?: string
+    status: 'green' | 'yellow' | 'red'; badge?: string; term?: string
   }[] = [
     {
       iconPath: 'M3 12h4l3-9 4 18 3-9h4', label: 'Nq', value: sizing.specific_speed_nq.toFixed(1), unit: '',
-      status: 'green', badge: nqTypeLabel(sizing.specific_speed_nq),
+      status: 'green', badge: nqTypeLabel(sizing.specific_speed_nq), term: 'Nq',
     },
     {
       iconPath: 'M22 12h-4l-3 9-4-18-3 9H4', label: '\u03B7 total', value: `${(sizing.estimated_efficiency * 100).toFixed(1)}`, unit: '%',
-      status: etaStatus(sizing.estimated_efficiency),
+      status: etaStatus(sizing.estimated_efficiency), term: '\u03B7 total',
     },
     {
       iconPath: 'M12 2.69l5.66 5.66a8 8 0 11-11.31 0z', label: 'NPSHr', value: sizing.estimated_npsh_r.toFixed(1), unit: 'm',
-      status: npshStatus(sizing.estimated_npsh_r),
+      status: npshStatus(sizing.estimated_npsh_r), term: 'NPSHr',
     },
     {
       iconPath: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Pot\u00EAncia', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW',
-      status: 'green',
+      status: 'green', term: 'Potencia',
     },
     {
       iconPath: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', label: 'D2', value: (sizing.impeller_d2 * 1000).toFixed(0), unit: 'mm',
-      status: 'green',
+      status: 'green', term: 'D2',
     },
     {
       iconPath: 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z', label: 'De Haller',
       value: deHaller != null ? deHaller.toFixed(3) : '--',
       unit: '',
       status: deHaller != null ? deHallerStatus(deHaller) : 'yellow',
+      term: 'De Haller',
     },
   ]
 
@@ -255,7 +261,7 @@ export default function DesignDashboard({ sizing, opPoint, onNavigate, onRunSizi
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <SvgIcon d={m.iconPath} size={16} />
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
-                {m.label}
+                {m.term ? <EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip> : m.label}
               </span>
               {m.badge && (
                 <span style={{

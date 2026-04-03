@@ -30,8 +30,12 @@ import MeridionalDragEditor from './components/MeridionalDragEditor'
 import TemplateSelector from './components/TemplateSelector'
 import StatusBar from './components/StatusBar'
 import DesignDashboard from './components/DesignDashboard'
+import ResultsSkeleton from './components/ResultsSkeleton'
 import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
+import HistoryPanel from './components/HistoryPanel'
+import type { HistoryEntry } from './components/HistoryPanel'
+import GuidedTour from './components/GuidedTour'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
@@ -163,6 +167,9 @@ export default function App() {
   const [savedId, setSavedId] = useState<string | null>(null)
   const [cmdOpen, setCmdOpen] = useState(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [previousSizing, setPreviousSizing] = useState<SizingResult | null>(null)
+  const [tourActive, setTourActive] = useState(() => !localStorage.getItem('hpe_tour_completed'))
   const { toasts, toast, dismiss } = useToast()
 
   useEffect(() => {
@@ -224,9 +231,26 @@ export default function App() {
       const qm3s = q / 3600
       // 1. Main sizing first
       const result = await runSizing(qm3s, h, n)
+      // Save previous sizing for delta indicators
+      setPreviousSizing(sizing)
       setSizing(result)
       setOpPoint({ flowRate: q, head: h, rpm: n })
       setSavedId(null)
+
+      // Push to calculation history (max 10, FIFO)
+      setHistory(prev => {
+        const entry: HistoryEntry = {
+          id: Date.now(),
+          timestamp: new Date(),
+          flowRate: q,
+          head: h,
+          rpm: n,
+          nq: result.specific_speed_nq,
+          eta: result.estimated_efficiency,
+          d2: result.impeller_d2 * 1000,
+        }
+        return [entry, ...prev].slice(0, 10)
+      })
 
       // 2. Secondary data — sequential to avoid middleware serialization deadlock
       const curvesData = await getCurves(qm3s, h, n).catch(() => ({ points: [] }))
@@ -259,6 +283,12 @@ export default function App() {
     onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false) },
   })
 
+  // History restore handler
+  const handleHistoryRestore = (entry: HistoryEntry) => {
+    setOpPoint({ flowRate: entry.flowRate, head: entry.head, rpm: entry.rpm })
+    handleRunSizing(entry.flowRate, entry.head, entry.rpm)
+  }
+
   /* Shared overlay elements rendered in all authenticated pages */
   const overlays = (
     <>
@@ -267,9 +297,11 @@ export default function App() {
         onClose={() => setCmdOpen(false)}
         onNavigate={handleNavigate}
         onRunSizing={handleRunSizingShortcut}
+        onStartTour={() => setTourActive(true)}
       />
       <Toast messages={toasts} onDismiss={dismiss} />
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
+      <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
     </>
   )
 
@@ -284,7 +316,7 @@ export default function App() {
       <Layout page="projects" activeTab={null} userName={user?.name || t.user}
         onNavigate={handleNavigate} onLogout={handleLogout}>
         <ProjectsPage onSelectProject={handleSelectProject} token={token} />
-        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
         {overlays}
       </Layout>
     )
@@ -307,7 +339,7 @@ export default function App() {
           sizing={sizing}
           onRunSizing={handleRunSizing}
         />
-        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
         {overlays}
       </Layout>
     )
@@ -354,7 +386,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
         {overlays}
       </Layout>
     )
@@ -366,7 +398,10 @@ export default function App() {
       projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
 
       <div className="content-header">
-        <h1>{currentProject?.name || t.quickDesign}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
+          <HistoryPanel history={history} onRestore={handleHistoryRestore} />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {sizing && (
             <div className="meta">
@@ -443,7 +478,7 @@ export default function App() {
               {/* Results + reference comparison always visible in results tab */}
               {tab === 'results' && (
                 <>
-                  <ResultsView sizing={sizing} />
+                  <ResultsView sizing={sizing} previousSizing={previousSizing} />
                   <ReferencePanel sizing={sizing} />
                 </>
               )}
@@ -473,10 +508,14 @@ export default function App() {
                 </div>
               )}
             </>
+          ) : loading ? (
+            /* Loading skeleton — shown while sizing is computing */
+            <ResultsSkeleton />
           ) : (
             /* Dashboard / empty state — shown before first sizing run or on results tab */
             <DesignDashboard
               sizing={null}
+              previousSizing={previousSizing}
               opPoint={opPoint}
               onNavigate={(t) => handleNavigate('design', t)}
               onRunSizing={handleRunSizing}
@@ -484,7 +523,7 @@ export default function App() {
           )}
         </div>
       </div>
-      <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+      <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
       {overlays}
     </Layout>
   )

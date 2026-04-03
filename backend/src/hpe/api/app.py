@@ -31,6 +31,8 @@ from hpe.api.routes.design_db_routes import router as design_db_router
 from hpe.api.routes.db_routes import router as db_router
 from hpe.api.routes.convergence_routes import router as convergence_router
 from hpe.api.routes.inverse_design_3d import router as inverse_design_3d_router
+from hpe.api.routes.volute_routes import router as volute_router
+from hpe.api.routes.mri_routes import router as mri_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -65,6 +67,8 @@ app.include_router(design_db_router)
 app.include_router(db_router)
 app.include_router(convergence_router)
 app.include_router(inverse_design_3d_router)
+app.include_router(volute_router)
+app.include_router(mri_router)
 
 
 @app.get("/health")

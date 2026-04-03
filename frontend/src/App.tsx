@@ -30,6 +30,7 @@ import MeridionalDragEditor from './components/MeridionalDragEditor'
 import TemplateSelector from './components/TemplateSelector'
 import StatusBar from './components/StatusBar'
 import DesignDashboard from './components/DesignDashboard'
+import ProgressStepper from './components/ProgressStepper'
 import ResultsSkeleton from './components/ResultsSkeleton'
 import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
@@ -170,12 +171,33 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [previousSizing, setPreviousSizing] = useState<SizingResult | null>(null)
   const [tourActive, setTourActive] = useState(() => !localStorage.getItem('hpe_tour_completed'))
+  const [completedSteps, setCompletedSteps] = useState<string[]>([])
   const { toasts, toast, dismiss } = useToast()
+
+  // Helper to mark a progress step as completed
+  const markStep = useCallback((step: string) => {
+    setCompletedSteps(prev => prev.includes(step) ? prev : [...prev, step])
+  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem('hpe_token')
     if (saved) { setToken(saved); setPage('projects') }
   }, [])
+
+  // Track progress steps based on state changes
+  useEffect(() => {
+    if (opPoint.flowRate > 0 && opPoint.head > 0 && opPoint.rpm > 0) markStep('dados')
+  }, [opPoint, markStep])
+
+  useEffect(() => {
+    if (sizing) markStep('sizing')
+  }, [sizing, markStep])
+
+  useEffect(() => {
+    if (tab === '3d' || tab === 'meridional-editor' || tab === 'meridional-drag') markStep('geometria')
+    if (['curves', 'velocity', 'losses', 'stress', 'pressure', 'multispeed', 'spanwise', 'noise'].includes(tab)) markStep('analise')
+    if (['optimize', 'doe', 'pareto'].includes(tab)) markStep('otimizacao')
+  }, [tab, markStep])
 
   const handleLogin = (userData: any, tok: string) => {
     setUser(userData); setToken(tok); setPage('projects')
@@ -397,6 +419,21 @@ export default function App() {
     <Layout page="design" activeTab={tab} userName={user?.name || t.user}
       projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
 
+      {/* Progress Stepper */}
+      <ProgressStepper
+        sizing={sizing}
+        activeTab={tab}
+        completedSteps={completedSteps}
+        onStepClick={(step) => {
+          const stepTabMap: Record<string, Tab> = {
+            dados: 'results', sizing: 'results', geometria: '3d',
+            analise: 'curves', otimizacao: 'optimize', exportar: 'results',
+          }
+          const t = stepTabMap[step]
+          if (t) handleNavigate('design', t)
+        }}
+      />
+
       <div className="content-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
@@ -468,17 +505,31 @@ export default function App() {
             loading={loading}
             setLoading={setLoading}
           />
-          <ExportPanel sizing={sizing} op={sizing ? opPoint : null} />
+          <ExportPanel sizing={sizing} op={sizing ? opPoint : null} curves={curves} projectName={currentProject?.name} onExported={() => markStep('exportar')} />
         </div>
 
         {/* RIGHT PANEL — results area */}
         <div>
           {sizing ? (
             <>
-              {/* Results + reference comparison always visible in results tab */}
+              {/* Results: dashboard overview + detailed results + reference */}
               {tab === 'results' && (
                 <>
-                  <ResultsView sizing={sizing} previousSizing={previousSizing} />
+                  <DesignDashboard
+                    sizing={sizing}
+                    previousSizing={previousSizing}
+                    opPoint={opPoint}
+                    onNavigate={(t) => handleNavigate('design', t)}
+                    onRunSizing={handleRunSizing}
+                    onWhatIf={(newD2mm) => {
+                      // Quick-compare: re-run sizing isn't possible without backend,
+                      // so we just trigger a toast with the projected value
+                      toast(`D2 alterado para ${newD2mm.toFixed(0)}mm — execute novamente para aplicar`, 'info')
+                    }}
+                  />
+                  <div style={{ marginTop: 16 }}>
+                    <ResultsView sizing={sizing} previousSizing={previousSizing} />
+                  </div>
                   <ReferencePanel sizing={sizing} />
                 </>
               )}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import ReportButton from './ReportButton'
 
 const SvgIcon = ({ d, size = 14 }: { d: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -9,9 +10,12 @@ const SvgIcon = ({ d, size = 14 }: { d: string; size?: number }) => (
 interface Props {
   sizing: any
   op: { flowRate: number; head: number; rpm: number } | null
+  curves?: any[]
+  projectName?: string
+  onExported?: () => void
 }
 
-export default function ExportPanel({ sizing, op }: Props) {
+export default function ExportPanel({ sizing, op, curves, projectName, onExported }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
 
   if (!sizing || !op) return null
@@ -111,7 +115,7 @@ export default function ExportPanel({ sizing, op }: Props) {
             disabled={busy === ex.id}
             onClick={async () => {
               setBusy(ex.id)
-              try { await ex.action() } finally { setBusy(null) }
+              try { await ex.action(); onExported?.() } finally { setBusy(null) }
             }}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px',
@@ -126,6 +130,8 @@ export default function ExportPanel({ sizing, op }: Props) {
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{ex.ext}</span>
           </button>
         ))}
+        {/* Client-side PDF report generation */}
+        <ReportButton sizing={sizing} opPoint={op!} curves={curves || []} projectName={projectName} />
       </div>
     </div>
   )

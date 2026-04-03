@@ -18,6 +18,7 @@ interface Props {
   opPoint: { flowRate: number; head: number; rpm: number }
   onNavigate: (tab: Tab) => void
   onRunSizing: (q: number, h: number, n: number) => void
+  onWhatIf?: (overrideD2: number) => void
 }
 
 /* ── Metric status color helper ─────────────────────────────────────────── */
@@ -94,7 +95,7 @@ function MiniSizingForm({ onRun }: { onRun: (q: number, h: number, n: number) =>
 }
 
 /* ── Main component ─────────────────────────────────────────────────────── */
-export default function DesignDashboard({ sizing, previousSizing, opPoint, onNavigate, onRunSizing }: Props) {
+export default function DesignDashboard({ sizing, previousSizing, opPoint, onNavigate, onRunSizing, onWhatIf }: Props) {
   const [showMiniForm, setShowMiniForm] = useState(false)
 
   /* ── Empty state — no sizing yet ────────────────────────────────────── */
@@ -206,29 +207,36 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
   /* ── Dashboard mode — sizing exists ─────────────────────────────────── */
   const deHaller = sizing.velocity_triangles?.de_haller ?? null
 
+  const ps = previousSizing || null
   const metrics: {
     iconPath: string; label: string; value: string; unit: string
     status: 'green' | 'yellow' | 'red'; badge?: string; term?: string
+    delta?: { current: number; previous: number | null; format: 'pct' | 'abs' | 'mm'; higherIsBetter?: boolean }
   }[] = [
     {
       iconPath: 'M3 12h4l3-9 4 18 3-9h4', label: 'Nq', value: sizing.specific_speed_nq.toFixed(1), unit: '',
       status: 'green', badge: nqTypeLabel(sizing.specific_speed_nq), term: 'Nq',
+      delta: ps ? { current: sizing.specific_speed_nq, previous: ps.specific_speed_nq, format: 'abs' } : undefined,
     },
     {
       iconPath: 'M22 12h-4l-3 9-4-18-3 9H4', label: '\u03B7 total', value: `${(sizing.estimated_efficiency * 100).toFixed(1)}`, unit: '%',
       status: etaStatus(sizing.estimated_efficiency), term: '\u03B7 total',
+      delta: ps ? { current: sizing.estimated_efficiency, previous: ps.estimated_efficiency, format: 'pct', higherIsBetter: true } : undefined,
     },
     {
       iconPath: 'M12 2.69l5.66 5.66a8 8 0 11-11.31 0z', label: 'NPSHr', value: sizing.estimated_npsh_r.toFixed(1), unit: 'm',
       status: npshStatus(sizing.estimated_npsh_r), term: 'NPSHr',
+      delta: ps ? { current: sizing.estimated_npsh_r, previous: ps.estimated_npsh_r, format: 'pct', higherIsBetter: false } : undefined,
     },
     {
       iconPath: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Pot\u00EAncia', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW',
       status: 'green', term: 'Potencia',
+      delta: ps ? { current: sizing.estimated_power / 1000, previous: ps.estimated_power / 1000, format: 'pct', higherIsBetter: false } : undefined,
     },
     {
       iconPath: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', label: 'D2', value: (sizing.impeller_d2 * 1000).toFixed(0), unit: 'mm',
       status: 'green', term: 'D2',
+      delta: ps ? { current: sizing.impeller_d2 * 1000, previous: ps.impeller_d2 * 1000, format: 'mm' } : undefined,
     },
     {
       iconPath: 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z', label: 'De Haller',
@@ -273,11 +281,33 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: statusColor(m.status) }}>
-              {m.value}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
-                {m.unit}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: statusColor(m.status) }}>
+                {m.value}
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                  {m.unit}
+                </span>
+                {m.delta && <DeltaIndicator current={m.delta.current} previous={m.delta.previous} format={m.delta.format} higherIsBetter={m.delta.higherIsBetter} />}
+              </div>
+              {m.label === 'D2' && onWhatIf && (
+                <QuickCompare
+                  metric="D2"
+                  currentValue={sizing.impeller_d2 * 1000}
+                  unit="mm"
+                  onWhatIf={(newD2mm) => onWhatIf(newD2mm)}
+                  previewImpact={(newD2mm) => {
+                    const ratio = newD2mm / (sizing.impeller_d2 * 1000)
+                    const newNq = sizing.specific_speed_nq / Math.pow(ratio, 2)
+                    const newEta = sizing.estimated_efficiency * (0.5 + 0.5 * (1 / ratio))
+                    const newNpsh = sizing.estimated_npsh_r * Math.pow(ratio, 0.5)
+                    return [
+                      { label: 'Nq', value: newNq.toFixed(1), delta: `${((newNq / sizing.specific_speed_nq - 1) * 100).toFixed(1)}%` },
+                      { label: '\u03B7', value: `${(newEta * 100).toFixed(1)}%`, delta: `${((newEta / sizing.estimated_efficiency - 1) * 100).toFixed(1)}%` },
+                      { label: 'NPSHr', value: `${newNpsh.toFixed(1)}m`, delta: `${((newNpsh / sizing.estimated_npsh_r - 1) * 100).toFixed(1)}%` },
+                    ]
+                  }}
+                />
+              )}
             </div>
           </div>
         ))}
@@ -317,22 +347,9 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
         ))}
       </div>
 
-      {/* ── Warnings ──────────────────────────────────────────────────── */}
+      {/* ── Smart Warnings ────────────────────────────────────────────── */}
       {sizing.warnings && sizing.warnings.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {sizing.warnings.map((w, i) => (
-            <div key={i} style={{
-              background: 'rgba(255,213,79,0.08)', border: '1px solid rgba(255,213,79,0.3)',
-              borderRadius: 6, padding: '8px 14px', fontSize: 12,
-              color: 'var(--accent-warning)', display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 9v4m0 4h.01M10.29 3.86l-8.6 14.88A1 1 0 002.56 20h16.88a1 1 0 00.87-1.26l-8.6-14.88a1 1 0 00-1.42 0z" />
-              </svg>
-              {w}
-            </div>
-          ))}
-        </div>
+        <SmartWarnings warnings={sizing.warnings} sizing={sizing} onNavigate={(t) => onNavigate(t as Tab)} />
       )}
     </div>
   )

@@ -2,6 +2,7 @@ import React from 'react'
 import type { SizingResult } from '../App'
 import EngineeringTooltip from './EngineeringTooltip'
 import DeltaIndicator from './DeltaIndicator'
+import { warningCounts } from './SmartWarnings'
 
 interface Props {
   sizing: SizingResult | null
@@ -77,8 +78,33 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
         )}
       </div>
 
-      {/* Right: save indicator + operating point */}
+      {/* Right: warnings badge + save indicator + operating point */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {sizing && sizing.warnings && sizing.warnings.length > 0 && (() => {
+          const counts = warningCounts(sizing.warnings)
+          return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {counts.critical > 0 && (
+                <span style={{
+                  fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                  background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 700,
+                }}>{counts.critical} crit</span>
+              )}
+              {counts.warning > 0 && (
+                <span style={{
+                  fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                  background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontWeight: 700,
+                }}>{counts.warning} alrt</span>
+              )}
+              {counts.info > 0 && (
+                <span style={{
+                  fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                  background: 'rgba(59,130,246,0.15)', color: '#3b82f6', fontWeight: 700,
+                }}>{counts.info} info</span>
+              )}
+            </span>
+          )
+        })()}
         {opPoint && (
           <span style={{ color: 'var(--text-muted)' }}>
             Q={opPoint.flowRate} m\u00B3/h{'  '}H={opPoint.head}m{'  '}n={opPoint.rpm}rpm

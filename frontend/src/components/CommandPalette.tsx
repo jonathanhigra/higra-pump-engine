@@ -38,10 +38,11 @@ interface Props {
   onClose: () => void
   onNavigate: (page: 'projects' | 'design', tab?: Tab) => void
   onRunSizing?: () => void
+  onStartTour?: () => void
 }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
-export default function CommandPalette({ open, onClose, onNavigate, onRunSizing }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, onRunSizing, onStartTour }: Props) {
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -115,9 +116,16 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing 
       icon: SECTION_ICONS.templates,
       action: () => { onNavigate('design', 'templates'); onClose() },
     })
+    list.push({
+      id: 'action-tour',
+      label: 'Tour Guiado',
+      category: 'Ajuda',
+      icon: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01',
+      action: () => { onStartTour?.(); onClose() },
+    })
 
     return list
-  }, [onNavigate, onClose, onRunSizing])
+  }, [onNavigate, onClose, onRunSizing, onStartTour])
 
   /* Filtered results */
   const filtered = useMemo(() => {

@@ -29,6 +29,7 @@ from hpe.api.routes.blade_ext import router as blade_ext_router
 from hpe.api.auth import router as auth_router
 from hpe.api.routes.design_db_routes import router as design_db_router
 from hpe.api.routes.db_routes import router as db_router
+from hpe.api.routes.convergence_routes import router as convergence_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -61,6 +62,7 @@ app.include_router(io_router)
 app.include_router(blade_ext_router)
 app.include_router(design_db_router)
 app.include_router(db_router)
+app.include_router(convergence_router)
 
 
 @app.get("/health")

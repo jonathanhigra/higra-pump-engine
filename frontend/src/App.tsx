@@ -290,7 +290,10 @@ export default function App() {
     )
   }
 
-  // === DESIGN — 3D fullscreen ===
+  // Tabs that need full width (no 2-column layout with SizingForm)
+  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize']
+
+  // === DESIGN — fullscreen tabs (3D viewer) ===
   if (tab === '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
@@ -310,7 +313,54 @@ export default function App() {
     )
   }
 
-  // === DESIGN — other tabs ===
+  // === DESIGN — wide tabs (editors, optimization, etc.) ===
+  if (WIDE_TABS.includes(tab) && tab !== '3d') {
+    return (
+      <Layout page="design" activeTab={tab} userName={user?.name || t.user}
+        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
+        <div style={{ maxWidth: 1100 }}>
+          {tab === 'templates' && (
+            <TemplateSelector onSelect={(tmpl: any) => {
+              if (tmpl.flow_rate && tmpl.head && tmpl.rpm) handleRunSizing(tmpl.flow_rate, tmpl.head, tmpl.rpm)
+            }} />
+          )}
+          {tab === 'meridional-drag' && sizing && (
+            <MeridionalDragEditor d1={sizing.impeller_d1 * 1000} d2={sizing.impeller_d2 * 1000} b2={sizing.impeller_b2 * 1000} />
+          )}
+          {tab === 'meridional-editor' && sizing && (
+            <MeridionalEditor d1={sizing.impeller_d1} d2={sizing.impeller_d2} b2={sizing.impeller_b2} />
+          )}
+          {tab === 'lete' && sizing && (
+            <LETEEditor nq={sizing.specific_speed_nq} flowRate={opPoint.flowRate / 3600} head={opPoint.head} rpm={opPoint.rpm} />
+          )}
+          {tab === 'lean-sweep' && (
+            <LeanSweepPanel defaultFlowRate={opPoint.flowRate / 3600} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
+          )}
+          {tab === 'doe' && <DoEPanel />}
+          {tab === 'pareto' && (
+            <ParetoPanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
+          )}
+          {tab === 'batch' && (
+            <div className="card" style={{ padding: 20 }}>
+              <h3 style={{ color: 'var(--accent)', marginTop: 0, fontSize: 15 }}>Batch / Paramétrico</h3>
+              <BatchPanel baseFlowRate={opPoint.flowRate / 3600} baseHead={opPoint.head} baseRpm={opPoint.rpm} />
+            </div>
+          )}
+          {tab === 'compare' && <DesignComparison />}
+          {tab === 'optimize' && <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />}
+          {!sizing && tab !== 'templates' && (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+              Execute um dimensionamento primeiro para usar esta funcionalidade.
+            </div>
+          )}
+        </div>
+        <StatusBar sizing={sizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        {overlays}
+      </Layout>
+    )
+  }
+
+  // === DESIGN — standard 2-column layout (sizing form + results) ===
   return (
     <Layout page="design" activeTab={tab} userName={user?.name || t.user}
       projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
@@ -388,16 +438,7 @@ export default function App() {
 
         {/* RIGHT PANEL — results area */}
         <div>
-          {/* Templates tab — works without sizing */}
-          {tab === 'templates' && (
-            <TemplateSelector onSelect={(tmpl: any) => {
-              if (tmpl.flow_rate && tmpl.head && tmpl.rpm && onRunSizing) {
-                handleRunSizing(tmpl.flow_rate, tmpl.head, tmpl.rpm)
-              }
-            }} />
-          )}
-
-          {tab !== 'templates' && sizing ? (
+          {sizing ? (
             <>
               {/* Results + reference comparison always visible in results tab */}
               {tab === 'results' && (
@@ -417,60 +458,18 @@ export default function App() {
               {tab === 'velocity' && <VelocityTriangle triangles={sizing.velocity_triangles} />}
               {tab === 'losses' && <LossBreakdownChart losses={losses} />}
               {tab === 'stress' && <StressView stress={stress} />}
-              {tab === 'compare' && <DesignComparison />}
-              {tab === 'optimize' && <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />}
+              {/* compare and optimize are now in wide-tab layout */}
               {tab === 'assistant' && <AssistantChat sizing={sizing} />}
               {tab === 'loading' && <LoadingEditor />}
               {tab === 'pressure' && <PressureDistribution sizing={sizing} />}
               {tab === 'multispeed' && <MultiSpeedChart flowRate={opPoint.flowRate} head={opPoint.head} rpm={opPoint.rpm} />}
-              {tab === 'meridional-editor' && (
-                <MeridionalEditor
-                  d1={sizing.impeller_d1}
-                  d2={sizing.impeller_d2}
-                  b2={sizing.impeller_b2}
-                />
-              )}
+              {/* meridional-editor is now in wide-tab layout */}
               {tab === 'spanwise' && <SpanwiseLoadingChart sizing={sizing} />}
-              {tab === 'doe' && <DoEPanel />}
-              {tab === 'pareto' && (
-                <ParetoPanel
-                  defaultFlowRate={opPoint.flowRate}
-                  defaultHead={opPoint.head}
-                  defaultRpm={opPoint.rpm}
-                />
-              )}
-              {tab === 'lean-sweep' && (
-                <LeanSweepPanel
-                  defaultFlowRate={opPoint.flowRate / 3600}
-                  defaultHead={opPoint.head}
-                  defaultRpm={opPoint.rpm}
-                />
-              )}
-              {tab === 'lete' && (
-                <LETEEditor
-                  nq={sizing.specific_speed_nq}
-                  flowRate={opPoint.flowRate / 3600}
-                  head={opPoint.head}
-                  rpm={opPoint.rpm}
-                />
-              )}
-              {tab === 'meridional-drag' && (
-                <MeridionalDragEditor
-                  d1={sizing.impeller_d1 * 1000}
-                  d2={sizing.impeller_d2 * 1000}
-                  b2={sizing.impeller_b2 * 1000}
-                />
-              )}
+              {/* doe, pareto, lean-sweep, lete, meridional-drag, batch are now in wide-tab layout */}
               {tab === 'noise' && (
                 <div className="card" style={{ padding: 20 }}>
                   <h3 style={{ color: 'var(--accent)', marginTop: 0, fontSize: 15 }}>Predição de Ruído</h3>
                   <NoisePanel flowRate={opPoint.flowRate / 3600} head={opPoint.head} rpm={opPoint.rpm} sizing={sizing} />
-                </div>
-              )}
-              {tab === 'batch' && (
-                <div className="card" style={{ padding: 20 }}>
-                  <h3 style={{ color: 'var(--accent)', marginTop: 0, fontSize: 15 }}>Batch / Paramétrico</h3>
-                  <BatchPanel baseFlowRate={opPoint.flowRate / 3600} baseHead={opPoint.head} baseRpm={opPoint.rpm} />
                 </div>
               )}
             </>

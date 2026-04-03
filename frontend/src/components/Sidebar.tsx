@@ -146,20 +146,34 @@ export default function Sidebar({
       </nav>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <div className="sidebar-footer">
-        <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
+      <div className="sidebar-footer" style={{ flexDirection: isCollapsed ? 'column' : 'row', gap: isCollapsed ? 8 : 10 }}>
         {!isCollapsed && (
-          <div className="user-info">
-            <div className="user-name">{userName.length > 15 ? userName.slice(0, 15) + '...' : userName}</div>
-            <div className="user-role" style={{ cursor: 'pointer' }} onClick={onLogout}>{t.logout}</div>
-          </div>
+          <>
+            <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
+            <div className="user-info">
+              <div className="user-name">{userName.length > 15 ? userName.slice(0, 15) + '...' : userName}</div>
+              <div className="user-role" style={{ cursor: 'pointer' }} onClick={onLogout}>{t.logout}</div>
+            </div>
+            <ThemeToggle />
+          </>
         )}
-        <ThemeToggle />
-        <button className="collapse-btn" onClick={onToggleCollapse} title={isCollapsed ? 'Expandir' : 'Recolher'}>
+        <button
+          className="collapse-btn"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? 'Expandir menu' : 'Recolher menu'}
+          style={{
+            width: isCollapsed ? 40 : undefined,
+            height: isCollapsed ? 40 : undefined,
+            borderRadius: isCollapsed ? 8 : undefined,
+            background: isCollapsed ? 'var(--bg-surface)' : undefined,
+            border: isCollapsed ? '1px solid var(--border-primary)' : undefined,
+          }}
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             {isCollapsed ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
           </svg>
         </button>
+        {isCollapsed && <ThemeToggle />}
       </div>
     </div>
   )

@@ -153,9 +153,10 @@ const CATEGORY_LABELS: Record<MachineCategory, string> = {
 
 interface Props {
   onSelect: (params: { flow_rate: number; head: number; rpm: number; machine_type: string }) => void
+  loading?: boolean
 }
 
-export default function TemplateSelector({ onSelect }: Props) {
+export default function TemplateSelector({ onSelect, loading }: Props) {
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
@@ -175,7 +176,7 @@ export default function TemplateSelector({ onSelect }: Props) {
   const handleClick = (t: Template) => {
     setSelectedKey(t.key)
     onSelect({
-      flow_rate: t.flow_rate_m3h / 3600,
+      flow_rate: t.flow_rate_m3h,  // m³/h — handleRunSizing converts internally
       head: t.head_m,
       rpm: t.rpm,
       machine_type: t.machine_type,
@@ -284,6 +285,16 @@ export default function TemplateSelector({ onSelect }: Props) {
                 marginTop: 2,
               }}>
                 {t.flow_rate_m3h} m{'\u00B3'}/h | {t.head_m} m | {t.rpm} rpm
+              </div>
+              {/* CTA hint */}
+              <div style={{
+                marginTop: 6,
+                fontSize: 10,
+                fontWeight: 600,
+                color: isSelected ? '#fff' : color,
+                opacity: isSelected ? 1 : 0.7,
+              }}>
+                {isSelected && loading ? 'Calculando...' : isSelected ? 'Carregado — ver resultados' : 'Clique para carregar'}
               </div>
             </button>
           )

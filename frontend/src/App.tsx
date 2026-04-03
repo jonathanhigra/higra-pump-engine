@@ -374,8 +374,12 @@ export default function App() {
         projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
         <div style={{ maxWidth: 1100 }}>
           {tab === 'templates' && (
-            <TemplateSelector onSelect={(tmpl: any) => {
-              if (tmpl.flow_rate && tmpl.head && tmpl.rpm) handleRunSizing(tmpl.flow_rate, tmpl.head, tmpl.rpm)
+            <TemplateSelector loading={loading} onSelect={(tmpl: any) => {
+              if (tmpl.flow_rate && tmpl.head && tmpl.rpm) {
+                // Navigate to results tab so user sees the computation
+                handleNavigate('design', 'results')
+                handleRunSizing(tmpl.flow_rate, tmpl.head, tmpl.rpm)
+              }
             }} />
           )}
           {tab === 'meridional-drag' && sizing && (

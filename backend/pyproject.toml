@@ -43,6 +43,12 @@ dependencies = [
 
     # PDF report generation (#18)
     "fpdf2>=2.7",
+
+    # Optimization
+    "deap>=1.4",
+
+    # Database (psycopg2 pool)
+    "psycopg2-binary>=2.9",
 ]
 
 [project.optional-dependencies]

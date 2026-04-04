@@ -274,11 +274,11 @@ void pressureColor
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-// Fix 5: CAD-neutral metallic palette (ADT-like photorealistic)
-const BLADE_COLOR = '#b8bcc4'    // blade PS — neutral steel
-const BLADE_COLOR_ALT = '#a8aeb8' // blade SS — slightly darker
-const HUB_COLOR = '#909aa8'       // hub — darker steel
-const SPLITTER_COLOR = '#a0a8b4'  // splitter
+// Inventor-style solid matte palette (no shine, no reflections)
+const BLADE_COLOR = '#a0a5ad'    // blade PS — matte steel gray
+const BLADE_COLOR_ALT = '#8e939b' // blade SS — slightly darker
+const HUB_COLOR = '#787e88'       // hub — dark matte
+const SPLITTER_COLOR = '#969ba3'  // splitter
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
@@ -354,8 +354,8 @@ function BladeSurfaceMesh({
           color={psColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.65}
-          roughness={0.32}
+          metalness={0.15}
+          roughness={0.75}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow
@@ -368,8 +368,8 @@ function BladeSurfaceMesh({
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.65}
-          roughness={0.32}
+          metalness={0.15}
+          roughness={0.75}
         />
       </mesh>
       {/* LE/TE edge caps — make blade solid */}
@@ -378,8 +378,8 @@ function BladeSurfaceMesh({
           color={capColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.80}
-          roughness={0.20}
+          metalness={0.15}
+          roughness={0.70}
         />
       </mesh>
     </>
@@ -406,8 +406,8 @@ function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface;
           vertexColors={showColormap}
           color={showColormap ? '#ffffff' : SPLITTER_COLOR}
           side={THREE.DoubleSide}
-          metalness={0.78}
-          roughness={0.20}
+          metalness={0.15}
+          roughness={0.70}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow>
@@ -415,8 +415,8 @@ function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface;
           vertexColors={showColormap}
           color={showColormap ? '#ffffff' : '#8a929c'}
           side={THREE.DoubleSide}
-          metalness={0.78}
-          roughness={0.20}
+          metalness={0.15}
+          roughness={0.70}
         />
       </mesh>
     </>
@@ -492,16 +492,16 @@ function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; p
 }
 
 function SceneLights() {
-  // Fix 7: CAD-standard lighting (3 lights, neutral, no dramatic highlights)
+  // Inventor/SolidWorks style: high ambient, soft directional, no hard shadows
   return (
     <>
-      <ambientLight intensity={0.6} />
-      {/* Key light — front-top */}
-      <directionalLight position={[3, 4, 5]} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
-      {/* Fill light — opposite side */}
-      <directionalLight position={[-4, 2, 3]} intensity={0.7} color="#f0f0f0" />
-      {/* Back fill — gentle rim definition */}
-      <directionalLight position={[1, -2, -3]} intensity={0.3} color="#e0e0e0" />
+      <ambientLight intensity={0.75} />
+      {/* Soft key light — broad, no shadow for matte look */}
+      <directionalLight position={[3, 4, 5]} intensity={1.0} color="#ffffff" />
+      {/* Fill from opposite — nearly same intensity for even lighting */}
+      <directionalLight position={[-3, 2, 4]} intensity={0.8} color="#f4f4f4" />
+      {/* Under fill — prevents dark underside */}
+      <directionalLight position={[0, -3, 2]} intensity={0.4} color="#e8e8e8" />
     </>
   )
 }
@@ -760,7 +760,7 @@ function Scene({
       <PerspectiveCamera makeDefault position={[2.5, 1.8, 3.5]} fov={34} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
-      <Environment preset="studio" />
+      {/* No environment map — solid matte look like Inventor/SolidWorks */}
       <ClipController clipZ={clipZ} />
 
       {/* Fix 6: Light background plane for CAD-style */}
@@ -926,7 +926,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (

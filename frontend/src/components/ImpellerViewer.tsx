@@ -1202,7 +1202,7 @@ export default function ImpellerViewer({
 
       {/* BOTTOM-RIGHT: Controls */}
       <div className="viewer-overlay viewer-overlay-br">
-        <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 520 }}>
+        <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 700 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
@@ -1248,6 +1248,14 @@ export default function ImpellerViewer({
           >
             {meridionalCut ? 'Corte Meridional ON' : 'Corte Meridional'}
           </button>
+
+          <ControlButton label={showDimensions ? 'Cotas ON' : 'Cotas'} onClick={() => setShowDimensions(d => !d)} />
+          <ControlButton label={showGhostOverlay ? 'Sobrepor V ON' : 'Sobrepor V anterior'} onClick={() => setShowGhostOverlay(g => !g)} />
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 6 }}>Vistas:</span>
+          <ControlButton label="Frontal" onClick={() => setCameraPos([0, 0, 5])} />
+          <ControlButton label="Lateral" onClick={() => setCameraPos([5, 0, 0])} />
+          <ControlButton label="Topo" onClick={() => setCameraPos([0, 5, 0])} />
+          <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
 
           <select
             value={resolution}

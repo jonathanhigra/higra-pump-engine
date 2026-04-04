@@ -48,20 +48,49 @@ function classifySeverity(text: string): Severity {
   return 'warning'
 }
 
-function getSuggestion(text: string): string {
+function getSuggestion(text: string, sizing?: SizingResult): string {
   const lower = text.toLowerCase()
-  if (/euler.*head.*excess|euler.*excesso|euler.*margem/i.test(lower))
+  if (/euler.*head.*excess|euler.*excesso|euler.*margem/i.test(lower)) {
+    if (sizing?.beta2) {
+      const sugBeta2 = (sizing.beta2 * 0.9).toFixed(1)
+      return `Considere reduzir B2 ou o numero de pas. Reduza \u03B22 para ${sugBeta2}\u00B0`
+    }
     return 'Considere reduzir B2 ou o numero de pas'
+  }
   if (/choke|bloqueio|engasgamento/i.test(lower))
     return 'Aumente a area de passagem (b2 ou D1)'
-  if (/npsh/i.test(lower))
+  if (/npsh/i.test(lower)) {
+    if (sizing) {
+      // Extract RPM from velocity triangles or use a heuristic
+      const currentRpm = (sizing.velocity_triangles as any)?.rpm ?? 0
+      if (currentRpm > 0) {
+        const sugRpm = Math.round(currentRpm * 0.85)
+        return `Reduza a rotacao ou aumente D1. Tente n = ${sugRpm} rpm`
+      }
+    }
     return 'Reduza a rotacao ou aumente D1'
+  }
   if (/de haller|haller|difus/i.test(lower))
     return 'Reduza a difusao -- considere mais pas ou menor B2'
   if (/slip|escorregamento|deslizamento/i.test(lower))
     return 'Revise o numero de pas (Z) ou o angulo B2'
-  if (/cavit/i.test(lower))
+  if (/cavit/i.test(lower)) {
+    if (sizing) {
+      const currentRpm = (sizing.velocity_triangles as any)?.rpm ?? 0
+      if (currentRpm > 0) {
+        const sugRpm = Math.round(currentRpm * 0.85)
+        return `Reduza a rotacao ou aumente a pressao de succao. Tente n = ${sugRpm} rpm`
+      }
+    }
     return 'Reduza a rotacao ou aumente a pressao de succao'
+  }
+  if (/efficien|efici/i.test(lower)) {
+    if (sizing?.blade_count) {
+      const sugZ = sizing.blade_count + 1
+      return `Aumente Z para ${sugZ} pas`
+    }
+    return 'Revise o numero de pas ou angulos'
+  }
   return 'Revise os parametros de entrada'
 }
 
@@ -104,12 +133,12 @@ function SeverityIcon({ severity, size = 16 }: { severity: Severity; size?: numb
   )
 }
 
-function processWarnings(warnings: string[]): WarningCard[] {
+function processWarnings(warnings: string[], sizing?: SizingResult): WarningCard[] {
   return warnings
     .map(text => ({
       text,
       severity: classifySeverity(text),
-      suggestion: getSuggestion(text),
+      suggestion: getSuggestion(text, sizing),
       relatedTab: getRelatedTab(text),
     }))
     .sort((a, b) => {
@@ -133,7 +162,7 @@ export default function SmartWarnings({ warnings, sizing, onNavigate }: Props) {
 
   if (!warnings || warnings.length === 0) return null
 
-  const cards = processWarnings(warnings)
+  const cards = processWarnings(warnings, sizing)
   const counts = warningCounts(warnings)
 
   return (

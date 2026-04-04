@@ -102,8 +102,8 @@ def _meridional_curves(
     This produces the classic centrifugal pump impeller shape:
     flat disc with concave hub rising to axial eye.
     """
-    # Eye height above disc (axial extent of the inlet)
-    z_eye = 0.12 * (2 * r2)
+    # Eye height: 0.20*D2 for proper depth (aspect ratio ~5:1)
+    z_eye = 0.20 * (2 * r2)
 
     # Hub surface: blades sit here (slightly above back-disc z=0)
     z_base = b2 * 0.10
@@ -112,28 +112,30 @@ def _meridional_curves(
     r_bend = r1_hub + (r1 - r1_hub) * 0.45
     bend_r = r_bend - r1_hub
 
+    # Eye shroud radius: D1/2 (outer wall of inlet tube)
+    r_eye_shroud = r1
+
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
-        # t=0: outlet (D2), t=1: inlet (eye)
 
         # --- HUB ---
-        if t < 0.60:
-            # Radial zone: flat disc from r2 to r_bend
-            s = t / 0.60
+        if t < 0.55:
+            # Radial zone: flat disc
+            s = t / 0.55
             r_h = r2 - (r2 - r_bend) * s
             z_h = z_base
-        elif t < 0.82:
-            # Bend zone: sharp quarter-arc (power=3)
-            s = (t - 0.60) / 0.22
-            arc = (math.pi / 2) * (s ** 3.0)
+        elif t < 0.78:
+            # Bend zone: quarter-arc
+            s = (t - 0.55) / 0.23
+            arc = (math.pi / 2) * (s ** 2.5)
             r_h = r1_hub + bend_r * math.cos(arc)
             z_h = z_base + bend_r * math.sin(arc)
         else:
-            # Eye zone: vertical tube at r=r1_hub
-            s = (t - 0.82) / 0.18
+            # Eye tube: vertical at r=r1_hub
+            s = (t - 0.78) / 0.22
             z_bend_top = z_base + bend_r
             r_h = r1_hub
             z_h = z_bend_top + s * (z_eye - z_bend_top)
@@ -141,27 +143,11 @@ def _meridional_curves(
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
 
-        # --- SHROUD (Fix #1 + #3: always monotonic r, simple offset) ---
-        # Shroud r must NEVER increase when going outlet→inlet
-        # In radial zone: same r as hub (offset only in z)
-        # In eye zone: offset only in r (outward from hub)
-        # In bend: smooth transition
-        if t < 0.60:
-            r_s = r_h
-            z_s = z_h + b_t
-        elif t < 0.82:
-            # Blend: offset transitions from pure-z to pure-r
-            blend = (t - 0.60) / 0.22  # 0→1
-            z_offset = b_t * (1.0 - blend)
-            r_offset = b_t * blend
-            r_s = r_h + r_offset
-            z_s = z_h + z_offset
-        else:
-            r_s = r_h + b_t
-            z_s = z_h
-
-        # Note: shroud r is NOT monotonic — it decreases outlet→bend then increases bend→eye.
-        # This is correct: the shroud wraps around the eye opening.
+        # --- SHROUD (strictly monotonic r: r2 → r_eye_shroud) ---
+        # Simple approach: shroud r decreases linearly from r2 to r_eye_shroud
+        # over the full chord, with z offset that tapers from b2 to 0
+        r_s = r2 + t * (r_eye_shroud - r2)  # linear r2 → r_eye
+        z_s = z_h + b_t * (1.0 - t * 0.7)   # z offset tapers but keeps some at inlet
 
         hub_rz.append((r_h, z_h))
         shroud_rz.append((r_s, z_s))

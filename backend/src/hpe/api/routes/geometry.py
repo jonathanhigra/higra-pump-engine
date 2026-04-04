@@ -282,53 +282,25 @@ def _build_blade_surface(
 
             # Thickness at this chord station (#11)
             thick = _naca_thickness_at(t_norm, t_max, le_radius, te_radius)
-            half_t = thick / 2.0
+
+            # Tangential offset: d_theta = half_thickness / r
+            d_theta = thick / (2.0 * r) if r > 1e-10 else 0.0
 
             # Lean + sweep stacking (#14)
             z_offset = sweep_m * s
             angle = theta_c + angular_offset + lean_offset
 
-            # Compute camber tangent direction for perpendicular offset
-            if i == 0:
-                r2c, z2c, th2c = camber[1]
-            elif i == n_chord - 1:
-                r2c, z2c, th2c = camber[i]
-                r, z, theta_c = camber[i - 1][0], camber[i - 1][1], camber[i - 1][2]
-                r2c, z2c, th2c = camber[i]
-            else:
-                r2c, z2c, th2c = camber[i + 1]
-
-            # Tangent in meridional (r-z) plane
-            dr = r2c - (camber[i - 1][0] if i > 0 else r)
-            dz_c = z2c - (camber[i - 1][1] if i > 0 else z)
-            # Re-read current point
-            r, z, theta_c = camber[i]
-            angle = theta_c + angular_offset + lean_offset
-
-            # Normal perpendicular to meridional tangent (in r-z plane)
-            mag = math.sqrt(dr * dr + dz_c * dz_c) if (dr * dr + dz_c * dz_c) > 1e-20 else 1.0
-            nr = -dz_c / mag   # normal in r direction
-            nz = dr / mag      # normal in z direction
-
-            # Also add tangential component for thickness visibility
-            d_theta = half_t / (r if r > 1e-10 else 0.001)
-
-            # PS: offset inward (toward hub) + tangential
-            r_ps = r + nr * half_t
-            z_ps = z + nz * half_t + z_offset
+            # PS: rotate backward by d_theta
             ps_row.append(BladePoint3D(
-                x=r_ps * math.cos(angle - d_theta * 0.5) * 1000,
-                y=r_ps * math.sin(angle - d_theta * 0.5) * 1000,
-                z=z_ps * 1000,
+                x=r * math.cos(angle - d_theta) * 1000,
+                y=r * math.sin(angle - d_theta) * 1000,
+                z=(z + z_offset) * 1000,
             ))
-
-            # SS: offset outward (toward shroud) + tangential
-            r_ss = r - nr * half_t
-            z_ss = z - nz * half_t + z_offset
+            # SS: rotate forward by d_theta
             ss_row.append(BladePoint3D(
-                x=r_ss * math.cos(angle + d_theta * 0.5) * 1000,
-                y=r_ss * math.sin(angle + d_theta * 0.5) * 1000,
-                z=z_ss * 1000,
+                x=r * math.cos(angle + d_theta) * 1000,
+                y=r * math.sin(angle + d_theta) * 1000,
+                z=(z + z_offset) * 1000,
             ))
 
         ps_surface.append(ps_row)
@@ -415,8 +387,8 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    # Typical t/chord = 5-10% for pumps; BLADE_THICKNESS_RATIO=0.03 * D2 gives max thickness
-    blade_thickness = max(0.002, min(0.010, d2 * BLADE_THICKNESS_RATIO))
+    # Blade max thickness: ~3-4% of D2 gives visible but realistic blades
+    blade_thickness = max(0.003, min(0.015, d2 * 0.04))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)

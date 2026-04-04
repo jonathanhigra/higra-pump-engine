@@ -437,9 +437,54 @@ function HubMesh({ profile }: { profile: BladePoint[] }) {
 }
 
 
-/** Transparent shroud surface — frames the blades like TURBOdesign Suite */
-function ShroudMesh({ profile }: { profile: BladePoint[] }) {
+/** Shroud surface — solid (closed impeller) or transparent (open impeller) */
+function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean }) {
   const geo = useMemo(() => buildRevolutionGeo(profile, 96), [profile])
+  // Shroud disc — flat annular ring at inlet z-plane (closes the top)
+  const discGeo = useMemo(() => {
+    if (!solid || profile.length < 2) return null
+    // First point = inlet (r_small, z_inlet), last = outlet (r_large, z_outlet)
+    const inlet = profile[0]
+    const outlet = profile[profile.length - 1]
+    const r_inner = inlet.x  // eye radius
+    const r_outer = outlet.x // outer radius
+    const z = outlet.z       // at outlet z
+    const segs = 96
+    const pos: number[] = []
+    for (let j = 0; j < segs; j++) {
+      const a0 = (j / segs) * Math.PI * 2
+      const a1 = ((j + 1) / segs) * Math.PI * 2
+      pos.push(r_inner * Math.cos(a0), r_inner * Math.sin(a0), z,
+               r_outer * Math.cos(a0), r_outer * Math.sin(a0), z,
+               r_inner * Math.cos(a1), r_inner * Math.sin(a1), z)
+      pos.push(r_outer * Math.cos(a0), r_outer * Math.sin(a0), z,
+               r_outer * Math.cos(a1), r_outer * Math.sin(a1), z,
+               r_inner * Math.cos(a1), r_inner * Math.sin(a1), z)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
+  }, [profile, solid])
+
+  if (solid) {
+    return (
+      <>
+        {/* Shroud shell — solid metallic */}
+        <mesh geometry={geo} castShadow receiveShadow>
+          <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
+        </mesh>
+        {/* Shroud outer disc — closes the annular gap at outlet */}
+        {discGeo && (
+          <mesh geometry={discGeo} castShadow receiveShadow>
+            <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
+          </mesh>
+        )}
+      </>
+    )
+  }
+
+  // Open impeller — transparent shroud
   return (
     <mesh geometry={geo}>
       <meshStandardMaterial
@@ -710,7 +755,7 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, showColormap, showLoadingMap, loadingData, showParticles, showVolute,
+  data, paused, rpm, showSplitters, clipZ, showColormap, showLoadingMap, loadingData, showParticles, showVolute, closedImpeller,
   selectedBlade, onSelectBlade,
 }: {
   data: ImpellerData
@@ -723,6 +768,7 @@ function Scene({
   loadingData?: BladeLoadingData | null
   showParticles: boolean
   showVolute: boolean
+  closedImpeller?: boolean
   selectedBlade: number | null
   onSelectBlade: (idx: number) => void
 }) {
@@ -741,7 +787,7 @@ function Scene({
       <RotatingGroup paused={paused} rpm={rpm}>
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
-          <ShroudMesh profile={data.shroud_profile} />
+          <ShroudMesh profile={data.shroud_profile} solid={closedImpeller} />
           {data.blade_surfaces.map((surf, i) => (
             <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
               showLoadingMap={showLoadingMap}
@@ -778,7 +824,8 @@ export default function ImpellerViewer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(true)
-  const [showSplitters, setShowSplitters] = useState(true)  // splitters on by default
+  const [showSplitters, setShowSplitters] = useState(true)
+  const [closedImpeller, setClosedImpeller] = useState(true)  // solid shroud by default
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
   const [showLoadingMap, setShowLoadingMap] = useState(false)
@@ -874,7 +921,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -930,6 +977,7 @@ export default function ImpellerViewer({
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
           <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+          <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <button
             onClick={() => setClipZ(c => c === null ? 0 : null)}
@@ -1061,6 +1109,7 @@ export default function ImpellerViewer({
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
           <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+          <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
 
           {/* Clip plane slider */}

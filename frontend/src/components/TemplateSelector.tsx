@@ -19,6 +19,14 @@ interface Template {
 
 const TEMPLATES: Template[] = [
   {
+    key: 'dragon',
+    name: 'Dragon',
+    description: 'Rotor fechado de referência HIGRA — bomba centrífuga industrial clássica',
+    flow_rate_m3h: 100, head_m: 32, rpm: 1750,
+    machine_type: 'centrifugal_pump', fluid: 'water',
+    expected_nq: 28, expected_eta: 0.82, expected_z: 6,
+  },
+  {
     key: 'centrifugal_pump_low_nq',
     name: 'Bomba Centrífuga Baixo Nq (Nq=18)',
     description: 'Bomba de alta pressão, baixa vazão — típica de água de alimentação de caldeira',

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, Environment, Html } from '@react-three/drei'
 import * as THREE from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import t from '../i18n/pt-br'
 import type { SizingResult } from '../App'
 
@@ -68,7 +69,9 @@ function buildQuadGeo(grid: BladePoint[][]): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.computeVertexNormals()
-  return g
+  const merged = mergeVertices(g, 0.001)
+  merged.computeVertexNormals()
+  return merged
 }
 
 function buildQuadGeoWithColors(grid: BladePoint[][], pressureGrid: number[][]): THREE.BufferGeometry {
@@ -180,7 +183,9 @@ function buildRevolutionGeo(profile: BladePoint[], segs = 128): THREE.BufferGeom
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.computeVertexNormals()
-  return g
+  const merged = mergeVertices(g, 0.001)
+  merged.computeVertexNormals()
+  return merged
 }
 
 /** Hub back-disc: flat annular disc at the outlet z-plane */
@@ -208,7 +213,9 @@ function buildHubDiscGeo(hubProfile: BladePoint[], segs = 96): THREE.BufferGeome
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.computeVertexNormals()
-  return g
+  const merged = mergeVertices(g, 0.001)
+  merged.computeVertexNormals()
+  return merged
 }
 
 /** Build LE/TE edge caps between PS and SS to make blade look solid */
@@ -218,16 +225,50 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
   if (nSpan < 2 || nChord < 2) return new THREE.BufferGeometry()
   const pos: number[] = []
 
-  // Leading edge cap (chord index 0): connect PS[:,0] to SS[:,0]
-  // Consistent winding: PS0→SS0→PS1, SS0→SS1→PS1 (CCW when viewed from outside)
+  // Leading edge cap (chord index 0): rounded with midpoint bulge for semicircular profile
   for (let s = 0; s < nSpan - 1; s++) {
     const ps0 = ps[s][0], ps1 = ps[s + 1][0]
     const ss0 = ss[s][0], ss1 = ss[s + 1][0]
-    pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
-    pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, ps1.x, ps1.y, ps1.z)
+
+    // Local thickness at this span station
+    const thickness0 = Math.sqrt((ps0.x - ss0.x) ** 2 + (ps0.y - ss0.y) ** 2 + (ps0.z - ss0.z) ** 2)
+    const thickness1 = Math.sqrt((ps1.x - ss1.x) ** 2 + (ps1.y - ss1.y) ** 2 + (ps1.z - ss1.z) ** 2)
+
+    // Midpoints between PS and SS at LE
+    const mid0 = { x: (ps0.x + ss0.x) / 2, y: (ps0.y + ss0.y) / 2, z: (ps0.z + ss0.z) / 2 }
+    const mid1 = { x: (ps1.x + ss1.x) / 2, y: (ps1.y + ss1.y) / 2, z: (ps1.z + ss1.z) / 2 }
+
+    // Outward direction: from chord[1] toward chord[0] (upstream / inlet direction)
+    const ch0 = nChord > 1 ? {
+      x: ((ps[s][0].x + ss[s][0].x) - (ps[s][1].x + ss[s][1].x)) / 2,
+      y: ((ps[s][0].y + ss[s][0].y) - (ps[s][1].y + ss[s][1].y)) / 2,
+      z: ((ps[s][0].z + ss[s][0].z) - (ps[s][1].z + ss[s][1].z)) / 2,
+    } : { x: 0, y: 0, z: 1 }
+    const ch1 = nChord > 1 ? {
+      x: ((ps[s + 1][0].x + ss[s + 1][0].x) - (ps[s + 1][1].x + ss[s + 1][1].x)) / 2,
+      y: ((ps[s + 1][0].y + ss[s + 1][0].y) - (ps[s + 1][1].y + ss[s + 1][1].y)) / 2,
+      z: ((ps[s + 1][0].z + ss[s + 1][0].z) - (ps[s + 1][1].z + ss[s + 1][1].z)) / 2,
+    } : { x: 0, y: 0, z: 1 }
+
+    // Normalize and apply bulge (35% of half-thickness for semicircle approximation)
+    const len0 = Math.sqrt(ch0.x ** 2 + ch0.y ** 2 + ch0.z ** 2) || 1
+    const len1 = Math.sqrt(ch1.x ** 2 + ch1.y ** 2 + ch1.z ** 2) || 1
+    const bulge0 = thickness0 * 0.35
+    const bulge1 = thickness1 * 0.35
+
+    const m0 = { x: mid0.x + (ch0.x / len0) * bulge0, y: mid0.y + (ch0.y / len0) * bulge0, z: mid0.z + (ch0.z / len0) * bulge0 }
+    const m1 = { x: mid1.x + (ch1.x / len1) * bulge1, y: mid1.y + (ch1.y / len1) * bulge1, z: mid1.z + (ch1.z / len1) * bulge1 }
+
+    // PS half: PS0->M0->PS1, M0->M1->PS1
+    pos.push(ps0.x, ps0.y, ps0.z, m0.x, m0.y, m0.z, ps1.x, ps1.y, ps1.z)
+    pos.push(m0.x, m0.y, m0.z, m1.x, m1.y, m1.z, ps1.x, ps1.y, ps1.z)
+    // SS half: M0->SS0->M1, SS0->SS1->M1
+    pos.push(m0.x, m0.y, m0.z, ss0.x, ss0.y, ss0.z, m1.x, m1.y, m1.z)
+    pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, m1.x, m1.y, m1.z)
   }
 
-  // Trailing edge cap (chord index nChord-1) — same winding as LE
+  // Trailing edge cap (chord index nChord-1) — thin by design (TE radius = 10% blade_thickness)
+  // No rounding needed: sharp TE is physically correct
   const c = nChord - 1
   for (let s = 0; s < nSpan - 1; s++) {
     const ps0 = ps[s][c], ps1 = ps[s + 1][c]
@@ -236,7 +277,9 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
     pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, ps1.x, ps1.y, ps1.z)
   }
 
-  // Fix 3: Restore hub/shroud edge caps (with thinner thickness they work now)
+  // Hub/shroud edge caps (close the blade thickness at hub and shroud spans)
+  // TODO: Future improvement — add hub-blade fillet geometry (radial bulge at span=0)
+  // to suggest weld fillet. Requires offsetting hub-side midpoints toward hub surface.
   // Hub edge (span=0): connect PS[0,:] to SS[0,:]
   for (let c2 = 0; c2 < nChord - 1; c2++) {
     const ps0h = ps[0][c2], ps1h = ps[0][c2 + 1]
@@ -256,7 +299,9 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.computeVertexNormals()
-  return g
+  const merged = mergeVertices(g, 0.001)
+  merged.computeVertexNormals()
+  return merged
 }
 
 // ─── Pressure colormap helper (used in legend) ────────────────────────────────
@@ -311,7 +356,7 @@ function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridi
 // ─── Scene components ─────────────────────────────────────────────────────────
 
 function BladeSurfaceMesh({
-  surface, idx, showColormap, showLoadingMap, loadingField, onSelect, isSelected,
+  surface, idx, showColormap, showLoadingMap, loadingField, onSelect, isSelected, selectedBlade,
 }: {
   surface: BladeSurface
   idx: number
@@ -320,6 +365,7 @@ function BladeSurfaceMesh({
   loadingField?: BladeLoadingField | null
   onSelect: (idx: number) => void
   isSelected: boolean
+  selectedBlade: number | null
 }) {
   const [hovered, setHovered] = useState(false)
 
@@ -345,10 +391,13 @@ function BladeSurfaceMesh({
 
   const useVertexColors = showColormap || showLoadingMap
   const highlight = isSelected || hovered
+  const otherSelected = selectedBlade !== null && !isSelected
   const psColor = useVertexColors ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
   const ssColor = useVertexColors ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
   const capColor = useVertexColors ? '#ffffff' : (highlight ? '#bcc4cc' : '#8a929c')
   const emissive = isSelected ? '#1a2530' : hovered ? '#0f1a22' : '#000000'
+  const bladeOpacity = otherSelected ? 0.3 : 1.0
+  const bladeTransparent = otherSelected
 
   return (
     <>
@@ -364,6 +413,9 @@ function BladeSurfaceMesh({
           side={THREE.DoubleSide}
           metalness={0.15}
           roughness={0.75}
+          transparent={bladeTransparent}
+          opacity={bladeOpacity}
+          depthWrite={!bladeTransparent}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow
@@ -376,6 +428,9 @@ function BladeSurfaceMesh({
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
+          transparent={bladeTransparent}
+          opacity={bladeOpacity}
+          depthWrite={!bladeTransparent}
           metalness={0.15}
           roughness={0.75}
         />
@@ -388,8 +443,49 @@ function BladeSurfaceMesh({
           side={THREE.DoubleSide}
           metalness={0.15}
           roughness={0.70}
+          transparent={bladeTransparent}
+          opacity={bladeOpacity}
+          depthWrite={!bladeTransparent}
         />
       </mesh>
+    </>
+  )
+}
+
+function BladeEdgeLines({ surface, visible }: { surface: BladeSurface; visible: boolean }) {
+  const edges = useMemo(() => {
+    const ps = surface.ps
+    const nSpan = ps.length
+    const nChord = ps[0]?.length ?? 0
+    if (nSpan < 2 || nChord < 2) return []
+    const lines: THREE.Vector3[][] = []
+
+    // LE (hub to shroud along chord=0)
+    lines.push(ps.map((row) => new THREE.Vector3(row[0].x, row[0].y, row[0].z)))
+    // TE (hub to shroud along chord=last)
+    lines.push(ps.map((row) => new THREE.Vector3(row[nChord - 1].x, row[nChord - 1].y, row[nChord - 1].z)))
+    // Hub edge (along chord at span=0)
+    lines.push(ps[0].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+    // Shroud edge (along chord at span=last)
+    lines.push(ps[nSpan - 1].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+
+    return lines
+  }, [surface])
+
+  const geos = useMemo(() =>
+    edges.map(pts => new THREE.BufferGeometry().setFromPoints(pts)),
+    [edges],
+  )
+
+  if (!visible || geos.length === 0) return null
+
+  return (
+    <>
+      {geos.map((geo, i) => (
+        <line key={i} geometry={geo}>
+          <lineBasicMaterial color="#303540" linewidth={1} />
+        </line>
+      ))}
     </>
   )
 }
@@ -500,12 +596,26 @@ function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; p
 }
 
 function SceneLights() {
-  // Inventor/SolidWorks style: high ambient, soft directional, no hard shadows
+  // CAD-style lighting: high ambient + soft shadow from key light for depth
   return (
     <>
       <ambientLight intensity={0.75} />
-      {/* Soft key light — broad, no shadow for matte look */}
-      <directionalLight position={[3, 4, 5]} intensity={1.0} color="#ffffff" />
+      {/* Key light with soft shadow — gives blade-on-hub depth cues */}
+      <directionalLight
+        position={[3, 4, 5]}
+        intensity={1.0}
+        color="#ffffff"
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+        shadow-radius={4}
+        shadow-camera-near={0.1}
+        shadow-camera-far={20}
+        shadow-camera-left={-4}
+        shadow-camera-right={4}
+        shadow-camera-top={4}
+        shadow-camera-bottom={-4}
+      />
       {/* Fill from opposite — nearly same intensity for even lighting */}
       <directionalLight position={[-3, 2, 4]} intensity={0.8} color="#f4f4f4" />
       {/* Under fill — prevents dark underside */}

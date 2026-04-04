@@ -421,7 +421,7 @@ export default function App() {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
         projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
-        <div style={{ maxWidth: 1100 }}>
+        <div>
           {tab === 'templates' && (
             <TemplateSelector loading={loading} onSelect={(tmpl: any) => {
               if (tmpl.flow_rate && tmpl.head && tmpl.rpm) {

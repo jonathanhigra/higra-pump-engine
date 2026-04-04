@@ -76,8 +76,8 @@ interface Props {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SVG_W = 560
-const SVG_H = 380
+const SVG_W = 800
+const SVG_H = 500
 const PAD = { l: 56, r: 30, t: 24, b: 44 }
 const INNER_W = SVG_W - PAD.l - PAD.r
 const INNER_H = SVG_H - PAD.t - PAD.b
@@ -1149,14 +1149,11 @@ export default function MeridionalDragEditor({
       background: 'var(--bg-surface)',
       border: '1px solid var(--border-primary)',
       borderRadius: 8,
-      padding: 20,
-      display: 'flex',
-      gap: 20,
-      flexWrap: 'wrap',
+      padding: 16,
       position: 'relative',
     }}>
-      {/* ---------- Left: SVG Canvas + Numeric Panel ---------- */}
-      <div style={{ flex: '1 1 auto', minWidth: 500 }}>
+      {/* Full-width layout */}
+      <div style={{ width: '100%' }}>
         <div style={{
           fontSize: 14, fontWeight: 600, color: 'var(--accent)',
           marginBottom: 10, letterSpacing: '0.04em',
@@ -1216,14 +1213,15 @@ export default function MeridionalDragEditor({
           </div>
         </div>
 
-        {/* SVG + Numeric panel row */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          {/* SVG Canvas */}
-          <div style={{ position: 'relative' }}>
+        {/* SVG + Numeric panel + Template — full width row */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          {/* SVG Canvas — takes all available space */}
+          <div style={{ position: 'relative', flex: '1 1 auto' }}>
             <svg
               ref={svgRef}
-              width={SVG_W}
+              width="100%"
               height={SVG_H}
+              preserveAspectRatio="xMidYMid meet"
               viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
               style={{
                 background: 'var(--bg-primary)',

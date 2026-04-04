@@ -765,7 +765,7 @@ function Scene({
       {/* Fix 6: Light background plane for CAD-style */}
       <mesh position={[0, 0, -3]} rotation={[0, 0, 0]}>
         <planeGeometry args={[20, 20]} />
-        <meshBasicMaterial color="#d5d8de" />
+        <meshBasicMaterial color="#1a2030" />
       </mesh>
 
       <RotatingGroup paused={paused} rpm={rpm}>
@@ -794,7 +794,7 @@ function Scene({
 
       {/* Floor grid */}
       {/* Fix 6: Light grid for CAD-style background */}
-      <gridHelper args={[6, 24, '#c0c4cc', '#d8dce4']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
+      <gridHelper args={[6, 24, '#2a3545', '#222838']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
     </>
   )
 }
@@ -905,7 +905,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)' }}>
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
@@ -945,7 +945,7 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)', position: 'relative' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)', position: 'relative' }}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -1007,7 +1007,7 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)' }}>
+      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
         {canvasEl}
       </div>
 

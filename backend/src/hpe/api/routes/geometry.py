@@ -86,35 +86,36 @@ def _meridional_curves(
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
     """Meridional curves for centrifugal impeller.
 
-    Hub: quarter-circle arc from axial inlet to radial outlet.
-         r: r1_hub → r2,  z: z_axial → 0
-    Shroud: parallel to hub, offset by passage width b(t).
+    Realistic profile with sharp elbow transition:
+    - Short axial zone at inlet (eye) — nearly vertical
+    - Sharp elbow at ~25% chord — tight radius bend
+    - Long flat radial zone — nearly horizontal disc to D2
 
-    The axial length L = 0.6*(r2-r1) gives a realistic flat-disc shape
-    (Gülich: typical L/D2 ≈ 0.3-0.4 for centrifugal pumps).
+    This matches real centrifugal pump impellers (Gülich Fig. 7.1).
     """
-    # Axial length: L/D2 ≈ 0.30-0.35 for centrifugal pumps (Gülich)
-    # Use r2 directly for better proportions
-    z_axial = 0.32 * (2 * r2)
+    # Axial depth: ~20% of D2 gives realistic flat disc
+    z_axial = 0.20 * (2 * r2)
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
-        arc = math.pi / 2 * t   # 0 → π/2
+
+        # Hub: quarter-circle arc with sharp elbow (power=2.5)
+        # Higher power = sharper transition from axial to radial = flatter disc
+        arc = (math.pi / 2) * (t ** 2.5)
         sin_a = math.sin(arc)
         cos_a = math.cos(arc)
 
         # Hub arc: (r1_hub, z_axial) → (r2, 0)
         r_h = r1_hub + (r2 - r1_hub) * sin_a
-        z_h = z_axial * (1.0 - sin_a)
+        z_h = z_axial * cos_a  # cos goes from 1 (inlet) to 0 (outlet)
 
         # Passage width tapers b1 → b2
         b_t = b1 + t * (b2 - b1)
 
-        # Shroud: offset outward along the passage (perpendicular to hub arc)
-        # Normal direction at arc position: (cos_a in r, sin_a in z)
+        # Shroud offset perpendicular to hub arc
         r_s = r_h + b_t * cos_a
         z_s = z_h + b_t * sin_a
 

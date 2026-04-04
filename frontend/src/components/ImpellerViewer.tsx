@@ -469,44 +469,16 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
   }, [profile, solid])
 
   if (solid) {
-    return (
-      <>
-        {/* Shroud shell — semi-transparent metallic so blades are visible inside */}
-        <mesh geometry={geo} castShadow>
-          <meshStandardMaterial
-            color="#8890a0"
-            metalness={0.70}
-            roughness={0.25}
-            side={THREE.FrontSide}
-            transparent
-            opacity={0.45}
-            depthWrite={false}
-          />
-        </mesh>
-        {/* Outer rim — vertical strip connecting shroud to hub at D2 */}
-        {rimGeo && (
-          <mesh geometry={rimGeo} castShadow receiveShadow>
-            <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
-          </mesh>
-        )}
-      </>
-    )
+    // Closed impeller: just the outer rim ring at D2 (no spherical shroud shell)
+    return rimGeo ? (
+      <mesh geometry={rimGeo} castShadow receiveShadow>
+        <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
+      </mesh>
+    ) : null
   }
 
-  // Open impeller — very light transparent shroud
-  return (
-    <mesh geometry={geo}>
-      <meshStandardMaterial
-        color="#90a0b4"
-        metalness={0.3}
-        roughness={0.4}
-        side={THREE.DoubleSide}
-        transparent
-        opacity={0.08}
-        depthWrite={false}
-      />
-    </mesh>
-  )
+  // Open impeller — no shroud at all (clean blade view)
+  return null
 }
 
 function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; paused?: boolean; rpm?: number }) {
@@ -787,8 +759,8 @@ function Scene({
 
   return (
     <>
-      {/* Front-top view — looking into the eye, slightly elevated */}
-      <PerspectiveCamera makeDefault position={[1.8, 1.4, 4.0]} fov={34} />
+      {/* 3/4 elevated — shows blades, hub disc, and eye clearly */}
+      <PerspectiveCamera makeDefault position={[2.5, 1.8, 3.5]} fov={34} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
       <ClipController clipZ={clipZ} />
@@ -834,7 +806,7 @@ export default function ImpellerViewer({
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(true)
   const [showSplitters, setShowSplitters] = useState(true)
-  const [closedImpeller, setClosedImpeller] = useState(true)  // solid shroud by default
+  const [closedImpeller, setClosedImpeller] = useState(false)  // open by default — shroud off
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)
   const [showLoadingMap, setShowLoadingMap] = useState(false)

@@ -460,8 +460,9 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    # Blade max thickness: ~3-4% of D2 gives visible but realistic blades
-    blade_thickness = max(0.003, min(0.015, d2 * 0.055))
+    # Blade max thickness: ~2% of D2 — matches ADT TURBOdesign proportions
+    # ADT ns280 example: 6mm for D2=470mm = 1.3%
+    blade_thickness = max(0.002, min(0.010, d2 * 0.020))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)

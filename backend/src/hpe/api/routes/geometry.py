@@ -173,17 +173,17 @@ def _hub_with_shaft(
         return hub_rz
     r_shaft = r1_hub * 0.35
 
-    # hub_rz[0] = outlet (r2, 0), hub_rz[-1] = inlet (r1_hub, z_eye)
-    r_out, z_out = hub_rz[0]   # outlet — back disc plane
+    # hub_rz[0] = outlet (r2, z≈0), hub_rz[-1] = inlet (r1_hub, z_eye)
+    r_out, z_out = hub_rz[0]   # outlet
     r_in, z_in = hub_rz[-1]    # inlet — eye top
 
-    # Back disc: flat ring from shaft to r2 at z=0
-    disc = [(r_shaft, z_out), (r_out, z_out)]
+    # Back disc slightly below hub surface so blades sit ON TOP
+    z_disc = z_out - 0.002  # 2mm below hub outlet surface
 
-    # Shaft stub at inlet eye: cylinder from r_shaft to r1_hub at z_eye
+    # Profile: shaft_center(bottom) → disc_outer → hub_curve → shaft_center(top)
+    disc = [(r_shaft, z_disc), (r_out, z_disc)]
     shaft = [(r_shaft, z_in)]
 
-    # Profile: disc_inner → disc_outer → hub_curve → shaft_top
     return disc + hub_rz + shaft
 
 

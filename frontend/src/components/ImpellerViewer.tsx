@@ -234,22 +234,8 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
     pos.push(ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z)
   }
 
-  // Hub edge cap (span index 0): connect PS[0,:] to SS[0,:]
-  for (let c2 = 0; c2 < nChord - 1; c2++) {
-    const ps0 = ps[0][c2], ps1 = ps[0][c2 + 1]
-    const ss0 = ss[0][c2], ss1 = ss[0][c2 + 1]
-    pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
-    pos.push(ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z)
-  }
-
-  // Shroud edge cap (span index nSpan-1)
-  const sLast = nSpan - 1
-  for (let c2 = 0; c2 < nChord - 1; c2++) {
-    const ps0 = ps[sLast][c2], ps1 = ps[sLast][c2 + 1]
-    const ss0 = ss[sLast][c2], ss1 = ss[sLast][c2 + 1]
-    pos.push(ps0.x, ps0.y, ps0.z, ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z)
-    pos.push(ps1.x, ps1.y, ps1.z, ss1.x, ss1.y, ss1.z, ss0.x, ss0.y, ss0.z)
-  }
+  // Hub and shroud edge caps removed — they created visual artifacts
+  // (struts extending beyond the disc). Only LE/TE caps remain.
 
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -351,7 +337,7 @@ function BladeSurfaceMesh({
           vertexColors={useVertexColors}
           color={psColor}
           emissive={emissive}
-          side={THREE.FrontSide}
+          side={THREE.DoubleSide}
           metalness={0.72}
           roughness={0.22}
         />
@@ -365,7 +351,7 @@ function BladeSurfaceMesh({
           vertexColors={useVertexColors}
           color={ssColor}
           emissive={emissive}
-          side={THREE.FrontSide}
+          side={THREE.DoubleSide}
           metalness={0.72}
           roughness={0.22}
         />
@@ -805,7 +791,7 @@ export default function ImpellerViewer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paused, setPaused] = useState(true)
-  const [showSplitters, setShowSplitters] = useState(true)
+  const [showSplitters, setShowSplitters] = useState(false)
   const [closedImpeller, setClosedImpeller] = useState(false)  // open by default — shroud off
   const [clipZ, setClipZ] = useState<number | null>(null)
   const [showColormap, setShowColormap] = useState(false)

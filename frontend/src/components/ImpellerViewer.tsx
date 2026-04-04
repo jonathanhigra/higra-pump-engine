@@ -235,8 +235,22 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
     pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, ps1.x, ps1.y, ps1.z)
   }
 
-  // Hub and shroud edge caps removed — they created visual artifacts
-  // (struts extending beyond the disc). Only LE/TE caps remain.
+  // Fix 3: Restore hub/shroud edge caps (with thinner thickness they work now)
+  // Hub edge (span=0): connect PS[0,:] to SS[0,:]
+  for (let c2 = 0; c2 < nChord - 1; c2++) {
+    const ps0h = ps[0][c2], ps1h = ps[0][c2 + 1]
+    const ss0h = ss[0][c2], ss1h = ss[0][c2 + 1]
+    pos.push(ps0h.x, ps0h.y, ps0h.z, ss0h.x, ss0h.y, ss0h.z, ps1h.x, ps1h.y, ps1h.z)
+    pos.push(ps1h.x, ps1h.y, ps1h.z, ss0h.x, ss0h.y, ss0h.z, ss1h.x, ss1h.y, ss1h.z)
+  }
+  // Shroud edge (span=nSpan-1)
+  const sL = nSpan - 1
+  for (let c2 = 0; c2 < nChord - 1; c2++) {
+    const ps0s = ps[sL][c2], ps1s = ps[sL][c2 + 1]
+    const ss0s = ss[sL][c2], ss1s = ss[sL][c2 + 1]
+    pos.push(ps0s.x, ps0s.y, ps0s.z, ps1s.x, ps1s.y, ps1s.z, ss0s.x, ss0s.y, ss0s.z)
+    pos.push(ps1s.x, ps1s.y, ps1s.z, ss1s.x, ss1s.y, ss1s.z, ss0s.x, ss0s.y, ss0s.z)
+  }
 
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -259,11 +273,11 @@ void pressureColor
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-// TURBOdesign-style metallic palette — bright brushed aluminum/steel
-const BLADE_COLOR = '#d4d8e0'    // blade PS — bright silver
-const BLADE_COLOR_ALT = '#bcc2cc' // blade SS — slightly darker
-const HUB_COLOR = '#a0a8b8'      // hub — medium bright steel
-const SPLITTER_COLOR = '#b0b8c4'  // splitter — same family
+// Fix 5: CAD-neutral metallic palette (ADT-like photorealistic)
+const BLADE_COLOR = '#b8bcc4'    // blade PS — neutral steel
+const BLADE_COLOR_ALT = '#a8aeb8' // blade SS — slightly darker
+const HUB_COLOR = '#909aa8'       // hub — darker steel
+const SPLITTER_COLOR = '#a0a8b4'  // splitter
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
@@ -339,8 +353,8 @@ function BladeSurfaceMesh({
           color={psColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.82}
-          roughness={0.18}
+          metalness={0.65}
+          roughness={0.32}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow
@@ -353,8 +367,8 @@ function BladeSurfaceMesh({
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.82}
-          roughness={0.18}
+          metalness={0.65}
+          roughness={0.32}
         />
       </mesh>
       {/* LE/TE edge caps — make blade solid */}
@@ -477,21 +491,16 @@ function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; p
 }
 
 function SceneLights() {
+  // Fix 7: CAD-standard lighting (3 lights, neutral, no dramatic highlights)
   return (
     <>
-      <ambientLight intensity={0.55} />
-      {/* Key light — front-top, strong for blade definition */}
-      <directionalLight position={[3, 4, 5]} intensity={2.0} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
-      {/* Fill light — left side, cool */}
-      <directionalLight position={[-5, 2, 3]} intensity={0.8} color="#e8eef4" />
-      {/* Rim light — behind-right for blade edge highlights */}
-      <directionalLight position={[3, -2, -4]} intensity={0.5} color="#d0d8e0" />
-      {/* Under fill — illuminate blade undersides */}
-      <directionalLight position={[0, -4, 2]} intensity={0.4} color="#ffffff" />
-      {/* Top-down light — blade top surface definition */}
-      <directionalLight position={[0, 0, 6]} intensity={0.6} color="#f0f4f8" />
-      {/* Point at center for blade passage highlights */}
-      <pointLight position={[0, 0, 2]} intensity={0.5} distance={8} color="#f0f4f8" />
+      <ambientLight intensity={0.6} />
+      {/* Key light — front-top */}
+      <directionalLight position={[3, 4, 5]} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} color="#ffffff" />
+      {/* Fill light — opposite side */}
+      <directionalLight position={[-4, 2, 3]} intensity={0.7} color="#f0f0f0" />
+      {/* Back fill — gentle rim definition */}
+      <directionalLight position={[1, -2, -3]} intensity={0.3} color="#e0e0e0" />
     </>
   )
 }
@@ -753,10 +762,10 @@ function Scene({
       <Environment preset="studio" />
       <ClipController clipZ={clipZ} />
 
-      {/* Background plane for depth */}
+      {/* Fix 6: Light background plane for CAD-style */}
       <mesh position={[0, 0, -3]} rotation={[0, 0, 0]}>
         <planeGeometry args={[20, 20]} />
-        <meshBasicMaterial color="#1a2030" />
+        <meshBasicMaterial color="#d5d8de" />
       </mesh>
 
       <RotatingGroup paused={paused} rpm={rpm}>
@@ -784,7 +793,8 @@ function Scene({
       <ParticleSystem data={data} active={showParticles} paused={paused} />
 
       {/* Floor grid */}
-      <gridHelper args={[6, 24, '#2a3040', '#222838']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
+      {/* Fix 6: Light grid for CAD-style background */}
+      <gridHelper args={[6, 24, '#c0c4cc', '#d8dce4']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
     </>
   )
 }
@@ -895,7 +905,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)' }}>
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
@@ -935,7 +945,7 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)', position: 'relative' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)', position: 'relative' }}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -997,7 +1007,7 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)' }}>
+      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #e8eaef 0%, #c8cdd5 100%)' }}>
         {canvasEl}
       </div>
 

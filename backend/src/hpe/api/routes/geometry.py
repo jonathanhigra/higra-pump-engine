@@ -336,7 +336,7 @@ def _build_blade_surface(
     sweep_m: float = 0.0,     # sweep stacking [m]
 ) -> BladeSurface:
     t_hub_v = t_hub if t_hub is not None else blade_thickness
-    t_shroud_v = t_shroud if t_shroud is not None else blade_thickness * 0.6
+    t_shroud_v = t_shroud if t_shroud is not None else blade_thickness  # uniform (ADT style)
 
     ps_surface: list[list[BladePoint3D]] = []
     ss_surface: list[list[BladePoint3D]] = []
@@ -473,8 +473,8 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    # [Action 4] Blade thickness 2.5% of D2 — ADT uses 1.3%, but we need more for WebGL visibility
-    blade_thickness = max(0.003, min(0.012, d2 * 0.025))
+    # Fix 1: Match ADT thickness — 1.3% of D2
+    blade_thickness = max(0.002, min(0.008, d2 * 0.013))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)
@@ -501,11 +501,12 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
         target_rad = math.radians(req.target_wrap_angle)
         beta2_rad = _adjust_beta2_for_wrap(hub_rz, shroud_rz, beta1_rad, beta2_rad, target_rad)
 
-    # Resolve advanced thickness (#11, #12)
-    le_r = req.le_radius if req.le_radius is not None else blade_thickness * 0.35
-    te_r = req.te_radius if req.te_radius is not None else blade_thickness * 0.20
-    t_hub = req.t_hub
-    t_shroud = req.t_shroud
+    # Fix 4: LE 25% / TE 10% (ADT-like sharp trailing edge)
+    le_r = req.le_radius if req.le_radius is not None else blade_thickness * 0.25
+    te_r = req.te_radius if req.te_radius is not None else blade_thickness * 0.10
+    # Fix 2: No spanwise tapering — uniform thickness like ADT
+    t_hub = req.t_hub if req.t_hub is not None else blade_thickness
+    t_shroud = req.t_shroud if req.t_shroud is not None else blade_thickness
 
     # Stacking (#14)
     lean_rad = math.radians(req.lean_angle)

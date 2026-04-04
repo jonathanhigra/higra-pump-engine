@@ -102,39 +102,38 @@ def _meridional_curves(
     This produces the classic centrifugal pump impeller shape:
     flat disc with concave hub rising to axial eye.
     """
-    # Eye depth (how far the inlet tube extends axially above the disc)
-    z_eye = r1 * 0.9  # proportional to inlet radius
+    # [Action 1] Eye depth reduced: 0.12*D2 (was 0.20*D2 via r1*0.9)
+    z_eye = 0.12 * (2 * r2)
 
-    # Bend radius: where the hub transitions from radial to axial
-    r_bend = r1_hub + (r1 - r1_hub) * 0.5
+    # Bend radius: controls the sharpness of hub elbow
+    r_bend = r1_hub + (r1 - r1_hub) * 0.45
+
+    # Hub surface sits slightly above back-disc (z=0)
+    z_hub_surface = b2 * 0.12
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
-        # t=0: outlet (D2, z=0), t=1: inlet (eye, z=z_eye)
-        # We build from OUTLET to INLET (standard meridional direction)
 
-        # Hub surface height in radial zone: slightly above z=0
-        # This is where the blades sit (back-disc is at z=0 below)
-        z_hub_surface = b2 * 0.15  # ~15% of b2 above the back disc
-
-        if t < 0.55:
-            # Radial disc zone: nearly flat, r goes from r2 to r_bend
-            s = t / 0.55  # 0→1
+        # [Action 3] Sharper bend with power=3.0 arc mapping
+        if t < 0.60:
+            # Radial disc zone: flat, r goes from r2 to r_bend
+            s = t / 0.60
             r_h = r2 - (r2 - r_bend) * s
             z_h = z_hub_surface
-        elif t < 0.80:
-            # Bend zone: quarter-circle transition from radial to axial
-            s = (t - 0.55) / 0.25  # 0→1
-            arc = s * math.pi / 2
-            bend_r = r_bend - r1_hub  # bend radius
+        elif t < 0.82:
+            # Bend zone: quarter-circle, sharp transition
+            s = (t - 0.60) / 0.22
+            # power=3.0 for sharper elbow
+            arc = (math.pi / 2) * (s ** 3.0)
+            bend_r = r_bend - r1_hub
             r_h = r1_hub + bend_r * math.cos(arc)
             z_h = z_hub_surface + bend_r * math.sin(arc)
         else:
-            # Axial eye zone: nearly vertical
-            s = (t - 0.80) / 0.20  # 0→1
+            # Axial eye zone: vertical tube
+            s = (t - 0.82) / 0.18
             z_bend_top = z_hub_surface + (r_bend - r1_hub)
             r_h = r1_hub
             z_h = z_bend_top + s * (z_eye - z_bend_top)
@@ -142,17 +141,14 @@ def _meridional_curves(
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
 
-        # Shroud offset direction:
-        # In radial zone (t<0.55): offset in +z (above hub)
-        # In bend zone: blend between +z and +r
-        # In axial zone (t>0.80): offset in +r (outward from hub)
-        if t < 0.55:
+        # Shroud offset: +z in radial zone, +r in axial zone
+        if t < 0.60:
             r_s = r_h
             z_s = z_h + b_t
-        elif t < 0.80:
-            blend = (t - 0.55) / 0.25  # 0→1 (radial→axial blend)
+        elif t < 0.82:
+            blend = (t - 0.60) / 0.22
             r_s = r_h + b_t * blend
-            z_s = z_h + b_t * (1.0 - blend * 0.3)
+            z_s = z_h + b_t * (1.0 - blend * 0.4)
         else:
             r_s = r_h + b_t
             z_s = z_h
@@ -242,8 +238,8 @@ def _integrate_camber_logarithmic(
     hub_rev = list(reversed(hub_rz))
     shr_rev = list(reversed(shroud_rz))
 
-    # Maximum wrap angle: 160° for pumps (clamp to avoid excessive spiral)
-    max_wrap = math.radians(160.0)
+    # [Action 2] Wrap clamp 180° — allows natural variation but prevents excess
+    max_wrap = math.radians(180.0)
 
     theta = 0.0
     camber_rev = []
@@ -460,19 +456,19 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    # Blade max thickness: ~2% of D2 — matches ADT TURBOdesign proportions
-    # ADT ns280 example: 6mm for D2=470mm = 1.3%
-    blade_thickness = max(0.002, min(0.010, d2 * 0.020))
+    # [Action 4] Blade thickness 2.5% of D2 — ADT uses 1.3%, but we need more for WebGL visibility
+    blade_thickness = max(0.003, min(0.012, d2 * 0.025))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)
 
     # Resolution presets override explicit n_blade_points / n_span_points
+    # [Action 5] Resolutions — 'high' now matches ADT chordwise (89 pts)
     _RESOLUTION_PRESETS: dict[str, tuple[int, int]] = {
         "low": (30, 8),
-        "medium": (60, 16),
-        "high": (120, 32),
-        "ultra": (200, 64),
+        "medium": (60, 12),
+        "high": (89, 20),
+        "ultra": (150, 40),
     }
     if req.resolution_preset and req.resolution_preset in _RESOLUTION_PRESETS:
         n_chord, n_span = _RESOLUTION_PRESETS[req.resolution_preset]

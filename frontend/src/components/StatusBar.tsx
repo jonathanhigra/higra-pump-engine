@@ -10,6 +10,7 @@ interface Props {
   opPoint?: { flowRate: number; head: number; rpm: number }
   savedId?: string | null
   onShortcutsHelp?: () => void
+  sidebarCollapsed?: boolean
 }
 
 interface Pill {
@@ -19,7 +20,7 @@ interface Pill {
   delta?: { current: number; previous: number | null; format: 'pct' | 'abs' | 'mm'; higherIsBetter?: boolean }
 }
 
-export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp }: Props) {
+export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp, sidebarCollapsed }: Props) {
   const prev = previousSizing || null
   const pills: Pill[] = sizing
     ? [
@@ -38,10 +39,9 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
     : []
 
   return (
-    <div style={{
+    <div className={`status-bar${sidebarCollapsed ? ' sb-collapsed' : ''}`} style={{
       position: 'fixed',
       bottom: 0,
-      left: 0,
       right: 0,
       height: 32,
       background: 'var(--bg-secondary)',

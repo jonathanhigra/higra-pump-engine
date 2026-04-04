@@ -630,16 +630,16 @@ function SpanSectionLines({ surface, scale }: {
         pts.push(new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
       }
       if (pts.length > 0) pts.push(pts[0].clone())
-      return new THREE.BufferGeometry().setFromPoints(pts)
+      const geo = new THREE.BufferGeometry().setFromPoints(pts)
+      const mat = new THREE.LineBasicMaterial({ color: '#f0c040' })
+      return new THREE.Line(geo, mat)
     })
   }, [surface, scale])
 
   return (
     <>
-      {lines.map((geo, i) => (
-        <line key={i} geometry={geo}>
-          <lineBasicMaterial color="#f0c040" linewidth={1} />
-        </line>
+      {lines.map((obj, i) => (
+        <primitive key={i} object={obj} />
       ))}
     </>
   )
@@ -1456,7 +1456,7 @@ export default function ImpellerViewer({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
-          <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
+          <ControlButton label={paused ? '▶' : '⏸'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
           <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
@@ -1504,6 +1504,10 @@ export default function ImpellerViewer({
           <ControlButton label="Lateral" onClick={() => setCameraPos([5, 0, 0])} />
           <ControlButton label="Topo" onClick={() => setCameraPos([0, 5, 0])} />
           <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
+          <ControlButton label={showVelocityArrows ? 'Vel. ON' : 'Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
+          <ControlButton label={showSections ? 'Secoes ON' : 'Secoes'} onClick={() => setShowSections(s => !s)} />
+          <ControlButton label={turntable ? 'Turntable ON' : 'Turntable'} onClick={() => setTurntable(t => !t)} />
+          <ControlButton label="PNG" onClick={handleScreenshot} />
           <select
             value={resolution}
             onChange={e => setResolution(e.target.value)}
@@ -1636,7 +1640,7 @@ export default function ImpellerViewer({
       <div className="viewer-overlay viewer-overlay-br">
         <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 700 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
-          <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
+          <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
           <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
@@ -1700,6 +1704,10 @@ export default function ImpellerViewer({
           <ControlButton label="Topo" onClick={() => setCameraPos([0, 5, 0])} />
           <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
 
+          <ControlButton label={showVelocityArrows ? 'Vel. ON' : 'Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
+          <ControlButton label={showSections ? 'Secoes ON' : 'Secoes'} onClick={() => setShowSections(s => !s)} />
+          <ControlButton label={turntable ? 'Turntable ON' : 'Turntable'} onClick={() => setTurntable(t => !t)} />
+          <ControlButton label="PNG" onClick={handleScreenshot} />
           <select
             value={resolution}
             onChange={e => setResolution(e.target.value)}

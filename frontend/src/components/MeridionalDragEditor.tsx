@@ -332,6 +332,13 @@ export default function MeridionalDragEditor({
   // Gap 4: Splitter toggle
   const [showSplitter, setShowSplitter] = useState(false)
 
+  // Snap to grid (5mm increments)
+  const [snapEnabled, setSnapEnabled] = useState(false)
+  const snap = (v: number) => snapEnabled ? Math.round(v / 5) * 5 : v
+
+  // Previous profile overlay
+  const [previousProfile, setPreviousProfile] = useState<ControlPoints | null>(null)
+
   // Gap 6: Zoom/Pan
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: SVG_W, height: SVG_H })
   const [isPanning, setIsPanning] = useState(false)
@@ -480,6 +487,25 @@ export default function MeridionalDragEditor({
     }).join(' ')
   }, [splitterCurve, toSVG, showSplitter])
 
+  // Previous profile paths (for overlay)
+  const prevHubPath = useMemo(() => {
+    if (!previousProfile) return ''
+    const curve = interpolateCurve(previousProfile.hub, 80)
+    return curve.map((p, i) => {
+      const s = toSVG(p)
+      return `${i === 0 ? 'M' : 'L'}${s.x.toFixed(1)},${s.y.toFixed(1)}`
+    }).join(' ')
+  }, [previousProfile, toSVG])
+
+  const prevShrPath = useMemo(() => {
+    if (!previousProfile) return ''
+    const curve = interpolateCurve(previousProfile.shroud, 80)
+    return curve.map((p, i) => {
+      const s = toSVG(p)
+      return `${i === 0 ? 'M' : 'L'}${s.x.toFixed(1)},${s.y.toFixed(1)}`
+    }).join(' ')
+  }, [previousProfile, toSVG])
+
   /** Passage fill polygon */
   const passagePath = useMemo(() => {
     const fwd = shrCurve.map(p => {
@@ -538,8 +564,9 @@ export default function MeridionalDragEditor({
       const my = viewBox.y + (e.clientY - rect.top) * scaleY
       const phys = fromSVG(mx, my)
 
-      // Clamp to positive r
-      phys.r = Math.max(0, phys.r)
+      // Clamp to positive r, then apply snap
+      phys.r = Math.max(0, snap(phys.r))
+      phys.z = snap(phys.z)
 
       const { curve, idx } = dragging
 
@@ -558,9 +585,9 @@ export default function MeridionalDragEditor({
         const next = [...prev]
         // Endpoints: only allow radial movement (fix z for inlet/outlet)
         if (idx === 0) {
-          next[0] = { r: phys.r, z: prev[0].z }
+          next[0] = { r: snap(phys.r), z: prev[0].z }
         } else if (idx === prev.length - 1) {
-          next[idx] = { r: phys.r, z: prev[idx].z }
+          next[idx] = { r: snap(phys.r), z: prev[idx].z }
         } else {
           next[idx] = phys
         }
@@ -897,6 +924,12 @@ export default function MeridionalDragEditor({
   // -----------------------------------------------------------------------
 
   const handleApply = async () => {
+    // Save current profile as "previous" before applying
+    setPreviousProfile({
+      hub: clonePoints(hubCPs),
+      shroud: clonePoints(shrCPs),
+      splitter: clonePoints(splitterCPs),
+    })
     setApplying(true)
     setApplyResult(null)
     try {
@@ -1199,7 +1232,19 @@ export default function MeridionalDragEditor({
             {history.past.length} passos
           </span>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label style={{
+              fontSize: 11, color: 'var(--text-secondary)', display: 'flex',
+              alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none',
+            }}>
+              <input
+                type="checkbox"
+                checked={snapEnabled}
+                onChange={e => setSnapEnabled(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Snap 5mm
+            </label>
             <label style={{
               fontSize: 11, color: 'var(--text-secondary)', display: 'flex',
               alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none',
@@ -1332,6 +1377,14 @@ export default function MeridionalDragEditor({
                 stroke="rgba(0,160,223,0.4)" strokeWidth={1} strokeDasharray="5,3"
               />
 
+              {/* Previous profile overlay (dashed gray) */}
+              {previousProfile && prevHubPath && (
+                <>
+                  <path d={prevHubPath} fill="none" stroke="#6b7280" strokeWidth={1.5} strokeLinejoin="round" strokeDasharray="6,4" opacity={0.5} />
+                  <path d={prevShrPath} fill="none" stroke="#6b7280" strokeWidth={1.5} strokeLinejoin="round" strokeDasharray="6,4" opacity={0.5} />
+                  <text x={PAD.l + 4} y={PAD.t + 14} fill="#6b7280" fontSize={10} opacity={0.6}>Anterior</text>
+                </>
+              )}
               {/* Hub curve */}
               <path d={hubPath} fill="none" stroke="#3b82f6" strokeWidth={2.5} strokeLinejoin="round" />
               {/* Shroud curve */}

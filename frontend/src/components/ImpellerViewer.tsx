@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, Environment, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import t from '../i18n/pt-br'
 import type { SizingResult } from '../App'
@@ -282,21 +282,29 @@ const SPLITTER_COLOR = '#969ba3'  // splitter
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
-function ClipController({ clipZ }: { clipZ: number | null }) {
+function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridionalCut?: boolean }) {
   const { gl } = useThree()
   useEffect(() => {
-    if (clipZ === null) {
+    const planes: THREE.Plane[] = []
+    if (clipZ !== null) {
+      planes.push(new THREE.Plane(new THREE.Vector3(0, 0, -1), clipZ))
+    }
+    if (meridionalCut) {
+      // Meridional section: clip at Y=0 plane (shows half the impeller)
+      planes.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+    }
+    if (planes.length > 0) {
+      gl.localClippingEnabled = true
+      gl.clippingPlanes = planes
+    } else {
       gl.clippingPlanes = []
       gl.localClippingEnabled = false
-    } else {
-      gl.localClippingEnabled = true
-      gl.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 0, -1), clipZ)]
     }
     return () => {
       gl.clippingPlanes = []
       gl.localClippingEnabled = false
     }
-  }, [clipZ, gl])
+  }, [clipZ, meridionalCut, gl])
   return null
 }
 
@@ -733,14 +741,15 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, showColormap, showLoadingMap, loadingData, showParticles, showVolute, closedImpeller,
-  selectedBlade, onSelectBlade,
+  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, loadingData, showParticles, showVolute, closedImpeller,
+  selectedBlade, onSelectBlade, showDimensions, cameraPos,
 }: {
   data: ImpellerData
   paused?: boolean
   rpm?: number
   showSplitters?: boolean
   clipZ: number | null
+  meridionalCut?: boolean
   showColormap: boolean
   showLoadingMap?: boolean
   loadingData?: BladeLoadingData | null
@@ -749,19 +758,39 @@ function Scene({
   closedImpeller?: boolean
   selectedBlade: number | null
   onSelectBlade: (idx: number) => void
+  showDimensions?: boolean
+  cameraPos?: [number, number, number]
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
   const scale = 1.8 / r2_mm
 
+  const camKey = cameraPos ? cameraPos.join(',') : '2.5,1.8,3.5'
+  const camPosition = cameraPos || [2.5, 1.8, 3.5] as [number, number, number]
+
+  // Dimension values in mm
+  const d2mm = (data.d2 * 1000).toFixed(0)
+  const d1mm = data.d1 ? (data.d1 * 1000).toFixed(0) : null
+  const b2mm = data.b2 ? (data.b2 * 1000).toFixed(0) : null
+  const r2 = data.d2 * 500  // radius in mm
+  const r1 = data.d1 ? data.d1 * 500 : r2 * 0.5
+  const z_eye = data.shroud_profile?.length > 0 ? data.shroud_profile[0].z : r2 * 0.3
+
+  const dimLabelStyle: React.CSSProperties = {
+    fontSize: 10, background: 'rgba(255,255,255,0.88)', color: '#1a1a2e',
+    padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' as const,
+    fontWeight: 600, pointerEvents: 'none' as const,
+    boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+  }
+
   return (
     <>
       {/* 3/4 elevated — shows blades, hub disc, and eye clearly */}
-      <PerspectiveCamera makeDefault position={[2.5, 1.8, 3.5]} fov={34} />
+      <PerspectiveCamera makeDefault position={camPosition} fov={34} key={camKey} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
       {/* No environment map — solid matte look like Inventor/SolidWorks */}
-      <ClipController clipZ={clipZ} />
+      <ClipController clipZ={clipZ} meridionalCut={meridionalCut} />
 
       {/* Fix 6: Light background plane for CAD-style */}
       <mesh position={[0, 0, -3]} rotation={[0, 0, 0]}>
@@ -793,6 +822,25 @@ function Scene({
 
       <ParticleSystem data={data} active={showParticles} paused={paused} />
 
+      {/* Dimension annotations */}
+      {showDimensions && (
+        <group scale={[scale, scale, scale]}>
+          <Html position={[r2, 0, 0]} center distanceFactor={8}>
+            <div style={dimLabelStyle}>D2={d2mm}mm</div>
+          </Html>
+          {d1mm && (
+            <Html position={[r1, 0, z_eye]} center distanceFactor={8}>
+              <div style={dimLabelStyle}>D1={d1mm}mm</div>
+            </Html>
+          )}
+          {b2mm && (
+            <Html position={[r2 * 0.85, 0, -r2 * 0.15]} center distanceFactor={8}>
+              <div style={dimLabelStyle}>b2={b2mm}mm</div>
+            </Html>
+          )}
+        </group>
+      )}
+
       {/* Floor grid */}
       {/* Fix 6: Light grid for CAD-style background */}
       <gridHelper args={[6, 24, '#2a3545', '#222838']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
@@ -813,6 +861,7 @@ export default function ImpellerViewer({
   const [showSplitters, setShowSplitters] = useState(false)
   const [closedImpeller, setClosedImpeller] = useState(false)  // open by default — shroud off
   const [clipZ, setClipZ] = useState<number | null>(null)
+  const [meridionalCut, setMeridionalCut] = useState(false)
   const [showColormap, setShowColormap] = useState(false)
   const [showLoadingMap, setShowLoadingMap] = useState(false)
   const [loadingData, setLoadingData] = useState<BladeLoadingData | null>(null)
@@ -820,6 +869,9 @@ export default function ImpellerViewer({
   const [showVolute, setShowVolute] = useState(false)
   const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
   const [resolution, setResolution] = useState<string>('high')
+  const [showDimensions, setShowDimensions] = useState(false)
+  const [showGhostOverlay, setShowGhostOverlay] = useState(false)
+  const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.5, 1.8, 3.5])
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -927,7 +979,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -976,6 +1028,17 @@ export default function ImpellerViewer({
               onClose={() => setSelectedBlade(null)}
             />
           )}
+          {showGhostOverlay && (
+            <div style={{
+              position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(10,15,20,0.85)', backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(245,158,11,0.4)', borderRadius: 6,
+              padding: '6px 14px', fontSize: 11, color: '#f59e0b',
+              whiteSpace: 'nowrap', pointerEvents: 'none',
+            }}>
+              Sobreposicao 3D disponivel em versao futura
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
@@ -997,6 +1060,25 @@ export default function ImpellerViewer({
           >
             {clipZ !== null ? 'Corte ON' : 'Corte'}
           </button>
+          <button
+            onClick={() => setMeridionalCut(v => !v)}
+            style={{
+              fontSize: 10, padding: '3px 8px', borderRadius: 4,
+              border: `1px solid ${meridionalCut ? '#f59e0b' : 'var(--border-primary)'}`,
+              background: meridionalCut ? 'rgba(245,158,11,0.15)' : 'transparent',
+              color: meridionalCut ? '#f59e0b' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {meridionalCut ? 'Corte Meridional ON' : 'Corte Meridional'}
+          </button>
+          <ControlButton label={showDimensions ? 'Cotas ON' : 'Cotas'} onClick={() => setShowDimensions(d => !d)} />
+          <ControlButton label={showGhostOverlay ? 'Sobrepor V ON' : 'Sobrepor V anterior'} onClick={() => setShowGhostOverlay(g => !g)} />
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 6 }}>Vistas:</span>
+          <ControlButton label="Frontal" onClick={() => setCameraPos([0, 0, 5])} />
+          <ControlButton label="Lateral" onClick={() => setCameraPos([5, 0, 0])} />
+          <ControlButton label="Topo" onClick={() => setCameraPos([0, 5, 0])} />
+          <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
           <select
             value={resolution}
             onChange={e => setResolution(e.target.value)}
@@ -1028,8 +1110,19 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
+      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)', position: 'relative' }}>
         {canvasEl}
+        {showGhostOverlay && (
+          <div style={{
+            position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(10,15,20,0.85)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(245,158,11,0.4)', borderRadius: 6,
+            padding: '6px 14px', fontSize: 11, color: '#f59e0b',
+            whiteSpace: 'nowrap', pointerEvents: 'none',
+          }}>
+            Sobreposicao 3D disponivel em versao futura
+          </div>
+        )}
       </div>
 
       {data && selectedBlade !== null && (
@@ -1141,6 +1234,20 @@ export default function ImpellerViewer({
               {clipZ !== null ? 'ON' : 'OFF'}
             </button>
           </div>
+
+          {/* Meridional section cut */}
+          <button
+            onClick={() => setMeridionalCut(v => !v)}
+            style={{
+              fontSize: 9, padding: '2px 8px', borderRadius: 3,
+              border: `1px solid ${meridionalCut ? '#f59e0b' : 'var(--border-primary)'}`,
+              background: meridionalCut ? 'rgba(245,158,11,0.15)' : 'transparent',
+              color: meridionalCut ? '#f59e0b' : 'var(--text-muted)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {meridionalCut ? 'Corte Meridional ON' : 'Corte Meridional'}
+          </button>
 
           <select
             value={resolution}

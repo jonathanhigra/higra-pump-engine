@@ -1151,9 +1151,11 @@ export default function MeridionalDragEditor({
       borderRadius: 8,
       padding: 16,
       position: 'relative',
+      display: 'flex',
+      gap: 16,
     }}>
-      {/* Full-width layout */}
-      <div style={{ width: '100%' }}>
+      {/* Left: SVG + Numeric + Metrics (takes all space) */}
+      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
         <div style={{
           fontSize: 14, fontWeight: 600, color: 'var(--accent)',
           marginBottom: 10, letterSpacing: '0.04em',
@@ -1432,7 +1434,7 @@ export default function MeridionalDragEditor({
       </div>
 
       {/* ---------- Right: Side Controls ---------- */}
-      <div style={{ flex: '0 0 220px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
         {/* Template selector */}
         <div>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>

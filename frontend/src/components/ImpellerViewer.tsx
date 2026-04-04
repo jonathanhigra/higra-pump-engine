@@ -163,6 +163,49 @@ function buildQuadGeoWithDivergingColors(grid: BladePoint[][], valueGrid: number
   return g
 }
 
+/** Span-gradient colormap: blue (hub) → white (mid) → red (shroud) */
+function buildQuadGeoWithSpanGradient(grid: BladePoint[][]): THREE.BufferGeometry {
+  const nSpan = grid.length
+  const nChord = grid[0]?.length ?? 0
+  const pos: number[] = []
+  const colors: number[] = []
+
+  const spanColor = (s: number): [number, number, number] => {
+    const t = nSpan > 1 ? s / (nSpan - 1) : 0.5 // 0=hub, 1=shroud
+    if (t < 0.5) {
+      const f = t * 2
+      return [0.15 + 0.85 * f, 0.39 + 0.49 * f, 0.93 - 0.05 * f] // blue→white
+    } else {
+      const f = (t - 0.5) * 2
+      return [0.88 + 0.12 * f, 0.88 - 0.73 * f, 0.88 - 0.73 * f] // white→red
+    }
+  }
+
+  const addTri = (
+    p0: BladePoint, p1: BladePoint, p2: BladePoint,
+    s0: number, s1: number, s2: number,
+  ) => {
+    pos.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z)
+    const c0 = spanColor(s0), c1 = spanColor(s1), c2 = spanColor(s2)
+    colors.push(...c0, ...c1, ...c2)
+  }
+
+  for (let s = 0; s < nSpan - 1; s++) {
+    for (let c = 0; c < nChord - 1; c++) {
+      const p00 = grid[s][c], p10 = grid[s + 1][c]
+      const p01 = grid[s][c + 1], p11 = grid[s + 1][c + 1]
+      addTri(p00, p10, p01, s, s + 1, s)
+      addTri(p10, p11, p01, s + 1, s + 1, s)
+    }
+  }
+
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  g.computeVertexNormals()
+  return g
+}
+
 function buildRevolutionGeo(profile: BladePoint[], segs = 128): THREE.BufferGeometry {
   if (profile.length < 2) return new THREE.BufferGeometry()
   const pos: number[] = []
@@ -356,12 +399,14 @@ function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridi
 // ─── Scene components ─────────────────────────────────────────────────────────
 
 function BladeSurfaceMesh({
-  surface, idx, showColormap, showLoadingMap, loadingField, onSelect, isSelected, selectedBlade,
+  surface, idx, showColormap, showLoadingMap, showSpanColors, showWireframe, loadingField, onSelect, isSelected, selectedBlade,
 }: {
   surface: BladeSurface
   idx: number
   showColormap: boolean
   showLoadingMap?: boolean
+  showSpanColors?: boolean
+  showWireframe?: boolean
   loadingField?: BladeLoadingField | null
   onSelect: (idx: number) => void
   isSelected: boolean
@@ -372,24 +417,28 @@ function BladeSurfaceMesh({
   const psGeo = useMemo(
     () => showLoadingMap && loadingField?.ps_rvtheta
       ? buildQuadGeoWithDivergingColors(surface.ps, loadingField.ps_rvtheta)
-      : showColormap && surface.ps_pressure
-        ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
-        : buildQuadGeo(surface.ps),
-    [surface, showColormap, showLoadingMap, loadingField],
+      : showSpanColors
+        ? buildQuadGeoWithSpanGradient(surface.ps)
+        : showColormap && surface.ps_pressure
+          ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
+          : buildQuadGeo(surface.ps),
+    [surface, showColormap, showLoadingMap, showSpanColors, loadingField],
   )
   const ssGeo = useMemo(
     () => showLoadingMap && loadingField?.ss_rvtheta
       ? buildQuadGeoWithDivergingColors(surface.ss, loadingField.ss_rvtheta)
-      : showColormap && surface.ss_pressure
-        ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
-        : buildQuadGeo(surface.ss),
-    [surface, showColormap, showLoadingMap, loadingField],
+      : showSpanColors
+        ? buildQuadGeoWithSpanGradient(surface.ss)
+        : showColormap && surface.ss_pressure
+          ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
+          : buildQuadGeo(surface.ss),
+    [surface, showColormap, showLoadingMap, showSpanColors, loadingField],
   )
 
   // Edge caps — close PS-SS gap to make blade look solid
   const capsGeo = useMemo(() => buildBladeEdgeCaps(surface.ps, surface.ss), [surface])
 
-  const useVertexColors = showColormap || showLoadingMap
+  const useVertexColors = showColormap || showLoadingMap || showSpanColors
   const highlight = isSelected || hovered
   const otherSelected = selectedBlade !== null && !isSelected
   const psColor = useVertexColors ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
@@ -448,6 +497,17 @@ function BladeSurfaceMesh({
           depthWrite={!bladeTransparent}
         />
       </mesh>
+      {/* Wireframe overlays */}
+      {showWireframe && (
+        <>
+          <lineSegments geometry={new THREE.WireframeGeometry(psGeo)}>
+            <lineBasicMaterial color="#555555" linewidth={1} transparent opacity={0.4} />
+          </lineSegments>
+          <lineSegments geometry={new THREE.WireframeGeometry(ssGeo)}>
+            <lineBasicMaterial color="#555555" linewidth={1} transparent opacity={0.4} />
+          </lineSegments>
+        </>
+      )}
     </>
   )
 }
@@ -482,6 +542,104 @@ function BladeEdgeLines({ surface, visible }: { surface: BladeSurface; visible: 
     <>
       {lineObjects.map((obj, i) => (
         <primitive key={i} object={obj} />
+      ))}
+    </>
+  )
+}
+
+function VelocityArrows({ surface, scale, sizing }: {
+  surface: BladeSurface; scale: number; sizing?: SizingResult | null
+}) {
+  const arrows = useMemo(() => {
+    const nSpan = surface.ps.length
+    if (nSpan < 2) return []
+    const midSpan = Math.floor(nSpan / 2)
+    const nChord = surface.ps[midSpan].length
+    if (nChord < 2) return []
+
+    const leP = surface.ps[midSpan][nChord - 1]
+    const teP = surface.ps[midSpan][0]
+
+    const arrowLen = 0.3
+    const result: { dir: THREE.Vector3; origin: THREE.Vector3; color: number }[] = []
+
+    const tangential = (p: BladePoint) => {
+      const r = Math.sqrt(p.x * p.x + p.y * p.y) || 1
+      return new THREE.Vector3(-p.y / r, p.x / r, 0)
+    }
+
+    const bladeDir = (spanIdx: number, chordIdx: number, forward: boolean) => {
+      const ps = surface.ps[spanIdx]
+      const c2 = forward
+        ? Math.min(chordIdx + 1, ps.length - 1)
+        : Math.max(chordIdx - 1, 0)
+      const dx = ps[c2].x - ps[chordIdx].x
+      const dy = ps[c2].y - ps[chordIdx].y
+      const dz = ps[c2].z - ps[chordIdx].z
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1
+      return new THREE.Vector3(dx / len, dy / len, dz / len)
+    }
+
+    const leOrigin = new THREE.Vector3(leP.x * scale, leP.y * scale, leP.z * scale)
+    const u1Dir = tangential(leP)
+    const w1Dir = bladeDir(midSpan, nChord - 1, false).negate()
+    const c1Dir = u1Dir.clone().add(w1Dir).normalize()
+    result.push({ dir: u1Dir, origin: leOrigin, color: 0xff4444 })
+    result.push({ dir: w1Dir, origin: leOrigin, color: 0x4488ff })
+    result.push({ dir: c1Dir, origin: leOrigin, color: 0x44cc44 })
+
+    const teOrigin = new THREE.Vector3(teP.x * scale, teP.y * scale, teP.z * scale)
+    const u2Dir = tangential(teP)
+    const w2Dir = bladeDir(midSpan, 0, true)
+    const c2Dir = u2Dir.clone().add(w2Dir).normalize()
+    result.push({ dir: u2Dir, origin: teOrigin, color: 0xff4444 })
+    result.push({ dir: w2Dir, origin: teOrigin, color: 0x4488ff })
+    result.push({ dir: c2Dir, origin: teOrigin, color: 0x44cc44 })
+
+    return result.map(a => new THREE.ArrowHelper(a.dir, a.origin, arrowLen, a.color, arrowLen * 0.25, arrowLen * 0.12))
+  }, [surface, scale, sizing])
+
+  return (
+    <group>
+      {arrows.map((arr, i) => (
+        <primitive key={i} object={arr} />
+      ))}
+    </group>
+  )
+}
+
+function SpanSectionLines({ surface, scale }: {
+  surface: BladeSurface; scale: number
+}) {
+  const lines = useMemo(() => {
+    const nSpan = surface.ps.length
+    if (nSpan < 3) return []
+    const count = Math.min(5, nSpan)
+    const spans: number[] = []
+    for (let i = 0; i < count; i++) {
+      spans.push(Math.round(i * (nSpan - 1) / (count - 1)))
+    }
+
+    return spans.map(s => {
+      const pts: THREE.Vector3[] = []
+      for (const p of surface.ps[s]) {
+        pts.push(new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      }
+      for (let c = surface.ss[s].length - 1; c >= 0; c--) {
+        const p = surface.ss[s][c]
+        pts.push(new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      }
+      if (pts.length > 0) pts.push(pts[0].clone())
+      return new THREE.BufferGeometry().setFromPoints(pts)
+    })
+  }, [surface, scale])
+
+  return (
+    <>
+      {lines.map((geo, i) => (
+        <line key={i} geometry={geo}>
+          <lineBasicMaterial color="#f0c040" linewidth={1} />
+        </line>
       ))}
     </>
   )
@@ -584,11 +742,20 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
   return null
 }
 
-function RotatingGroup({ children, paused, rpm }: { children: React.ReactNode; paused?: boolean; rpm?: number }) {
+function RotatingGroup({ children, paused, rpm, turntable }: { children: React.ReactNode; paused?: boolean; rpm?: number; turntable?: boolean }) {
   const ref = useRef<THREE.Group>(null)
   // Rotation speed: simulate ~1/10 of real RPM for visual effect
   const speed = rpm ? (rpm / 60) * Math.PI * 2 * 0.04 : 0.5
-  useFrame((_, d) => { if (ref.current && !paused) ref.current.rotation.z += d * speed })
+  const turntableSpeed = Math.PI * 2 / 10 // 1 rev per 10 seconds
+  useFrame((_, d) => {
+    if (ref.current) {
+      if (turntable) {
+        ref.current.rotation.z += d * turntableSpeed
+      } else if (!paused) {
+        ref.current.rotation.z += d * speed
+      }
+    }
+  })
   return <group ref={ref}>{children}</group>
 }
 
@@ -845,11 +1012,39 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
   )
 }
 
+// ─── Meridional streamlines ──────────────────────────────────────────────────
+
+function MeridionalLines({ hubProfile, shroudProfile, scale }: {
+  hubProfile: BladePoint[]
+  shroudProfile: BladePoint[]
+  scale: number
+}) {
+  const lines = useMemo(() => {
+    const hubPts = hubProfile.map(p => new THREE.Vector3(p.x * scale, 0, p.z * scale))
+    const shrPts = shroudProfile.map(p => new THREE.Vector3(p.x * scale, 0, p.z * scale))
+    const hubGeo = new THREE.BufferGeometry().setFromPoints(hubPts)
+    const shrGeo = new THREE.BufferGeometry().setFromPoints(shrPts)
+    const hubMat = new THREE.LineBasicMaterial({ color: '#f59e0b', linewidth: 2 })
+    const shrMat = new THREE.LineBasicMaterial({ color: '#06b6d4', linewidth: 2 })
+    return [
+      new THREE.Line(hubGeo, hubMat),
+      new THREE.Line(shrGeo, shrMat),
+    ]
+  }, [hubProfile, shroudProfile, scale])
+
+  return (
+    <group>
+      {lines.map((obj, i) => <primitive key={i} object={obj} />)}
+    </group>
+  )
+}
+
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, loadingData, showParticles, showVolute, closedImpeller,
+  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, showSpanColors, showWireframe, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showVolute, closedImpeller,
   selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount,
+  showVelocityArrows, showSections, turntable, sizing,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -859,6 +1054,10 @@ function Scene({
   meridionalCut?: boolean
   showColormap: boolean
   showLoadingMap?: boolean
+  showSpanColors?: boolean
+  showWireframe?: boolean
+  showBladeNumbers?: boolean
+  showMeridionalLines?: boolean
   loadingData?: BladeLoadingData | null
   showParticles: boolean
   showVolute: boolean
@@ -869,6 +1068,10 @@ function Scene({
   cameraPos?: [number, number, number]
   showEdges?: boolean
   explodeAmount?: number
+  showVelocityArrows?: boolean
+  showSections?: boolean
+  turntable?: boolean
+  sizing?: SizingResult | null
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -923,7 +1126,7 @@ function Scene({
         <meshBasicMaterial color="#1a2030" />
       </mesh>
 
-      <RotatingGroup paused={paused} rpm={rpm}>
+      <RotatingGroup paused={paused} rpm={rpm} turntable={turntable}>
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
           <ShroudMesh profile={data.shroud_profile} solid={closedImpeller} />
@@ -940,18 +1143,57 @@ function Scene({
               <group key={i} position={[ox, oy, 0]} rotation={[0, 0, animRot]}>
                 <BladeSurfaceMesh surface={surf} idx={i} showColormap={showColormap}
                   showLoadingMap={showLoadingMap}
+                  showSpanColors={showSpanColors}
+                  showWireframe={showWireframe}
                   loadingField={loadingData?.blade_loading?.[i] ?? null}
                   onSelect={onSelectBlade} isSelected={selectedBlade === i}
                   selectedBlade={selectedBlade} />
                 <BladeEdgeLines surface={surf} visible={showEdges ?? true} />
+                {i === 0 && showVelocityArrows && (
+                  <VelocityArrows surface={surf} scale={1} sizing={sizing} />
+                )}
+                {i === 0 && showSections && (
+                  <SpanSectionLines surface={surf} scale={1} />
+                )}
               </group>
             )
           })}
           {showSplitters && data.splitter_surfaces?.map((surf, i) => (
             <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} showColormap={showColormap} />
           ))}
+          {/* Blade numbering labels */}
+          {showBladeNumbers && data.blade_surfaces.map((surf, i) => {
+            const midSpan = Math.floor(surf.ps.length / 2)
+            const midChord = Math.floor(surf.ps[0].length / 2)
+            const p = surf.ps[midSpan][midChord]
+            return (
+              <Html key={`label-${i}`} position={[p.x, p.y, p.z]}
+                style={{ pointerEvents: 'none' }}>
+                <div style={{
+                  background: 'rgba(0,0,0,0.6)', color: '#fff',
+                  borderRadius: '50%', width: 20, height: 20,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700, fontFamily: 'Inter, sans-serif',
+                }}>
+                  {i + 1}
+                </div>
+              </Html>
+            )
+          })}
+          {/* Meridional streamlines (hub + shroud profiles) */}
+          {showMeridionalLines && (
+            <MeridionalLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} />
+          )}
         </group>
       </RotatingGroup>
+
+      {/* Section fill plane at Y=0 for meridional cut */}
+      {meridionalCut && (
+        <mesh position={[0, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[4, 4]} />
+          <meshStandardMaterial color="#3a4050" side={THREE.DoubleSide} metalness={0.1} roughness={0.8} />
+        </mesh>
+      )}
 
       {showVolute && (
         <group scale={[scale, scale, scale]}>
@@ -977,6 +1219,14 @@ function Scene({
               <div style={dimLabelStyle}>b2={b2mm}mm</div>
             </Html>
           )}
+          {data.actual_wrap_angle != null && (
+            <Html position={[r2 * 0.5, r2 * 0.5, 0]} center distanceFactor={8}>
+              <div style={dimLabelStyle}>Wrap={data.actual_wrap_angle.toFixed(0)}&deg;</div>
+            </Html>
+          )}
+          <Html position={[0, 0, z_eye * 0.5]} center distanceFactor={8}>
+            <div style={dimLabelStyle}>Z={data.blade_count}</div>
+          </Html>
         </group>
       )}
 
@@ -1013,6 +1263,13 @@ export default function ImpellerViewer({
   const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.5, 1.8, 3.5])
   const [showEdges, setShowEdges] = useState(true)
   const [explodeAmount, setExplodeAmount] = useState(0)
+  const [showVelocityArrows, setShowVelocityArrows] = useState(false)
+  const [showSections, setShowSections] = useState(false)
+  const [turntable, setTurntable] = useState(false)
+  const [showWireframe, setShowWireframe] = useState(false)
+  const [showBladeNumbers, setShowBladeNumbers] = useState(false)
+  const [showSpanColors, setShowSpanColors] = useState(false)
+  const [showMeridionalLines, setShowMeridionalLines] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -1112,6 +1369,15 @@ export default function ImpellerViewer({
     if (q > 0 && h > 0 && n > 0 && onRunSizing) onRunSizing(q, h, n)
   }
 
+  const handleScreenshot = () => {
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement
+    if (!canvas) return
+    const link = document.createElement('a')
+    link.download = `hpe-rotor-${Date.now()}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
+
   const isLoading = loading || parentLoading
 
   const canvasEl = isLoading ? (
@@ -1119,8 +1385,8 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} />
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -1138,7 +1404,7 @@ export default function ImpellerViewer({
         </div>
         {/* Legend / colormap legend */}
         <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {!showColormap && !showLoadingMap && (
+          {!showColormap && !showLoadingMap && !showSpanColors && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
@@ -1156,6 +1422,13 @@ export default function ImpellerViewer({
               <span>Baixo rVθ</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2060ff, #ffffff, #ff3030)' }} />
               <span>Alto rVθ</span>
+            </div>
+          )}
+          {showSpanColors && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Hub</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2563eb, #e0e0e0, #dc2626)' }} />
+              <span>Shroud</span>
             </div>
           )}
         </div>
@@ -1184,12 +1457,16 @@ export default function ImpellerViewer({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
-          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
+          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
+          <ControlButton label={showWireframe ? '◉ Wireframe' : '○ Wireframe'} onClick={() => setShowWireframe(w => !w)} />
+          <ControlButton label={showBladeNumbers ? '◉ N.' : '○ N.'} onClick={() => setShowBladeNumbers(b => !b)} />
+          <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
+          <ControlButton label={showMeridionalLines ? '◉ Meridional' : '○ Meridional'} onClick={() => setShowMeridionalLines(m => !m)} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>
             <input type="range" min={0} max={100} step={1} value={explodeAmount}
@@ -1286,7 +1563,7 @@ export default function ImpellerViewer({
       <div className="viewer-overlay viewer-overlay-tl">
         <div className="glass-panel" style={{ padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 12 }}>
           <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13 }}>HPE</span>
-          {!showColormap && !showLoadingMap && (
+          {!showColormap && !showLoadingMap && !showSpanColors && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo" />
@@ -1304,6 +1581,13 @@ export default function ImpellerViewer({
               <span>Baixo rVθ</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2060ff, #ffffff, #ff3030)' }} />
               <span>Alto rVθ</span>
+            </div>
+          )}
+          {showSpanColors && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Hub</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2563eb, #e0e0e0, #dc2626)' }} />
+              <span>Shroud</span>
             </div>
           )}
           {data && (
@@ -1353,12 +1637,16 @@ export default function ImpellerViewer({
         <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 700 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => setPaused(p => !p)} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false) }} />
-          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false) }} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
+          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
+          <ControlButton label={showWireframe ? '◉ Wireframe' : '○ Wireframe'} onClick={() => setShowWireframe(w => !w)} />
+          <ControlButton label={showBladeNumbers ? '◉ N.' : '○ N.'} onClick={() => setShowBladeNumbers(b => !b)} />
+          <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
+          <ControlButton label={showMeridionalLines ? '◉ Meridional' : '○ Meridional'} onClick={() => setShowMeridionalLines(m => !m)} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>
             <input type="range" min={0} max={100} step={1} value={explodeAmount}

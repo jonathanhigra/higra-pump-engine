@@ -84,40 +84,73 @@ def _meridional_curves(
     r1: float, r1_hub: float, r2: float,
     b1: float, b2: float, n_chord: int,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Meridional curves for centrifugal impeller.
+    """Meridional curves for centrifugal pump impeller.
 
-    Realistic profile with sharp elbow transition:
-    - Short axial zone at inlet (eye) — nearly vertical
-    - Sharp elbow at ~25% chord — tight radius bend
-    - Long flat radial zone — nearly horizontal disc to D2
+    Coordinate system: r = radial, z = axial (z=0 is the back-disc plane).
+    The impeller extends from z=0 (back disc) upward to z=z_eye (inlet).
 
-    This matches real centrifugal pump impellers (Gülich Fig. 7.1).
+    Hub profile (inner wall):
+      - Back disc: flat at z=0 from r=r_shaft to r=r_bend
+      - Bend: quarter-circle arc from radial to axial
+      - Eye tube: nearly vertical up to z=z_eye at r=r1_hub
+
+    Shroud profile (outer wall):
+      - Offset from hub by passage width b(t)
+      - At inlet: offset radially outward (r direction)
+      - At outlet: offset axially (z direction)
+
+    This produces the classic centrifugal pump impeller shape:
+    flat disc with concave hub rising to axial eye.
     """
-    # Axial depth: ~20% of D2 gives realistic flat disc
-    z_axial = 0.20 * (2 * r2)
+    # Eye depth (how far the inlet tube extends axially above the disc)
+    z_eye = r1 * 0.9  # proportional to inlet radius
+
+    # Bend radius: where the hub transitions from radial to axial
+    r_bend = r1_hub + (r1 - r1_hub) * 0.5
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
+        # t=0: outlet (D2, z=0), t=1: inlet (eye, z=z_eye)
+        # We build from OUTLET to INLET (standard meridional direction)
 
-        # Hub: quarter-circle arc with sharp elbow (power=2.5)
-        # Higher power = sharper transition from axial to radial = flatter disc
-        arc = (math.pi / 2) * (t ** 2.5)
-        sin_a = math.sin(arc)
-        cos_a = math.cos(arc)
+        if t < 0.55:
+            # Radial disc zone: flat at z ≈ 0, r goes from r2 to r_bend
+            s = t / 0.55  # 0→1
+            r_h = r2 - (r2 - r_bend) * s
+            z_h = 0.0
+        elif t < 0.80:
+            # Bend zone: quarter-circle transition
+            s = (t - 0.55) / 0.25  # 0→1
+            arc = s * math.pi / 2
+            bend_r = r_bend - r1_hub  # bend radius
+            r_h = r1_hub + bend_r * math.cos(arc)
+            z_h = bend_r * math.sin(arc)
+        else:
+            # Axial eye zone: nearly vertical
+            s = (t - 0.80) / 0.20  # 0→1
+            r_h = r1_hub
+            z_h = (r_bend - r1_hub) + s * (z_eye - (r_bend - r1_hub))
 
-        # Hub arc: (r1_hub, z_axial) → (r2, 0)
-        r_h = r1_hub + (r2 - r1_hub) * sin_a
-        z_h = z_axial * cos_a  # cos goes from 1 (inlet) to 0 (outlet)
+        # Passage width: b2 at outlet → b1 at inlet
+        b_t = b2 + t * (b1 - b2)
 
-        # Passage width tapers b1 → b2
-        b_t = b1 + t * (b2 - b1)
-
-        # Shroud offset perpendicular to hub arc
-        r_s = r_h + b_t * cos_a
-        z_s = z_h + b_t * sin_a
+        # Shroud offset direction:
+        # In radial zone (t<0.55): offset in +z (above hub)
+        # In bend zone: blend between +z and +r
+        # In axial zone (t>0.80): offset in +r (outward from hub)
+        if t < 0.55:
+            r_s = r_h
+            z_s = z_h + b_t
+        elif t < 0.80:
+            blend = (t - 0.55) / 0.25  # 0→1 (radial→axial blend)
+            r_s = r_h + b_t * blend
+            z_s = z_h + b_t * (1.0 - blend * 0.3)
+        else:
+            r_s = r_h + b_t
+            z_s = z_h
 
         hub_rz.append((r_h, z_h))
         shroud_rz.append((r_s, z_s))
@@ -129,22 +162,29 @@ def _hub_with_shaft(
     hub_rz: list[tuple[float, float]],
     r1_hub: float,
 ) -> list[tuple[float, float]]:
-    """Add shaft stub and hub back-disc for visual completeness."""
+    """Add shaft stub and hub back-disc for visual completeness.
+
+    The hub_rz goes from outlet (r2, z=0) to inlet (r1_hub, z_eye).
+    We add:
+    - Back disc: at z=0, from r_shaft to r2 (closes the back)
+    - Shaft stub: at inlet, from r1_hub down to r_shaft
+    """
     if not hub_rz:
         return hub_rz
     r_shaft = r1_hub * 0.35
-    r_in, z_in = hub_rz[0]
-    r_out, z_out = hub_rz[-1]
 
-    # Shaft cylinder at inlet: from shaft radius to r_in, at z_in
-    shaft_top = (r_shaft, z_in + (z_out - z_in) * 0.15)
-    shaft_bot = (r_in, z_in)
+    # hub_rz[0] = outlet (r2, 0), hub_rz[-1] = inlet (r1_hub, z_eye)
+    r_out, z_out = hub_rz[0]   # outlet — back disc plane
+    r_in, z_in = hub_rz[-1]    # inlet — eye top
 
-    # Hub back disc at outlet: from r_out back to shaft radius, at z_out
-    disc_outer = (r_out, z_out)
-    disc_inner = (r_shaft, z_out)
+    # Back disc: flat ring from shaft to r2 at z=0
+    disc = [(r_shaft, z_out), (r_out, z_out)]
 
-    return [shaft_top, shaft_bot] + hub_rz + [disc_outer, disc_inner]
+    # Shaft stub at inlet eye: cylinder from r_shaft to r1_hub at z_eye
+    shaft = [(r_shaft, z_in)]
+
+    # Profile: disc_inner → disc_outer → hub_curve → shaft_top
+    return disc + hub_rz + shaft
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +220,11 @@ def _integrate_camber_logarithmic(
     beta1_rad: float, beta2_rad: float,
     s: float,  # span fraction 0=hub 1=shroud
 ) -> list[tuple[float, float, float]]:
-    """Build camber (r, z, theta) by logarithmic spiral integration."""
+    """Build camber (r, z, theta) by logarithmic spiral integration.
+
+    hub_rz goes from outlet (r2, z=0) to inlet (r1, z=z_eye).
+    So t=0 is outlet (beta2) and t=1 is inlet (beta1).
+    """
     n = len(hub_rz)
     theta = 0.0
     camber = []
@@ -188,12 +232,13 @@ def _integrate_camber_logarithmic(
         t = i / (n - 1)
         r = hub_rz[i][0] + s * (shroud_rz[i][0] - hub_rz[i][0])
         z = hub_rz[i][1] + s * (shroud_rz[i][1] - hub_rz[i][1])
-        beta = beta1_rad + t * (beta2_rad - beta1_rad)
+        # t=0 → outlet (beta2), t=1 → inlet (beta1)
+        beta = beta2_rad + t * (beta1_rad - beta2_rad)
         camber.append((r, z, theta))
         if i < n - 1:
             r_next = hub_rz[i+1][0] + s * (shroud_rz[i+1][0] - hub_rz[i+1][0])
             dr = r_next - r
-            beta_next = beta1_rad + (i + 1) / (n - 1) * (beta2_rad - beta1_rad)
+            beta_next = beta2_rad + (i + 1) / (n - 1) * (beta1_rad - beta2_rad)
             b_mid = (beta + beta_next) / 2
             r_mid = (r + r_next) / 2
             if abs(math.tan(b_mid)) > 1e-10 and r_mid > 1e-6:

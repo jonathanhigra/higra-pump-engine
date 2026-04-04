@@ -91,7 +91,7 @@ const NAV_ITEMS: SidebarItem[] = [
     icon: <I d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm10 0a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z" /> },
   { key: 'design', label: 'Design', defaultTab: 'results',
     icon: <I d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" /> },
-  { key: 'geometry', label: 'Geometria', defaultTab: '3d',
+  { key: 'geometry', label: 'Geometria', defaultTab: 'meridional-drag',
     icon: <I d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /> },
   { key: 'analysis', label: 'Análise', defaultTab: 'velocity',
     icon: <I d="M3 12h4l3-9 4 18 3-9h4" /> },

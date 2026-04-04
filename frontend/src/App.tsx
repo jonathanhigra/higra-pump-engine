@@ -347,20 +347,22 @@ export default function App() {
   // Tabs that need full width (no 2-column layout with SizingForm)
   const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize']
 
-  // === DESIGN — fullscreen tabs (3D viewer) ===
+  // === DESIGN — 3D viewer (now with sub-tabs visible) ===
   if (tab === '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout} noPad>
-        <ImpellerViewer
-          flowRate={opPoint.flowRate}
-          head={opPoint.head}
-          rpm={opPoint.rpm}
-          fullscreen
-          loading={loading}
-          sizing={sizing}
-          onRunSizing={handleRunSizing}
-        />
+        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
+        <div style={{ height: 'calc(100vh - 180px)', borderRadius: 8, overflow: 'hidden' }}>
+          <ImpellerViewer
+            flowRate={opPoint.flowRate}
+            head={opPoint.head}
+            rpm={opPoint.rpm}
+            fullscreen
+            loading={loading}
+            sizing={sizing}
+            onRunSizing={handleRunSizing}
+          />
+        </div>
         <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
         {overlays}
       </Layout>

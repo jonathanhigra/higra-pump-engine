@@ -160,9 +160,8 @@ def _meridional_curves(
             r_s = r_h + b_t
             z_s = z_h
 
-        # Enforce shroud r monotonic: must not increase outlet→inlet
-        if shroud_rz and r_s > shroud_rz[-1][0] + 0.001:
-            r_s = shroud_rz[-1][0]
+        # Note: shroud r is NOT monotonic — it decreases outlet→bend then increases bend→eye.
+        # This is correct: the shroud wraps around the eye opening.
 
         hub_rz.append((r_h, z_h))
         shroud_rz.append((r_s, z_s))
@@ -473,8 +472,9 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r1_hub = float(mp.get("d1_hub", d1 * 0.35)) / 2.0
     r2 = d2 / 2.0
 
-    # Fix 1: Match ADT thickness — 1.3% of D2
-    blade_thickness = max(0.002, min(0.008, d2 * 0.013))
+    # Fix 1: Match ADT thickness — 1.3% of D2 as ACTUAL max thickness
+    # NACA formula gives peak at ~50% of t_max, so t_max = 2 * desired_actual
+    blade_thickness = max(0.004, min(0.016, d2 * 0.026))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)

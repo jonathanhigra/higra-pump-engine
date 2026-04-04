@@ -46,6 +46,15 @@ export default function ProgressStepper({ sizing, activeTab, completedSteps, onS
     }
   }
 
+  // Find the next incomplete step (first non-completed step after the current one)
+  let nextIncompleteIdx = -1
+  for (let i = 0; i < STEPS.length; i++) {
+    if (!completedSet.has(STEPS[i].id) && i !== activeIdx) {
+      nextIncompleteIdx = i
+      break
+    }
+  }
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 0,
@@ -55,6 +64,7 @@ export default function ProgressStepper({ sizing, activeTab, completedSteps, onS
       {STEPS.map((step, i) => {
         const isCompleted = completedSet.has(step.id)
         const isCurrent = i === activeIdx
+        const isNextIncomplete = i === nextIncompleteIdx
         const isFuture = !isCompleted && !isCurrent
         const isClickable = isCompleted && onStepClick
 
@@ -99,6 +109,11 @@ export default function ProgressStepper({ sizing, activeTab, completedSteps, onS
                   color: '#fff',
                   boxShadow: '0 0 0 3px rgba(0,160,223,0.25)',
                   animation: 'pulse-step 2s ease-in-out infinite',
+                } : isNextIncomplete ? {
+                  background: 'transparent',
+                  border: '2px solid var(--accent)',
+                  color: 'var(--accent)',
+                  animation: 'pulse-next-step 2s ease-in-out infinite',
                 } : {
                   background: 'transparent',
                   border: '2px solid var(--border-primary)',
@@ -131,6 +146,10 @@ export default function ProgressStepper({ sizing, activeTab, completedSteps, onS
         @keyframes pulse-step {
           0%, 100% { box-shadow: 0 0 0 3px rgba(0,160,223,0.25); }
           50% { box-shadow: 0 0 0 6px rgba(0,160,223,0.1); }
+        }
+        @keyframes pulse-next-step {
+          0%, 100% { box-shadow: 0 0 0 0px rgba(0,160,223,0); border-color: var(--accent); }
+          50% { box-shadow: 0 0 0 4px rgba(0,160,223,0.15); border-color: var(--accent); }
         }
       `}</style>
     </div>

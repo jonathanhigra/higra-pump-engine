@@ -50,6 +50,54 @@ function nqBadge(nq: number): { label: string; color: string; icon: string } {
   return { label: `Nq \u2248 ${nq.toFixed(0)} (fora de faixa)`, color: '#ef4444', icon: '\u26A0' }
 }
 
+/* SVG silhouette icons for impeller type based on Nq */
+function ImpellerSilhouette({ nq }: { nq: number }) {
+  if (nq <= 0) return null
+  const size = 24
+  const color = 'var(--accent)'
+  // Radial: flat disc
+  if (nq < 30) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+        <ellipse cx="12" cy="12" rx="10" ry="3" />
+        <line x1="12" y1="9" x2="12" y2="15" />
+        <circle cx="12" cy="12" r="2" fill={color} fillOpacity="0.3" />
+      </svg>
+    )
+  }
+  // Radial wide eye
+  if (nq < 80) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+        <ellipse cx="12" cy="13" rx="10" ry="4" />
+        <ellipse cx="12" cy="11" rx="5" ry="2" />
+        <line x1="12" y1="9" x2="12" y2="17" />
+        <circle cx="12" cy="12" r="1.5" fill={color} fillOpacity="0.3" />
+      </svg>
+    )
+  }
+  // Mixed-flow: angled profile
+  if (nq < 160) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+        <path d="M4 16 L12 8 L20 16" />
+        <ellipse cx="12" cy="16" rx="8" ry="2.5" />
+        <circle cx="12" cy="12" r="1.5" fill={color} fillOpacity="0.3" />
+      </svg>
+    )
+  }
+  // Axial: propeller shape
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+      <circle cx="12" cy="12" r="2" fill={color} fillOpacity="0.3" />
+      <path d="M12 10 C8 4, 4 6, 6 10" />
+      <path d="M14 12 C20 8, 18 4, 14 6" />
+      <path d="M12 14 C16 20, 20 18, 18 14" />
+      <path d="M10 12 C4 16, 6 20, 10 18" />
+    </svg>
+  )
+}
+
 function rangeHint(value: number, min: number, max: number, typical: string): { text: string; warn: boolean } {
   if (!value || value === 0) return { text: typical, warn: false }
   if (value < min || value > max) return { text: `\u26A0 Valor fora da faixa tipica (${typical})`, warn: true }
@@ -84,6 +132,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [customMu, setCustomMu] = useState('1.0e-3')
   const [error, setError] = useState<string | null>(null)
   const [designHint, setDesignHint] = useState<DesignHint | null>(null)
+  const [calculated, setCalculated] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fluid = FLUIDS.find(f => f.id === fluidId) || FLUIDS[0]
@@ -167,6 +216,8 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
       const lossData = await getLossBreakdown(q_m3s, h, n).catch(() => null)
       const stressData = await runStressAnalysis(q_m3s, h, n).catch(() => null)
       onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: q_m3h, head: h, rpm: n })
+      setCalculated(true)
+      setTimeout(() => setCalculated(false), 2000)
     } catch (err: any) {
       setError(err.message || 'Erro ao calcular')
     } finally {
@@ -253,12 +304,15 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           </button>
         </div>
 
-        {/* Nq live badge */}
+        {/* Nq live badge with machine silhouette */}
         {nq > 0 && (
-          <div style={{ marginBottom: 10, padding: '4px 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'rgba(0,0,0,0.3)', border: `1px solid ${badge.color}40` }}>
-            {badge.icon && <span style={{ fontSize: 9, color: badge.color, flexShrink: 0 }}>{badge.icon}</span>}
-            <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
+          <div style={{ marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: '4px 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(0,0,0,0.3)', border: `1px solid ${badge.color}40` }}>
+              {badge.icon && <span style={{ fontSize: 9, color: badge.color, flexShrink: 0 }}>{badge.icon}</span>}
+              <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
+            </div>
+            <ImpellerSilhouette nq={nq} />
           </div>
         )}
 
@@ -298,6 +352,14 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             value={unit === 'm3h' ? flowRate : (q_m3h / 3600).toFixed(6)}
             onChange={e => setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600))}
             placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'} />
+          <input type="range" min={0} max={1000} step={1}
+            value={Math.round(Math.log10(Math.max(q_m3h, 1)) / Math.log10(5000) * 1000)}
+            onChange={e => {
+              const logVal = (parseFloat(e.target.value) / 1000) * Math.log10(5000)
+              const val = Math.pow(10, logVal)
+              setFlowRate(unit === 'm3h' ? val.toFixed(1) : (val / 3600).toFixed(5))
+            }}
+            className="hpe-slider" />
           {(() => {
             const hint = rangeHint(q_m3h, 1, 10000, 'T\u00EDpico: 1-10000 m\u00B3/h')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
@@ -307,6 +369,10 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         <div style={fieldStyle}>
           <label style={labelStyle}>Altura Total H [m]</label>
           <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30" />
+          <input type="range" min={1} max={500} step={1}
+            value={Math.min(500, Math.max(1, parseFloat(head) || 1))}
+            onChange={e => setHead(e.target.value)}
+            className="hpe-slider" />
           {(() => {
             const hint = rangeHint(parseFloat(head) || 0, 1, 500, 'T\u00EDpico: 1-500 m')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
@@ -316,10 +382,50 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         <div style={fieldStyle}>
           <label style={labelStyle}>Rota\u00E7\u00E3o n [rpm]</label>
           <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750" />
+          <input type="range" min={300} max={6000} step={10}
+            value={Math.min(6000, Math.max(300, parseFloat(rpm) || 300))}
+            onChange={e => setRpm(e.target.value)}
+            className="hpe-slider" />
           {(() => {
             const hint = rangeHint(parseFloat(rpm) || 0, 300, 15000, 'T\u00EDpico: 300-15000 rpm')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+        </div>
+
+        {/* Inline quick-fill examples */}
+        <div style={{ marginBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Industrial', q: '100', h: '32', n: '1750' },
+              { label: 'Alta press\u00E3o', q: '50', h: '80', n: '3550' },
+              { label: 'Grande vaz\u00E3o', q: '1000', h: '20', n: '1750' },
+            ].map(ex => (
+              <button key={ex.label} type="button"
+                onClick={() => {
+                  setFlowRate(unit === 'm3h' ? ex.q : (parseFloat(ex.q) / 3600).toFixed(5))
+                  setHead(ex.h)
+                  setRpm(ex.n)
+                }}
+                style={{
+                  fontSize: 10, padding: '2px 8px', borderRadius: 12,
+                  border: '1px solid var(--border-primary)',
+                  background: 'transparent', color: 'var(--text-muted)',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  lineHeight: '16px',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
+                  ;(e.currentTarget as HTMLElement).style.color = 'var(--accent)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-primary)'
+                  ;(e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'
+                }}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -368,7 +474,14 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         )}
       </div>
 
-      <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+      <button type="submit" className="btn-primary" disabled={loading}
+        style={{
+          width: '100%',
+          background: calculated ? '#22c55e' : undefined,
+          borderColor: calculated ? '#22c55e' : undefined,
+          animation: calculated ? 'btnPulse 300ms ease' : undefined,
+          transition: 'background 0.3s, border-color 0.3s',
+        }}>
         {loading
           ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -376,6 +489,10 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
                 <path d="M21 12a9 9 0 11-6.219-8.56" />
               </svg>
               Calculando...
+            </span>
+          : calculated
+          ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              &#10003; Calculado
             </span>
           : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -389,7 +506,48 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         </div>
       )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes btnPulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .hpe-slider {
+          width: 100%;
+          height: 4px;
+          margin: 6px 0 0 0;
+          -webkit-appearance: none;
+          appearance: none;
+          background: var(--border-primary);
+          border-radius: 2px;
+          outline: none;
+          cursor: pointer;
+          accent-color: var(--accent);
+        }
+        .hpe-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: var(--accent);
+          cursor: pointer;
+          border: none;
+        }
+        .hpe-slider::-moz-range-thumb {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: var(--accent);
+          cursor: pointer;
+          border: none;
+        }
+        .hpe-slider::-webkit-slider-runnable-track {
+          height: 4px;
+          border-radius: 2px;
+        }
+        .hpe-slider::-moz-range-track {
+          height: 4px;
+          border-radius: 2px;
+          background: var(--border-primary);
+        }
+      `}</style>
     </form>
   )
 }

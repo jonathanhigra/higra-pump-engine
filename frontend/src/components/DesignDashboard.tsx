@@ -98,8 +98,39 @@ function MiniSizingForm({ onRun }: { onRun: (q: number, h: number, n: number) =>
 export default function DesignDashboard({ sizing, previousSizing, opPoint, onNavigate, onRunSizing, onWhatIf }: Props) {
   const [showMiniForm, setShowMiniForm] = useState(false)
 
-  /* ── Empty state — no sizing yet ────────────────────────────────────── */
+  /* ── Empty state — no sizing yet (3-step wizard) ─────────────────── */
   if (!sizing) {
+    const wizardSteps = [
+      {
+        num: 1,
+        title: 'Escolha um template ou insira dados',
+        desc: 'Use a barra lateral ou preencha Q, H e RPM',
+        icon: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z',
+        enabled: true,
+        onClick: () => onNavigate('templates'),
+      },
+      {
+        num: 2,
+        title: 'Clique em Executar',
+        desc: 'O motor calcula dimensionamento, curvas e perdas',
+        icon: 'M13 10V3L4 14h7v7l9-11h-7z',
+        enabled: true,
+        onClick: () => {
+          // Focus the sizing submit button in the left panel
+          const btn = document.querySelector('.btn-primary[type="submit"]') as HTMLElement
+          if (btn) { btn.focus(); btn.style.boxShadow = '0 0 0 3px rgba(0,160,223,0.5)'; setTimeout(() => { btn.style.boxShadow = '' }, 2000) }
+        },
+      },
+      {
+        num: 3,
+        title: 'Explore os resultados',
+        desc: 'Geometria 3D, curvas, perdas e otimizacao',
+        icon: 'M1 12s4-8 11-8 11 8-4 8-11 8-11-8z',
+        enabled: false,
+        onClick: () => {},
+      },
+    ]
+
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -113,93 +144,71 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
         <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
           Comece seu projeto
         </div>
+
+        {/* 3-step wizard cards */}
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 16, width: '100%', maxWidth: 700,
         }}>
-          {/* Card: Templates */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => onNavigate('templates')}
-            onKeyDown={e => { if (e.key === 'Enter') onNavigate('templates') }}
-            style={{
-              background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-              borderRadius: 10, padding: 20, cursor: 'pointer',
-              transition: 'border-color 0.15s, background 0.15s',
-              textAlign: 'center',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-hover-bg)'
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--card-border)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
-            }}
-          >
-            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
-              <SvgIcon d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" size={28} />
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Templates</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              Escolha um ponto de partida
-            </div>
-          </div>
-
-          {/* Card: Quick sizing */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setShowMiniForm(v => !v)}
-            onKeyDown={e => { if (e.key === 'Enter') setShowMiniForm(v => !v) }}
-            style={{
-              background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-              borderRadius: 10, padding: 20, cursor: 'pointer',
-              transition: 'border-color 0.15s, background 0.15s',
-              textAlign: 'center',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-hover-bg)'
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--card-border)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
-            }}
-          >
-            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
-              <SvgIcon d="M13 10V3L4 14h7v7l9-11h-7z" size={28} />
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-              Dimensionamento R\u00E1pido
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              Informe Q, H e RPM
-            </div>
-            {showMiniForm && (
-              <div onClick={e => e.stopPropagation()}>
-                <MiniSizingForm onRun={onRunSizing} />
+          {wizardSteps.map(ws => (
+            <div
+              key={ws.num}
+              role={ws.enabled ? 'button' : undefined}
+              tabIndex={ws.enabled ? 0 : undefined}
+              onClick={() => ws.enabled && ws.onClick()}
+              onKeyDown={e => { if (ws.enabled && e.key === 'Enter') ws.onClick() }}
+              style={{
+                background: 'var(--card-bg)',
+                border: `1px solid ${ws.enabled ? 'var(--card-border)' : 'var(--border-primary)'}`,
+                borderRadius: 10, padding: 20,
+                cursor: ws.enabled ? 'pointer' : 'default',
+                opacity: ws.enabled ? 1 : 0.45,
+                transition: 'border-color 0.15s, background 0.15s',
+                textAlign: 'center', position: 'relative',
+              }}
+              onMouseEnter={e => {
+                if (ws.enabled) {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
+                  ;(e.currentTarget as HTMLElement).style.background = 'var(--card-hover-bg)'
+                }
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--card-border)'
+                ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
+              }}
+            >
+              {/* Step number badge */}
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: ws.enabled ? 'var(--accent)' : 'var(--border-primary)',
+                color: ws.enabled ? '#fff' : 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 13, fontWeight: 700, margin: '0 auto 10px',
+              }}>
+                {ws.num}
               </div>
-            )}
-          </div>
-
-          {/* Card: Import */}
-          <div style={{
-            background: 'var(--card-bg)', border: '1px dashed var(--border-primary)',
-            borderRadius: 10, padding: 20, textAlign: 'center', opacity: 0.5,
-          }}>
-            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
-              <SvgIcon d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" size={28} />
+              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
+                <SvgIcon d={ws.icon} size={24} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {ws.title}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {ws.desc}
+              </div>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-              Importar Projeto
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              Em breve
-            </div>
-          </div>
+          ))}
         </div>
+
+        {/* Legacy quick-start: mini form */}
+        {showMiniForm && (
+          <div style={{
+            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+            borderRadius: 10, padding: 20, width: '100%', maxWidth: 400,
+          }} onClick={e => e.stopPropagation()}>
+            <MiniSizingForm onRun={onRunSizing} />
+          </div>
+        )}
       </div>
     )
   }

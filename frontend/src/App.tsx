@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import t from './i18n/pt-br'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -27,6 +27,7 @@ import ParetoPanel from './components/ParetoPanel'
 import LeanSweepPanel from './components/LeanSweepPanel'
 import LETEEditor from './components/LETEEditor'
 import MeridionalDragEditor from './components/MeridionalDragEditor'
+import OptimizationPresets from './components/OptimizationPresets'
 import TemplateSelector from './components/TemplateSelector'
 import StatusBar from './components/StatusBar'
 import DesignDashboard from './components/DesignDashboard'
@@ -36,9 +37,12 @@ import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
 import HistoryPanel from './components/HistoryPanel'
 import type { HistoryEntry } from './components/HistoryPanel'
+import NextStepBanner from './components/NextStepBanner'
 import VersionPanel from './components/VersionPanel'
 import VersionCompareModal from './components/VersionCompareModal'
 import GuidedTour from './components/GuidedTour'
+import FloatingMetrics from './components/FloatingMetrics'
+import DesignQualityBadge from './components/DesignQualityBadge'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
@@ -173,6 +177,7 @@ export default function App() {
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [previousSizing, setPreviousSizing] = useState<SizingResult | null>(null)
+  const resultsRef = useRef<HTMLDivElement | null>(null)
   const [tourActive, setTourActive] = useState(() => !localStorage.getItem('hpe_tour_completed'))
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
   const [versions, setVersions] = useState<VersionEntry[]>([])
@@ -370,6 +375,7 @@ export default function App() {
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
       <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
       {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
+      <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
     </>
   )
 
@@ -454,7 +460,12 @@ export default function App() {
             </div>
           )}
           {tab === 'compare' && <DesignComparison />}
-          {tab === 'optimize' && <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />}
+          {tab === 'optimize' && (
+            <>
+              <OptimizationPresets defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
+              <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
+            </>
+          )}
           {!sizing && tab !== 'templates' && (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
               Execute um dimensionamento primeiro para usar esta funcionalidade.
@@ -489,6 +500,25 @@ export default function App() {
 
       <div className="content-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => handleNavigate('projects')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 11, color: 'var(--text-muted)', background: 'none',
+              border: 'none', cursor: 'pointer', padding: '2px 0',
+              fontFamily: 'var(--font-family)', whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Projetos
+          </button>
+          <span style={{ color: 'var(--border-primary)', fontSize: 14, userSelect: 'none' }}>/</span>
           <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
           <VersionPanel
             versions={versions}
@@ -498,6 +528,7 @@ export default function App() {
             onDelete={handleVersionDelete}
           />
           <HistoryPanel history={history} onRestore={handleHistoryRestore} />
+          {sizing && <DesignQualityBadge sizing={sizing} />}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {sizing && (
@@ -572,7 +603,7 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL — results area */}
-        <div>
+        <div ref={resultsRef}>
           {sizing ? (
             <>
               {/* Results: dashboard overview + detailed results + reference */}
@@ -635,6 +666,7 @@ export default function App() {
               onRunSizing={handleRunSizing}
             />
           )}
+          <NextStepBanner currentTab={tab} hasSizing={!!sizing} onNavigate={(t) => handleNavigate('design', t)} />
         </div>
       </div>
       <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />

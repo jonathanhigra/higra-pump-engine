@@ -240,26 +240,36 @@ def _integrate_camber_logarithmic(
     hub_rev = list(reversed(hub_rz))
     shr_rev = list(reversed(shroud_rz))
 
-    # [Action 2] Wrap clamp 180° — allows natural variation but prevents excess
-    max_wrap = math.radians(180.0)
+    # Target wrap: ~140° at shroud, naturally more at hub due to smaller radius
+    # Scale beta to achieve target wrap — use effective beta that gives ~150° at mid-span
+    r_outlet = hub_rev[-1][0] + s * (shr_rev[-1][0] - hub_rev[-1][0])
+    r_inlet = hub_rev[0][0] + s * (shr_rev[0][0] - hub_rev[0][0])
+    # Target wrap at this span (hub gets more, shroud gets less)
+    target_wrap = math.radians(130 + 30 * (1 - s))  # hub~160°, shroud~130°
+
+    # Compute what beta_eff gives target wrap: wrap = ln(r2/r1)/tan(beta_eff)
+    r_ratio = r_outlet / max(r_inlet, 0.001)
+    if r_ratio > 1 and target_wrap > 0:
+        beta_eff = math.atan(math.log(r_ratio) / target_wrap)
+    else:
+        beta_eff = (beta1_rad + beta2_rad) / 2
 
     theta = 0.0
     camber_rev = []
     for i in range(n):
-        t = i / (n - 1)   # t=0: inlet, t=1: outlet
+        t = i / (n - 1)
         r = hub_rev[i][0] + s * (shr_rev[i][0] - hub_rev[i][0])
         z = hub_rev[i][1] + s * (shr_rev[i][1] - hub_rev[i][1])
-        # t=0 → inlet (beta1), t=1 → outlet (beta2)
+        # Blend between sizing betas and effective beta for wrap control
         beta = beta1_rad + t * (beta2_rad - beta1_rad)
-        camber_rev.append((r, z, min(theta, max_wrap)))
+        beta_use = 0.3 * beta + 0.7 * beta_eff  # mostly use effective beta
+        camber_rev.append((r, z, theta))
         if i < n - 1:
             r_next = hub_rev[i+1][0] + s * (shr_rev[i+1][0] - hub_rev[i+1][0])
-            dr = r_next - r   # positive: r increases from inlet to outlet
-            beta_next = beta1_rad + (i + 1) / (n - 1) * (beta2_rad - beta1_rad)
-            b_mid = (beta + beta_next) / 2
+            dr = r_next - r
             r_mid = (r + r_next) / 2
-            if abs(math.tan(b_mid)) > 1e-10 and r_mid > 1e-6:
-                theta += dr / (r_mid * math.tan(b_mid))
+            if abs(math.tan(beta_use)) > 1e-10 and r_mid > 1e-6 and abs(dr) > 1e-8:
+                theta += dr / (r_mid * math.tan(beta_use))
 
     # Reverse back to outlet→inlet order (matching hub_rz)
     return list(reversed(camber_rev))

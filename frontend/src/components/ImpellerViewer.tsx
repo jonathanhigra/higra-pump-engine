@@ -1454,60 +1454,44 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{t.dragToRotate}</span>
-          <ControlButton label={paused ? '▶' : '⏸'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
-          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
-          <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
-          <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
-          <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
-          <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
-          <ControlButton label={showWireframe ? '◉ Wireframe' : '○ Wireframe'} onClick={() => setShowWireframe(w => !w)} />
-          <ControlButton label={showBladeNumbers ? '◉ N.' : '○ N.'} onClick={() => setShowBladeNumbers(b => !b)} />
-          <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
-          <ControlButton label={showMeridionalLines ? '◉ Meridional' : '○ Meridional'} onClick={() => setShowMeridionalLines(m => !m)} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>
-            <input type="range" min={0} max={100} step={1} value={explodeAmount}
-              onChange={e => setExplodeAmount(parseFloat(e.target.value))}
-              style={{ width: 60, accentColor: 'var(--accent)' }} />
+        {/* Controls organized in rows by category */}
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Row 1: Play + Colormaps + Display */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <ControlButton label={paused ? '▶' : '⏸'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
+            <ControlButton label={turntable ? '◉ Turntable' : '○ Turntable'} onClick={() => setTurntable(t => !t)} />
+            <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
+            <ControlButton label={showColormap ? '◉ Pressão' : '○ Pressão'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
+            <ControlButton label={showLoadingMap ? '◉ rVθ' : '○ rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
+            <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
+            <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
+            <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
+            <ControlButton label={showWireframe ? '◉ Wire' : '○ Wire'} onClick={() => setShowWireframe(w => !w)} />
+            <ControlButton label={showBladeNumbers ? '◉ Nº' : '○ Nº'} onClick={() => setShowBladeNumbers(b => !b)} />
+            <ControlButton label={showDimensions ? '◉ Cotas' : '○ Cotas'} onClick={() => setShowDimensions(d => !d)} />
           </div>
-          <button
-            onClick={() => setClipZ(c => c === null ? 0 : null)}
-            style={{
-              fontSize: 10, padding: '3px 8px', borderRadius: 4,
-              border: `1px solid ${clipZ !== null ? 'var(--accent)' : 'var(--border-primary)'}`,
-              background: clipZ !== null ? 'rgba(0,160,223,0.15)' : 'transparent',
-              color: clipZ !== null ? 'var(--accent)' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
-          >
-            {clipZ !== null ? 'Corte ON' : 'Corte'}
-          </button>
-          <button
-            onClick={() => setMeridionalCut(v => !v)}
-            style={{
-              fontSize: 10, padding: '3px 8px', borderRadius: 4,
-              border: `1px solid ${meridionalCut ? '#f59e0b' : 'var(--border-primary)'}`,
-              background: meridionalCut ? 'rgba(245,158,11,0.15)' : 'transparent',
-              color: meridionalCut ? '#f59e0b' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
-          >
-            {meridionalCut ? 'Corte Meridional ON' : 'Corte Meridional'}
-          </button>
-          <ControlButton label={showDimensions ? 'Cotas ON' : 'Cotas'} onClick={() => setShowDimensions(d => !d)} />
-          <ControlButton label={showGhostOverlay ? 'Sobrepor V ON' : 'Sobrepor V anterior'} onClick={() => setShowGhostOverlay(g => !g)} />
-          <span style={{ fontSize: 9, color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 6 }}>Vistas:</span>
-          <ControlButton label="Frontal" onClick={() => setCameraPos([0, 0, 5])} />
-          <ControlButton label="Lateral" onClick={() => setCameraPos([5, 0, 0])} />
-          <ControlButton label="Topo" onClick={() => setCameraPos([0, 5, 0])} />
-          <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
-          <ControlButton label={showVelocityArrows ? 'Vel. ON' : 'Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
-          <ControlButton label={showSections ? 'Secoes ON' : 'Secoes'} onClick={() => setShowSections(s => !s)} />
-          <ControlButton label={turntable ? 'Turntable ON' : 'Turntable'} onClick={() => setTurntable(t => !t)} />
-          <ControlButton label="PNG" onClick={handleScreenshot} />
+          {/* Row 2: Geometry + Cortes + Vistas */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
+            <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+            <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
+            <ControlButton label={showMeridionalLines ? '◉ Merid.' : '○ Merid.'} onClick={() => setShowMeridionalLines(m => !m)} />
+            <ControlButton label={showVelocityArrows ? '◉ Vel.' : '○ Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
+            <ControlButton label={showSections ? '◉ Seções' : '○ Seções'} onClick={() => setShowSections(s => !s)} />
+            <ControlButton label={meridionalCut ? '◉ Corte M' : '○ Corte M'} onClick={() => setMeridionalCut(v => !v)} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Explosão</span>
+              <input type="range" min={0} max={100} step={1} value={explodeAmount}
+                onChange={e => setExplodeAmount(parseFloat(e.target.value))}
+                style={{ width: 50, accentColor: 'var(--accent)' }} />
+            </div>
+            <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
+            <ControlButton label="Front" onClick={() => setCameraPos([0, 0, 5])} />
+            <ControlButton label="Lat" onClick={() => setCameraPos([5, 0, 0])} />
+            <ControlButton label="Top" onClick={() => setCameraPos([0, 5, 0])} />
+            <ControlButton label="Iso" onClick={() => setCameraPos([2.5, 1.8, 3.5])} />
+            <ControlButton label="PNG" onClick={handleScreenshot} />
+          </div>
           <select
             value={resolution}
             onChange={e => setResolution(e.target.value)}

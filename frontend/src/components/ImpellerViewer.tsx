@@ -440,26 +440,27 @@ function HubMesh({ profile }: { profile: BladePoint[] }) {
 /** Shroud surface — solid (closed impeller) or transparent (open impeller) */
 function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean }) {
   const geo = useMemo(() => buildRevolutionGeo(profile, 96), [profile])
-  // Shroud disc — flat annular ring at inlet z-plane (closes the top)
-  const discGeo = useMemo(() => {
+  // Shroud outer rim — connects shroud shell to hub disc at outlet (z≈0)
+  // This closes the gap between shroud and hub at the outer diameter
+  const rimGeo = useMemo(() => {
     if (!solid || profile.length < 2) return null
-    // First point = inlet (r_small, z_inlet), last = outlet (r_large, z_outlet)
-    const inlet = profile[0]
     const outlet = profile[profile.length - 1]
-    const r_inner = inlet.x  // eye radius
-    const r_outer = outlet.x // outer radius
-    const z = outlet.z       // at outlet z
+    const r_outer = outlet.x
+    const z_shroud = outlet.z
+    // Hub outlet is at z≈0, same r_outer — build a connecting strip
+    const z_hub = 0
     const segs = 96
     const pos: number[] = []
     for (let j = 0; j < segs; j++) {
       const a0 = (j / segs) * Math.PI * 2
       const a1 = ((j + 1) / segs) * Math.PI * 2
-      pos.push(r_inner * Math.cos(a0), r_inner * Math.sin(a0), z,
-               r_outer * Math.cos(a0), r_outer * Math.sin(a0), z,
-               r_inner * Math.cos(a1), r_inner * Math.sin(a1), z)
-      pos.push(r_outer * Math.cos(a0), r_outer * Math.sin(a0), z,
-               r_outer * Math.cos(a1), r_outer * Math.sin(a1), z,
-               r_inner * Math.cos(a1), r_inner * Math.sin(a1), z)
+      // Vertical strip connecting shroud outer edge to hub outer edge
+      pos.push(r_outer * Math.cos(a0), r_outer * Math.sin(a0), z_shroud,
+               r_outer * Math.cos(a0), r_outer * Math.sin(a0), z_hub,
+               r_outer * Math.cos(a1), r_outer * Math.sin(a1), z_shroud)
+      pos.push(r_outer * Math.cos(a0), r_outer * Math.sin(a0), z_hub,
+               r_outer * Math.cos(a1), r_outer * Math.sin(a1), z_hub,
+               r_outer * Math.cos(a1), r_outer * Math.sin(a1), z_shroud)
     }
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -474,9 +475,9 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
         <mesh geometry={geo} castShadow receiveShadow>
           <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
         </mesh>
-        {/* Shroud outer disc — closes the annular gap at outlet */}
-        {discGeo && (
-          <mesh geometry={discGeo} castShadow receiveShadow>
+        {/* Outer rim — vertical strip connecting shroud to hub at D2 */}
+        {rimGeo && (
+          <mesh geometry={rimGeo} castShadow receiveShadow>
             <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
           </mesh>
         )}

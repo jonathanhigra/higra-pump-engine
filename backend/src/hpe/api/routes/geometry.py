@@ -93,8 +93,9 @@ def _meridional_curves(
     The axial length L = 0.6*(r2-r1) gives a realistic flat-disc shape
     (Gülich: typical L/D2 ≈ 0.3-0.4 for centrifugal pumps).
     """
-    # Axial length: proportional to (r2-r1), capped for flat disc shape
-    z_axial = 0.55 * (r2 - r1)
+    # Axial length: L/D2 ≈ 0.30-0.35 for centrifugal pumps (Gülich)
+    # Use r2 directly for better proportions
+    z_axial = 0.32 * (2 * r2)
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []

@@ -68,3 +68,87 @@ export async function getLossBreakdown(flowRate: number, head: number, rpm: numb
   if (!res.ok) throw new Error(`Losses failed: ${res.status}`)
   return res.json()
 }
+
+// ---------------------------------------------------------------------------
+// Version History API
+// ---------------------------------------------------------------------------
+
+export interface VersionEntry {
+  id: string
+  version_number: number
+  label: string
+  nq: number
+  eta: number
+  d2_mm: number
+  npsh: number
+  power_kw: number
+  flow_rate: number
+  head: number
+  rpm: number
+  created_at: string
+}
+
+export interface VersionDetail {
+  id: string
+  version_number: number
+  label: string
+  created_at: string
+  operating_point: { flow_rate: number; head: number; rpm: number }
+  sizing_result: Record<string, any>
+}
+
+export interface VersionCompareResult {
+  a: { version: VersionEntry; sizing_result: Record<string, any> }
+  b: { version: VersionEntry; sizing_result: Record<string, any> }
+  deltas: Record<string, { a: number; b: number; delta: number; pct: number }>
+}
+
+export async function saveVersion(
+  operatingPoint: { flow_rate: number; head: number; rpm: number },
+  sizingResult: Record<string, any>,
+  projectId?: string,
+  label?: string,
+): Promise<VersionEntry> {
+  const res = await fetch(`${API_BASE}/versions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: projectId || null,
+      operating_point: operatingPoint,
+      sizing_result: sizingResult,
+      label: label || null,
+    }),
+  })
+  if (!res.ok) throw new Error(`Save version failed: ${res.status}`)
+  return res.json()
+}
+
+export async function listVersions(projectId?: string, limit = 50): Promise<VersionEntry[]> {
+  const params = new URLSearchParams()
+  if (projectId) params.set('project_id', projectId)
+  params.set('limit', String(limit))
+  const res = await fetch(`${API_BASE}/versions?${params}`)
+  if (!res.ok) throw new Error(`List versions failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getVersion(id: string): Promise<VersionDetail> {
+  const res = await fetch(`${API_BASE}/versions/${id}`)
+  if (!res.ok) throw new Error(`Get version failed: ${res.status}`)
+  return res.json()
+}
+
+export async function compareVersions(a: string, b: string): Promise<VersionCompareResult> {
+  const res = await fetch(`${API_BASE}/versions/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version_a: a, version_b: b }),
+  })
+  if (!res.ok) throw new Error(`Compare versions failed: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteVersion(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/versions/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Delete version failed: ${res.status}`)
+}

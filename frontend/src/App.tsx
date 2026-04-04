@@ -36,10 +36,13 @@ import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
 import HistoryPanel from './components/HistoryPanel'
 import type { HistoryEntry } from './components/HistoryPanel'
+import VersionPanel from './components/VersionPanel'
+import VersionCompareModal from './components/VersionCompareModal'
 import GuidedTour from './components/GuidedTour'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from './services/api'
+import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
+import type { VersionEntry, VersionCompareResult } from './services/api'
 
 /* Simple inline panels for Noise and Batch until full components are built */
 function NoisePanel({ flowRate, head, rpm, sizing }: any) {
@@ -172,6 +175,9 @@ export default function App() {
   const [previousSizing, setPreviousSizing] = useState<SizingResult | null>(null)
   const [tourActive, setTourActive] = useState(() => !localStorage.getItem('hpe_tour_completed'))
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
+  const [versions, setVersions] = useState<VersionEntry[]>([])
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
+  const [compareData, setCompareData] = useState<VersionCompareResult | null>(null)
   const { toasts, toast, dismiss } = useToast()
 
   // Helper to mark a progress step as completed
@@ -284,6 +290,17 @@ export default function App() {
       const stressData = await runStressAnalysis(qm3s, h, n).catch(() => null)
       setStress(stressData)
 
+      // Auto-save as version
+      try {
+        const ver = await saveVersion(
+          { flow_rate: qm3s, head: h, rpm: n },
+          result,
+          currentProject?.id || undefined,
+        )
+        setVersions(prev => [ver, ...prev])
+        setCurrentVersionId(ver.id)
+      } catch { /* version save is best-effort */ }
+
       toast('Dimensionamento concluido', 'success')
     } catch {
       toast('Erro ao calcular', 'error')
@@ -311,6 +328,34 @@ export default function App() {
     handleRunSizing(entry.flowRate, entry.head, entry.rpm)
   }
 
+  // Version handlers
+  const handleVersionSelect = (v: VersionEntry) => {
+    setCurrentVersionId(v.id)
+    // flow_rate from backend is in m3/s, convert to m3/h for the form
+    const qH = v.flow_rate >= 1 ? v.flow_rate : v.flow_rate * 3600
+    setOpPoint({ flowRate: qH, head: v.head, rpm: v.rpm })
+    handleRunSizing(qH, v.head, v.rpm)
+  }
+
+  const handleVersionCompare = async (a: VersionEntry, b: VersionEntry) => {
+    try {
+      const result = await compareVersions(a.id, b.id)
+      setCompareData(result)
+    } catch {
+      toast('Erro ao comparar versoes', 'error')
+    }
+  }
+
+  const handleVersionDelete = async (id: string) => {
+    try {
+      await apiDeleteVersion(id)
+      setVersions(prev => prev.filter(v => v.id !== id))
+      if (currentVersionId === id) setCurrentVersionId(null)
+    } catch {
+      toast('Erro ao excluir versao', 'error')
+    }
+  }
+
   /* Shared overlay elements rendered in all authenticated pages */
   const overlays = (
     <>
@@ -324,6 +369,7 @@ export default function App() {
       <Toast messages={toasts} onDismiss={dismiss} />
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
       <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
+      {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
     </>
   )
 
@@ -444,6 +490,13 @@ export default function App() {
       <div className="content-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
+          <VersionPanel
+            versions={versions}
+            currentVersionId={currentVersionId}
+            onSelect={handleVersionSelect}
+            onCompare={handleVersionCompare}
+            onDelete={handleVersionDelete}
+          />
           <HistoryPanel history={history} onRestore={handleHistoryRestore} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

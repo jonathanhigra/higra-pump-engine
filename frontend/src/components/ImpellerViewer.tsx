@@ -471,9 +471,17 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
   if (solid) {
     return (
       <>
-        {/* Shroud shell — solid metallic */}
-        <mesh geometry={geo} castShadow receiveShadow>
-          <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
+        {/* Shroud shell — semi-transparent metallic so blades are visible inside */}
+        <mesh geometry={geo} castShadow>
+          <meshStandardMaterial
+            color="#8890a0"
+            metalness={0.70}
+            roughness={0.25}
+            side={THREE.FrontSide}
+            transparent
+            opacity={0.45}
+            depthWrite={false}
+          />
         </mesh>
         {/* Outer rim — vertical strip connecting shroud to hub at D2 */}
         {rimGeo && (
@@ -485,7 +493,7 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
     )
   }
 
-  // Open impeller — transparent shroud
+  // Open impeller — very light transparent shroud
   return (
     <mesh geometry={geo}>
       <meshStandardMaterial
@@ -494,7 +502,7 @@ function ShroudMesh({ profile, solid }: { profile: BladePoint[]; solid?: boolean
         roughness={0.4}
         side={THREE.DoubleSide}
         transparent
-        opacity={0.12}
+        opacity={0.08}
         depthWrite={false}
       />
     </mesh>
@@ -779,8 +787,8 @@ function Scene({
 
   return (
     <>
-      {/* 3/4 elevated view — similar to TURBOdesign Suite post-processing */}
-      <PerspectiveCamera makeDefault position={[2.8, 2.2, 3.0]} fov={34} />
+      {/* Front-top view — looking into the eye, slightly elevated */}
+      <PerspectiveCamera makeDefault position={[1.8, 1.4, 4.0]} fov={34} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
       <ClipController clipZ={clipZ} />

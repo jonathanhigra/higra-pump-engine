@@ -116,23 +116,28 @@ def _meridional_curves(
         # t=0: outlet (D2, z=0), t=1: inlet (eye, z=z_eye)
         # We build from OUTLET to INLET (standard meridional direction)
 
+        # Hub surface height in radial zone: slightly above z=0
+        # This is where the blades sit (back-disc is at z=0 below)
+        z_hub_surface = b2 * 0.15  # ~15% of b2 above the back disc
+
         if t < 0.55:
-            # Radial disc zone: flat at z ≈ 0, r goes from r2 to r_bend
+            # Radial disc zone: nearly flat, r goes from r2 to r_bend
             s = t / 0.55  # 0→1
             r_h = r2 - (r2 - r_bend) * s
-            z_h = 0.0
+            z_h = z_hub_surface
         elif t < 0.80:
-            # Bend zone: quarter-circle transition
+            # Bend zone: quarter-circle transition from radial to axial
             s = (t - 0.55) / 0.25  # 0→1
             arc = s * math.pi / 2
             bend_r = r_bend - r1_hub  # bend radius
             r_h = r1_hub + bend_r * math.cos(arc)
-            z_h = bend_r * math.sin(arc)
+            z_h = z_hub_surface + bend_r * math.sin(arc)
         else:
             # Axial eye zone: nearly vertical
             s = (t - 0.80) / 0.20  # 0→1
+            z_bend_top = z_hub_surface + (r_bend - r1_hub)
             r_h = r1_hub
-            z_h = (r_bend - r1_hub) + s * (z_eye - (r_bend - r1_hub))
+            z_h = z_bend_top + s * (z_eye - z_bend_top)
 
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
@@ -173,17 +178,17 @@ def _hub_with_shaft(
         return hub_rz
     r_shaft = r1_hub * 0.35
 
-    # hub_rz[0] = outlet (r2, z≈0), hub_rz[-1] = inlet (r1_hub, z_eye)
+    # hub_rz[0] = outlet (r2, z_hub_surface), hub_rz[-1] = inlet (r1_hub, z_eye)
     r_out, z_out = hub_rz[0]   # outlet
     r_in, z_in = hub_rz[-1]    # inlet — eye top
 
-    # Back disc slightly below hub surface so blades sit ON TOP
-    z_disc = z_out - 0.002  # 2mm below hub outlet surface
+    # Back disc at z=0 (below hub blade surface)
+    disc = [(r_shaft, 0.0), (r_out, 0.0)]
 
-    # Profile: shaft_center(bottom) → disc_outer → hub_curve → shaft_center(top)
-    disc = [(r_shaft, z_disc), (r_out, z_disc)]
+    # Shaft stub at inlet eye
     shaft = [(r_shaft, z_in)]
 
+    # Profile: disc → hub_curve → shaft
     return disc + hub_rz + shaft
 
 

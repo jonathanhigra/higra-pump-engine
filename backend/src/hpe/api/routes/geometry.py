@@ -223,27 +223,38 @@ def _integrate_camber_logarithmic(
     """Build camber (r, z, theta) by logarithmic spiral integration.
 
     hub_rz goes from outlet (r2, z=0) to inlet (r1, z=z_eye).
-    So t=0 is outlet (beta2) and t=1 is inlet (beta1).
+    Integration is done REVERSED (inlet→outlet) for correct wrap direction,
+    then the result is flipped back to match the outlet→inlet order.
     """
     n = len(hub_rz)
+
+    # Build reversed arrays: inlet (i=0) → outlet (i=n-1)
+    hub_rev = list(reversed(hub_rz))
+    shr_rev = list(reversed(shroud_rz))
+
+    # Maximum wrap angle: 160° for pumps (clamp to avoid excessive spiral)
+    max_wrap = math.radians(160.0)
+
     theta = 0.0
-    camber = []
+    camber_rev = []
     for i in range(n):
-        t = i / (n - 1)
-        r = hub_rz[i][0] + s * (shroud_rz[i][0] - hub_rz[i][0])
-        z = hub_rz[i][1] + s * (shroud_rz[i][1] - hub_rz[i][1])
-        # t=0 → outlet (beta2), t=1 → inlet (beta1)
-        beta = beta2_rad + t * (beta1_rad - beta2_rad)
-        camber.append((r, z, theta))
+        t = i / (n - 1)   # t=0: inlet, t=1: outlet
+        r = hub_rev[i][0] + s * (shr_rev[i][0] - hub_rev[i][0])
+        z = hub_rev[i][1] + s * (shr_rev[i][1] - hub_rev[i][1])
+        # t=0 → inlet (beta1), t=1 → outlet (beta2)
+        beta = beta1_rad + t * (beta2_rad - beta1_rad)
+        camber_rev.append((r, z, min(theta, max_wrap)))
         if i < n - 1:
-            r_next = hub_rz[i+1][0] + s * (shroud_rz[i+1][0] - hub_rz[i+1][0])
-            dr = r_next - r
-            beta_next = beta2_rad + (i + 1) / (n - 1) * (beta1_rad - beta2_rad)
+            r_next = hub_rev[i+1][0] + s * (shr_rev[i+1][0] - hub_rev[i+1][0])
+            dr = r_next - r   # positive: r increases from inlet to outlet
+            beta_next = beta1_rad + (i + 1) / (n - 1) * (beta2_rad - beta1_rad)
             b_mid = (beta + beta_next) / 2
             r_mid = (r + r_next) / 2
             if abs(math.tan(b_mid)) > 1e-10 and r_mid > 1e-6:
                 theta += dr / (r_mid * math.tan(b_mid))
-    return camber
+
+    # Reverse back to outlet→inlet order (matching hub_rz)
+    return list(reversed(camber_rev))
 
 
 def _integrate_camber_bezier(

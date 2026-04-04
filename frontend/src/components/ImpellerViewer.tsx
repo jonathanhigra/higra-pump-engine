@@ -453,38 +453,35 @@ function BladeSurfaceMesh({
 }
 
 function BladeEdgeLines({ surface, visible }: { surface: BladeSurface; visible: boolean }) {
-  const edges = useMemo(() => {
+  const lineObjects = useMemo(() => {
     const ps = surface.ps
     const nSpan = ps.length
     const nChord = ps[0]?.length ?? 0
     if (nSpan < 2 || nChord < 2) return []
-    const lines: THREE.Vector3[][] = []
 
+    const edgeSets: THREE.Vector3[][] = []
     // LE (hub to shroud along chord=0)
-    lines.push(ps.map((row) => new THREE.Vector3(row[0].x, row[0].y, row[0].z)))
+    edgeSets.push(ps.map((row) => new THREE.Vector3(row[0].x, row[0].y, row[0].z)))
     // TE (hub to shroud along chord=last)
-    lines.push(ps.map((row) => new THREE.Vector3(row[nChord - 1].x, row[nChord - 1].y, row[nChord - 1].z)))
+    edgeSets.push(ps.map((row) => new THREE.Vector3(row[nChord - 1].x, row[nChord - 1].y, row[nChord - 1].z)))
     // Hub edge (along chord at span=0)
-    lines.push(ps[0].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+    edgeSets.push(ps[0].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
     // Shroud edge (along chord at span=last)
-    lines.push(ps[nSpan - 1].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+    edgeSets.push(ps[nSpan - 1].map((p) => new THREE.Vector3(p.x, p.y, p.z)))
 
-    return lines
+    const mat = new THREE.LineBasicMaterial({ color: '#303540' })
+    return edgeSets.map(pts => {
+      const geo = new THREE.BufferGeometry().setFromPoints(pts)
+      return new THREE.Line(geo, mat)
+    })
   }, [surface])
 
-  const geos = useMemo(() =>
-    edges.map(pts => new THREE.BufferGeometry().setFromPoints(pts)),
-    [edges],
-  )
-
-  if (!visible || geos.length === 0) return null
+  if (!visible || lineObjects.length === 0) return null
 
   return (
     <>
-      {geos.map((geo, i) => (
-        <line key={i} geometry={geo}>
-          <lineBasicMaterial color="#303540" linewidth={1} />
-        </line>
+      {lineObjects.map((obj, i) => (
+        <primitive key={i} object={obj} />
       ))}
     </>
   )
@@ -852,7 +849,7 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
 
 function Scene({
   data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, loadingData, showParticles, showVolute, closedImpeller,
-  selectedBlade, onSelectBlade, showDimensions, cameraPos,
+  selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -870,10 +867,28 @@ function Scene({
   onSelectBlade: (idx: number) => void
   showDimensions?: boolean
   cameraPos?: [number, number, number]
+  showEdges?: boolean
+  explodeAmount?: number
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
   const scale = 1.8 / r2_mm
+
+  // Assembly animation: blades fly into position on load
+  const [assemblyT, setAssemblyT] = useState(0)
+  const assemblyRef = useRef(0)
+
+  useEffect(() => {
+    assemblyRef.current = 0
+    setAssemblyT(0)
+  }, [data])
+
+  useFrame((_, delta) => {
+    if (assemblyRef.current < 1) {
+      assemblyRef.current = Math.min(1, assemblyRef.current + delta * 1.5)
+      setAssemblyT(assemblyRef.current)
+    }
+  })
 
   const camKey = cameraPos ? cameraPos.join(',') : '2.5,1.8,3.5'
   const camPosition = cameraPos || [2.5, 1.8, 3.5] as [number, number, number]
@@ -912,12 +927,26 @@ function Scene({
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} />
           <ShroudMesh profile={data.shroud_profile} solid={closedImpeller} />
-          {data.blade_surfaces.map((surf, i) => (
-            <BladeSurfaceMesh key={i} surface={surf} idx={i} showColormap={showColormap}
-              showLoadingMap={showLoadingMap}
-              loadingField={loadingData?.blade_loading?.[i] ?? null}
-              onSelect={onSelectBlade} isSelected={selectedBlade === i} />
-          ))}
+          {data.blade_surfaces.map((surf, i) => {
+            const bladeAngle = (i / data.blade_count) * Math.PI * 2
+            const eased = 1 - Math.pow(1 - assemblyT, 3)
+            const animOffset = (1 - eased) * r2_mm * 0.5
+            const animRot = (1 - eased) * Math.PI * 0.3
+            const explode = (explodeAmount ?? 0) * r2_mm * 0.3
+            const totalOffset = animOffset + explode
+            const ox = Math.cos(bladeAngle) * totalOffset
+            const oy = Math.sin(bladeAngle) * totalOffset
+            return (
+              <group key={i} position={[ox, oy, 0]} rotation={[0, 0, animRot]}>
+                <BladeSurfaceMesh surface={surf} idx={i} showColormap={showColormap}
+                  showLoadingMap={showLoadingMap}
+                  loadingField={loadingData?.blade_loading?.[i] ?? null}
+                  onSelect={onSelectBlade} isSelected={selectedBlade === i}
+                  selectedBlade={selectedBlade} />
+                <BladeEdgeLines surface={surf} visible={showEdges ?? true} />
+              </group>
+            )
+          })}
           {showSplitters && data.splitter_surfaces?.map((surf, i) => (
             <SplitterSurfaceMesh key={`spl_${i}`} surface={surf} showColormap={showColormap} />
           ))}
@@ -982,6 +1011,8 @@ export default function ImpellerViewer({
   const [showDimensions, setShowDimensions] = useState(false)
   const [showGhostOverlay, setShowGhostOverlay] = useState(false)
   const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.5, 1.8, 3.5])
+  const [showEdges, setShowEdges] = useState(true)
+  const [explodeAmount, setExplodeAmount] = useState(0)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -1089,7 +1120,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping }} style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #181d28 100%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -1158,6 +1189,13 @@ export default function ImpellerViewer({
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
+          <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>
+            <input type="range" min={0} max={100} step={1} value={explodeAmount}
+              onChange={e => setExplodeAmount(parseFloat(e.target.value))}
+              style={{ width: 60, accentColor: 'var(--accent)' }} />
+          </div>
           <button
             onClick={() => setClipZ(c => c === null ? 0 : null)}
             style={{
@@ -1320,6 +1358,13 @@ export default function ImpellerViewer({
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <ControlButton label={closedImpeller ? '◉ Fechado' : '○ Aberto'} onClick={() => setClosedImpeller(v => !v)} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
+          <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>
+            <input type="range" min={0} max={100} step={1} value={explodeAmount}
+              onChange={e => setExplodeAmount(parseFloat(e.target.value))}
+              style={{ width: 60, accentColor: 'var(--accent)' }} />
+          </div>
 
           {/* Clip plane slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

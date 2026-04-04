@@ -119,17 +119,16 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
       {/* Dropdown panel */}
       {open && (
         <div style={{
-          position: 'absolute',
-          top: '100%',
-          right: 0,
-          marginTop: 6,
-          width: 400,
-          maxHeight: 500,
+          position: 'fixed',
+          top: 80,
+          left: 260,
+          width: 380,
+          maxHeight: 'calc(100vh - 140px)',
           overflowY: 'auto',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-primary)',
           borderRadius: 10,
-          boxShadow: 'var(--shadow-md)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           zIndex: 1500,
           display: 'flex',
           flexDirection: 'column',

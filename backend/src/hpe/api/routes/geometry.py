@@ -102,56 +102,67 @@ def _meridional_curves(
     This produces the classic centrifugal pump impeller shape:
     flat disc with concave hub rising to axial eye.
     """
-    # [Action 1] Eye depth reduced: 0.12*D2 (was 0.20*D2 via r1*0.9)
+    # Eye height above disc (axial extent of the inlet)
     z_eye = 0.12 * (2 * r2)
 
-    # Bend radius: controls the sharpness of hub elbow
-    r_bend = r1_hub + (r1 - r1_hub) * 0.45
+    # Hub surface: blades sit here (slightly above back-disc z=0)
+    z_base = b2 * 0.10
 
-    # Hub surface sits slightly above back-disc (z=0)
-    z_hub_surface = b2 * 0.12
+    # Bend elbow radius
+    r_bend = r1_hub + (r1 - r1_hub) * 0.45
+    bend_r = r_bend - r1_hub
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
+        # t=0: outlet (D2), t=1: inlet (eye)
 
-        # [Action 3] Sharper bend with power=3.0 arc mapping
+        # --- HUB ---
         if t < 0.60:
-            # Radial disc zone: flat, r goes from r2 to r_bend
+            # Radial zone: flat disc from r2 to r_bend
             s = t / 0.60
             r_h = r2 - (r2 - r_bend) * s
-            z_h = z_hub_surface
+            z_h = z_base
         elif t < 0.82:
-            # Bend zone: quarter-circle, sharp transition
+            # Bend zone: sharp quarter-arc (power=3)
             s = (t - 0.60) / 0.22
-            # power=3.0 for sharper elbow
             arc = (math.pi / 2) * (s ** 3.0)
-            bend_r = r_bend - r1_hub
             r_h = r1_hub + bend_r * math.cos(arc)
-            z_h = z_hub_surface + bend_r * math.sin(arc)
+            z_h = z_base + bend_r * math.sin(arc)
         else:
-            # Axial eye zone: vertical tube
+            # Eye zone: vertical tube at r=r1_hub
             s = (t - 0.82) / 0.18
-            z_bend_top = z_hub_surface + (r_bend - r1_hub)
+            z_bend_top = z_base + bend_r
             r_h = r1_hub
             z_h = z_bend_top + s * (z_eye - z_bend_top)
 
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
 
-        # Shroud offset: +z in radial zone, +r in axial zone
+        # --- SHROUD (Fix #1 + #3: always monotonic r, simple offset) ---
+        # Shroud r must NEVER increase when going outlet→inlet
+        # In radial zone: same r as hub (offset only in z)
+        # In eye zone: offset only in r (outward from hub)
+        # In bend: smooth transition
         if t < 0.60:
             r_s = r_h
             z_s = z_h + b_t
         elif t < 0.82:
-            blend = (t - 0.60) / 0.22
-            r_s = r_h + b_t * blend
-            z_s = z_h + b_t * (1.0 - blend * 0.4)
+            # Blend: offset transitions from pure-z to pure-r
+            blend = (t - 0.60) / 0.22  # 0→1
+            z_offset = b_t * (1.0 - blend)
+            r_offset = b_t * blend
+            r_s = r_h + r_offset
+            z_s = z_h + z_offset
         else:
             r_s = r_h + b_t
             z_s = z_h
+
+        # Enforce shroud r monotonic: must not increase outlet→inlet
+        if shroud_rz and r_s > shroud_rz[-1][0] + 0.001:
+            r_s = shroud_rz[-1][0]
 
         hub_rz.append((r_h, z_h))
         shroud_rz.append((r_s, z_s))
@@ -174,23 +185,29 @@ def _hub_with_shaft(
         return hub_rz
     r_shaft = r1_hub * 0.35
 
-    # hub_rz[0] = outlet (r2, z_hub_surface), hub_rz[-1] = inlet (r1_hub, z_eye)
-    r_out, z_out = hub_rz[0]   # outlet
-    r_in, z_in = hub_rz[-1]    # inlet — eye top
+    # hub_rz[0] = outlet (r2, z_base), hub_rz[-1] = inlet (r1_hub, z_eye)
+    r_out, z_out = hub_rz[0]   # outlet (r=r2, z=z_base ~2mm)
+    r_in, z_in = hub_rz[-1]    # inlet eye top
 
-    # Back disc at z=0 with a 3mm rim step at outer edge (#10)
-    disc = [(r_shaft, 0.0), (r_out, 0.0), (r_out, -0.003)]
-
-    # Shaft stub at inlet eye with smooth nose cone (#4)
-    nose = [
-        (r_shaft, z_in),
-        (r_shaft * 0.8, z_in + r_shaft * 0.3),
-        (r_shaft * 0.4, z_in + r_shaft * 0.5),
-        (0.0, z_in + r_shaft * 0.6),
+    # Revolution profile (r increasing order for clean geometry):
+    # 1. Shaft center at back → shaft outer at back (back disc inner)
+    # 2. Disc outer at back (r=r2, z=-3mm rim)
+    # 3. Disc outer at surface (r=r2, z=0)
+    # 4. Hub curve (r=r2→r1_hub, z=z_base→z_eye) — the hub_rz data
+    # 5. Shaft at eye + nose cone
+    profile = [
+        (r_shaft, -0.003),      # shaft at back
+        (r_out, -0.003),        # disc outer, back face (3mm rim)
+        (r_out, 0.0),           # disc outer, front face
     ]
-
-    # Profile: disc_rim → disc → hub_curve → shaft → nose
-    return disc + hub_rz + nose
+    profile += hub_rz           # hub surface (outlet→inlet)
+    profile += [
+        (r_shaft, z_in),        # shaft at eye level
+        (r_shaft * 0.7, z_in + r_shaft * 0.3),  # nose taper
+        (r_shaft * 0.3, z_in + r_shaft * 0.5),
+        (0.0, z_in + r_shaft * 0.55),            # nose tip
+    ]
+    return profile
 
 
 # ---------------------------------------------------------------------------

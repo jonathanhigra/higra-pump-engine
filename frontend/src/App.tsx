@@ -361,6 +361,7 @@ export default function App() {
             loading={loading}
             sizing={sizing}
             onRunSizing={handleRunSizing}
+            onToast={toast}
           />
         </div>
         <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
@@ -510,6 +511,9 @@ export default function App() {
             }}
             loading={loading}
             setLoading={setLoading}
+            extFlowRate={opPoint.flowRate}
+            extHead={opPoint.head}
+            extRpm={opPoint.rpm}
           />
           <ExportPanel sizing={sizing} op={sizing ? opPoint : null} curves={curves} projectName={currentProject?.name} onExported={() => markStep('exportar')} />
         </div>

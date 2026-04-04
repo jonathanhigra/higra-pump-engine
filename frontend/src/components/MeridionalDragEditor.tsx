@@ -62,9 +62,11 @@ interface ContextMenuState {
 }
 
 interface Props {
-  /** Initial outlet diameter [m] */
+  /** Initial inlet diameter [mm] */
+  d1?: number
+  /** Initial outlet diameter [mm] */
   d2?: number
-  /** Initial outlet width [m] */
+  /** Initial outlet width [mm] */
   b2?: number
   /** Callback when user clicks "Aplicar ao 3D" */
   onApply?: (data: { hub_rz: RZPoint[]; shroud_rz: RZPoint[]; splitter_rz?: RZPoint[] }) => void
@@ -95,10 +97,10 @@ const TEMPLATES: TemplateOption[] = [
 // Default control points (radial pump, 6 points each)
 // ---------------------------------------------------------------------------
 
-function defaultHubCPs(r2: number, b2: number): RZPoint[] {
-  const r1 = r2 * 0.45
-  const hubR0 = r1 * 0.45
-  const axLen = r2 * 0.3
+function defaultHubCPs(r2: number, b2: number, d1?: number): RZPoint[] {
+  const r1 = d1 != null ? d1 / 2 : r2 * 0.45
+  const hubR0 = r1 * 0.45   // hub radius at eye ≈ d1_hub
+  const axLen = r2 * 0.3     // axial length ≈ 0.20 * D2 (since r2 = D2/2, 0.3*r2 = 0.15*D2)
   return [
     { r: hubR0, z: axLen },
     { r: hubR0, z: axLen * 0.72 },
@@ -109,8 +111,8 @@ function defaultHubCPs(r2: number, b2: number): RZPoint[] {
   ]
 }
 
-function defaultShroudCPs(r2: number, b2: number): RZPoint[] {
-  const r1 = r2 * 0.45
+function defaultShroudCPs(r2: number, b2: number, d1?: number): RZPoint[] {
+  const r1 = d1 != null ? d1 / 2 : r2 * 0.45
   const axLen = r2 * 0.3
   return [
     { r: r1, z: axLen },
@@ -285,6 +287,7 @@ function clonePoints(pts: RZPoint[]): RZPoint[] {
 // ---------------------------------------------------------------------------
 
 export default function MeridionalDragEditor({
+  d1: initD1,
   d2: initD2 = 0.3,
   b2: initB2 = 0.02,
   onApply,
@@ -292,14 +295,14 @@ export default function MeridionalDragEditor({
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Control points state
-  const [hubCPs, setHubCPs] = useState<RZPoint[]>(() => defaultHubCPs(initD2 / 2, initB2))
-  const [shrCPs, setShrCPs] = useState<RZPoint[]>(() => defaultShroudCPs(initD2 / 2, initB2))
+  // Control points state — use d1 from sizing if available
+  const [hubCPs, setHubCPs] = useState<RZPoint[]>(() => defaultHubCPs(initD2 / 2, initB2, initD1))
+  const [shrCPs, setShrCPs] = useState<RZPoint[]>(() => defaultShroudCPs(initD2 / 2, initB2, initD1))
   const [splitterCPs, setSplitterCPs] = useState<RZPoint[]>(() =>
-    defaultSplitterCPs(defaultHubCPs(initD2 / 2, initB2), defaultShroudCPs(initD2 / 2, initB2)),
+    defaultSplitterCPs(defaultHubCPs(initD2 / 2, initB2, initD1), defaultShroudCPs(initD2 / 2, initB2, initD1)),
   )
-  const [initialHub, setInitialHub] = useState<RZPoint[]>(() => defaultHubCPs(initD2 / 2, initB2))
-  const [initialShr, setInitialShr] = useState<RZPoint[]>(() => defaultShroudCPs(initD2 / 2, initB2))
+  const [initialHub, setInitialHub] = useState<RZPoint[]>(() => defaultHubCPs(initD2 / 2, initB2, initD1))
+  const [initialShr, setInitialShr] = useState<RZPoint[]>(() => defaultShroudCPs(initD2 / 2, initB2, initD1))
 
   // Interaction state
   const [dragging, setDragging] = useState<{ curve: 'hub' | 'shr' | 'splitter'; idx: number } | null>(null)
@@ -848,8 +851,8 @@ export default function MeridionalDragEditor({
     } catch {
       // Fallback to local defaults
       const r2 = initD2 / 2
-      const hub = defaultHubCPs(r2, initB2)
-      const shr = defaultShroudCPs(r2, initB2)
+      const hub = defaultHubCPs(r2, initB2, initD1)
+      const shr = defaultShroudCPs(r2, initB2, initD1)
       setHubCPs(hub)
       setShrCPs(shr)
       setSplitterCPs(defaultSplitterCPs(hub, shr))
@@ -1241,13 +1244,13 @@ export default function MeridionalDragEditor({
               {gridLinesV.map((g, i) => (
                 <line key={`gv-${i}`}
                   x1={g.x} y1={PAD.t} x2={g.x} y2={PAD.t + INNER_H}
-                  stroke="#1e293b" strokeWidth={0.5} strokeDasharray="3,3"
+                  stroke="var(--border-subtle)" strokeWidth={0.5} strokeDasharray="3,3"
                 />
               ))}
               {gridLinesH.map((g, i) => (
                 <line key={`gh-${i}`}
                   x1={PAD.l} y1={g.y} x2={PAD.l + INNER_W} y2={g.y}
-                  stroke="#1e293b" strokeWidth={0.5} strokeDasharray="3,3"
+                  stroke="var(--border-subtle)" strokeWidth={0.5} strokeDasharray="3,3"
                 />
               ))}
 

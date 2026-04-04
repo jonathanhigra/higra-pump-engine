@@ -58,11 +58,19 @@ export default function MeridionalPanel({
   const hubMapped = mapToSVG(hubProfile, [zMin, zMax], [xMin, xMax], svgW, svgH, pad)
   const shrMapped = mapToSVG(shroudProfile, [zMin, zMax], [xMin, xMax], svgW, svgH, pad)
 
-  // Key points
-  const hubOut = hubMapped[hubMapped.length - 1]
-  const shrIn = shrMapped[0]
-  const shrOut = shrMapped[shrMapped.length - 1]
-  const hubIn = hubMapped[0]
+  // Key points — find outlet (min z ≈ D2 region) and inlet (max z ≈ eye region)
+  // Hub profile may include shaft/nose points, so identify by geometry:
+  //   outlet = point with largest r (near D2) on the hub curve
+  //   inlet  = point with largest z on the hub curve
+  const hubOutIdx = hubProfile.reduce((best, p, i) => p.x > hubProfile[best].x ? i : best, 0)
+  const hubInIdx  = hubProfile.reduce((best, p, i) => p.z > hubProfile[best].z ? i : best, 0)
+  const shrOutIdx = 0   // shroud[0] = outlet (r2, small z)
+  const shrInIdx  = shroudProfile.length - 1  // shroud[last] = inlet (r_eye, large z)
+
+  const hubOut = hubMapped[hubOutIdx]
+  const hubIn  = hubMapped[hubInIdx]
+  const shrOut = shrMapped[shrOutIdx]
+  const shrIn  = shrMapped[shrInIdx]
 
   const fontSize = compact ? 7 : 9
   const strokeW = compact ? 1.5 : 2

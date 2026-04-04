@@ -44,6 +44,7 @@ interface Props {
   loading?: boolean
   sizing?: SizingResult | null
   onRunSizing?: (q: number, h: number, n: number) => void
+  onToast?: (msg: string, type: 'success' | 'error' | 'info') => void
 }
 
 // ─── Geometry builders ────────────────────────────────────────────────────────
@@ -803,7 +804,7 @@ function Scene({
 
 export default function ImpellerViewer({
   flowRate, head, rpm,
-  fullscreen, loading: parentLoading, sizing, onRunSizing,
+  fullscreen, loading: parentLoading, sizing, onRunSizing, onToast,
 }: Props) {
   const [data, setData] = useState<ImpellerData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -861,6 +862,11 @@ export default function ImpellerViewer({
       .catch(() => {})
   }, [flowRate, head, rpm, showLoadingMap])
 
+  const notify = (msg: string, type: 'success' | 'error' | 'info') => {
+    if (onToast) onToast(msg, type)
+    else if (type === 'error') alert(msg)
+  }
+
   const handleExport = async (format: string) => {
     try {
       const res = await fetch('/api/v1/geometry/export', {
@@ -868,12 +874,22 @@ export default function ImpellerViewer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flow_rate: flowRate / 3600, head, rpm, format }),
       })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || `Erro ${res.status}`); return }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        const detail = e.detail || `Erro ${res.status}`
+        if (res.status === 501) {
+          notify(`Exportacao ${format.toUpperCase()} indisponivel: ${detail}. Use glTF como alternativa.`, 'error')
+        } else {
+          notify(`Erro ao exportar ${format.toUpperCase()}: ${detail}`, 'error')
+        }
+        return
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `rotor.${format}`; a.click()
       URL.revokeObjectURL(url)
-    } catch (e: any) { alert(`Falha: ${e.message}`) }
+      notify(`Exportado rotor.${format} com sucesso`, 'success')
+    } catch (e: any) { notify(`Falha ao exportar: ${e.message}`, 'error') }
   }
 
   const handleGltfExport = async () => {
@@ -883,13 +899,18 @@ export default function ImpellerViewer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flow_rate: flowRate / 3600, head, rpm, format: 'gltf' }),
       })
-      if (!res.ok) { alert(`Erro ${res.status}`); return }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        notify(`Erro ao exportar glTF: ${e.detail || `HTTP ${res.status}`}`, 'error')
+        return
+      }
       const { gltf, filename } = await res.json()
       const blob = new Blob([gltf], { type: 'model/gltf+json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = filename ?? 'impeller.gltf'; a.click()
       URL.revokeObjectURL(url)
-    } catch (e: any) { alert(`Falha glTF: ${e.message}`) }
+      notify('Exportado glTF com sucesso', 'success')
+    } catch (e: any) { notify(`Falha ao exportar glTF: ${e.message}`, 'error') }
   }
 
   const handleFloatingRun = (e: React.FormEvent) => {

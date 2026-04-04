@@ -60,9 +60,13 @@ interface Props {
   onResult: (sizing: any, curves: any[], losses: any, stress: any, op?: any) => void
   loading: boolean
   setLoading: (v: boolean) => void
+  /** External operating point — syncs form fields when changed (e.g. template selection) */
+  extFlowRate?: number   // m³/h
+  extHead?: number       // m
+  extRpm?: number        // rpm
 }
 
-export default function SizingForm({ onResult, loading, setLoading }: Props) {
+export default function SizingForm({ onResult, loading, setLoading, extFlowRate, extHead, extRpm }: Props) {
   const [unit, setUnit] = useState<'m3h' | 'm3s'>(() =>
     (localStorage.getItem('hpe_unit') as 'm3h' | 'm3s') || 'm3h'
   )
@@ -102,6 +106,21 @@ export default function SizingForm({ onResult, loading, setLoading }: Props) {
     }, 500)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [machineType, nq])
+
+  // Sync form fields when external operating point changes (e.g. template selection)
+  useEffect(() => {
+    if (extFlowRate != null && extFlowRate > 0) {
+      setFlowRate(unit === 'm3h' ? String(extFlowRate) : (extFlowRate / 3600).toFixed(5))
+    }
+  }, [extFlowRate])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (extHead != null && extHead > 0) setHead(String(extHead))
+  }, [extHead])
+
+  useEffect(() => {
+    if (extRpm != null && extRpm > 0) setRpm(String(extRpm))
+  }, [extRpm])
 
   const toggleUnit = () => {
     const next = unit === 'm3h' ? 'm3s' : 'm3h'

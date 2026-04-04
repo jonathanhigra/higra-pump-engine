@@ -167,12 +167,12 @@ def _hub_with_shaft(
     hub_rz: list[tuple[float, float]],
     r1_hub: float,
 ) -> list[tuple[float, float]]:
-    """Add shaft stub and hub back-disc for visual completeness.
+    """Add shaft stub, nose cone and hub back-disc for visual completeness.
 
     The hub_rz goes from outlet (r2, z=0) to inlet (r1_hub, z_eye).
     We add:
-    - Back disc: at z=0, from r_shaft to r2 (closes the back)
-    - Shaft stub: at inlet, from r1_hub down to r_shaft
+    - Back disc with rim: at z=0, from r_shaft to r2 (closes the back)
+    - Shaft stub at inlet with a smooth conical nose
     """
     if not hub_rz:
         return hub_rz
@@ -182,14 +182,19 @@ def _hub_with_shaft(
     r_out, z_out = hub_rz[0]   # outlet
     r_in, z_in = hub_rz[-1]    # inlet — eye top
 
-    # Back disc at z=0 (below hub blade surface)
-    disc = [(r_shaft, 0.0), (r_out, 0.0)]
+    # Back disc at z=0 with a 3mm rim step at outer edge (#10)
+    disc = [(r_shaft, 0.0), (r_out, 0.0), (r_out, -0.003)]
 
-    # Shaft stub at inlet eye
-    shaft = [(r_shaft, z_in)]
+    # Shaft stub at inlet eye with smooth nose cone (#4)
+    nose = [
+        (r_shaft, z_in),
+        (r_shaft * 0.8, z_in + r_shaft * 0.3),
+        (r_shaft * 0.4, z_in + r_shaft * 0.5),
+        (0.0, z_in + r_shaft * 0.6),
+    ]
 
-    # Profile: disc → hub_curve → shaft
-    return disc + hub_rz + shaft
+    # Profile: disc_rim → disc → hub_curve → shaft → nose
+    return disc + hub_rz + nose
 
 
 # ---------------------------------------------------------------------------
@@ -399,9 +404,14 @@ def _compute_wrap_angle(
     shroud_rz: list[tuple[float, float]],
     beta1_rad: float, beta2_rad: float,
 ) -> float:
-    """Compute wrap angle [deg] at mid-span for camber diagnostics (#9)."""
+    """Compute wrap angle [deg] at mid-span for camber diagnostics (#9).
+
+    After the inlet-to-outlet integration + reversal, the maximum theta
+    may sit at either end of the camber list (outlet or inlet).  We take
+    the absolute maximum across all stations so the result is never 0.
+    """
     camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, 0.5)
-    return math.degrees(camber[-1][2])
+    return math.degrees(max(abs(pt[2]) for pt in camber))
 
 
 def _adjust_beta2_for_wrap(
@@ -451,7 +461,7 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
     r2 = d2 / 2.0
 
     # Blade max thickness: ~3-4% of D2 gives visible but realistic blades
-    blade_thickness = max(0.003, min(0.015, d2 * 0.04))
+    blade_thickness = max(0.003, min(0.015, d2 * 0.055))
 
     beta1_rad = math.radians(sizing.beta1)
     beta2_rad = math.radians(sizing.beta2)

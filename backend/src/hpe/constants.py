@@ -70,7 +70,7 @@ BETA2_MAX: float = 40.0
 # ---------------------------------------------------------------------------
 # Blade count (Pfleiderer correlation)
 # ---------------------------------------------------------------------------
-BLADE_COUNT_MIN: int = 5
+BLADE_COUNT_MIN: int = 6
 BLADE_COUNT_MAX: int = 12
 BLADE_COUNT_PFLEIDERER: float = 6.5  # coefficient in Pfleiderer formula
 

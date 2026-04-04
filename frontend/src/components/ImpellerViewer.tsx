@@ -218,20 +218,21 @@ function buildBladeEdgeCaps(ps: BladePoint[][], ss: BladePoint[][]): THREE.Buffe
   const pos: number[] = []
 
   // Leading edge cap (chord index 0): connect PS[:,0] to SS[:,0]
+  // Consistent winding: PS0→SS0→PS1, SS0→SS1→PS1 (CCW when viewed from outside)
   for (let s = 0; s < nSpan - 1; s++) {
     const ps0 = ps[s][0], ps1 = ps[s + 1][0]
     const ss0 = ss[s][0], ss1 = ss[s + 1][0]
-    pos.push(ps0.x, ps0.y, ps0.z, ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z)
-    pos.push(ps1.x, ps1.y, ps1.z, ss1.x, ss1.y, ss1.z, ss0.x, ss0.y, ss0.z)
+    pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
+    pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, ps1.x, ps1.y, ps1.z)
   }
 
-  // Trailing edge cap (chord index nChord-1)
+  // Trailing edge cap (chord index nChord-1) — same winding as LE
   const c = nChord - 1
   for (let s = 0; s < nSpan - 1; s++) {
     const ps0 = ps[s][c], ps1 = ps[s + 1][c]
     const ss0 = ss[s][c], ss1 = ss[s + 1][c]
     pos.push(ps0.x, ps0.y, ps0.z, ss0.x, ss0.y, ss0.z, ps1.x, ps1.y, ps1.z)
-    pos.push(ps1.x, ps1.y, ps1.z, ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z)
+    pos.push(ss0.x, ss0.y, ss0.z, ss1.x, ss1.y, ss1.z, ps1.x, ps1.y, ps1.z)
   }
 
   // Hub and shroud edge caps removed — they created visual artifacts
@@ -258,10 +259,10 @@ void pressureColor
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-// TURBOdesign-style metallic palette — brushed aluminum/steel
-const BLADE_COLOR = '#c8cdd4'    // blade PS — bright brushed steel
-const BLADE_COLOR_ALT = '#a0a8b2' // blade SS — slightly darker
-const HUB_COLOR = '#8890a0'      // hub — darker steel
+// TURBOdesign-style metallic palette — bright brushed aluminum/steel
+const BLADE_COLOR = '#d4d8e0'    // blade PS — bright silver
+const BLADE_COLOR_ALT = '#bcc2cc' // blade SS — slightly darker
+const HUB_COLOR = '#a0a8b8'      // hub — medium bright steel
 const SPLITTER_COLOR = '#b0b8c4'  // splitter — same family
 
 // ─── ClipController ───────────────────────────────────────────────────────────
@@ -338,8 +339,8 @@ function BladeSurfaceMesh({
           color={psColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.72}
-          roughness={0.22}
+          metalness={0.82}
+          roughness={0.18}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow
@@ -352,18 +353,18 @@ function BladeSurfaceMesh({
           color={ssColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.72}
-          roughness={0.22}
+          metalness={0.82}
+          roughness={0.18}
         />
       </mesh>
-      {/* LE/TE/hub/shroud edge caps — make blade solid */}
+      {/* LE/TE edge caps — make blade solid */}
       <mesh geometry={capsGeo} castShadow>
         <meshStandardMaterial
           color={capColor}
           emissive={emissive}
           side={THREE.DoubleSide}
-          metalness={0.70}
-          roughness={0.25}
+          metalness={0.80}
+          roughness={0.20}
         />
       </mesh>
     </>
@@ -390,8 +391,8 @@ function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface;
           vertexColors={showColormap}
           color={showColormap ? '#ffffff' : SPLITTER_COLOR}
           side={THREE.DoubleSide}
-          metalness={0.68}
-          roughness={0.25}
+          metalness={0.78}
+          roughness={0.20}
         />
       </mesh>
       <mesh geometry={ssGeo} castShadow>
@@ -399,8 +400,8 @@ function SplitterSurfaceMesh({ surface, showColormap }: { surface: BladeSurface;
           vertexColors={showColormap}
           color={showColormap ? '#ffffff' : '#8a929c'}
           side={THREE.DoubleSide}
-          metalness={0.68}
-          roughness={0.25}
+          metalness={0.78}
+          roughness={0.20}
         />
       </mesh>
     </>
@@ -749,7 +750,14 @@ function Scene({
       <PerspectiveCamera makeDefault position={[2.5, 1.8, 3.5]} fov={34} />
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
+      <Environment preset="studio" />
       <ClipController clipZ={clipZ} />
+
+      {/* Background plane for depth */}
+      <mesh position={[0, 0, -3]} rotation={[0, 0, 0]}>
+        <planeGeometry args={[20, 20]} />
+        <meshBasicMaterial color="#1a2030" />
+      </mesh>
 
       <RotatingGroup paused={paused} rpm={rpm}>
         <group scale={[scale, scale, scale]}>
@@ -887,7 +895,7 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)' }}>
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)' }}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} showColormap={showColormap} showLoadingMap={showLoadingMap} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} closedImpeller={closedImpeller} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} />
     </Canvas>
   ) : (
@@ -927,7 +935,7 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)', position: 'relative' }}>
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)', position: 'relative' }}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -989,7 +997,7 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #2a3040 0%, #151a24 100%)' }}>
+      <div style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at center, #252d3d 0%, #0d1117 100%)' }}>
         {canvasEl}
       </div>
 

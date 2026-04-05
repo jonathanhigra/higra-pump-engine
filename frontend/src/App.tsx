@@ -404,18 +404,16 @@ export default function App() {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
         projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
-        <div style={{ height: 'calc(100vh - 180px)', borderRadius: 8, overflow: 'hidden' }}>
-          <ImpellerViewer
-            flowRate={opPoint.flowRate}
-            head={opPoint.head}
-            rpm={opPoint.rpm}
-            fullscreen
-            loading={loading}
-            sizing={sizing}
-            onRunSizing={handleRunSizing}
-            onToast={toast}
-          />
-        </div>
+        <ImpellerViewer
+          flowRate={opPoint.flowRate}
+          head={opPoint.head}
+          rpm={opPoint.rpm}
+          fullscreen
+          loading={loading}
+          sizing={sizing}
+          onRunSizing={handleRunSizing}
+          onToast={toast}
+        />
         <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
         {overlays}
       </Layout>

@@ -373,9 +373,9 @@ body {
 .viewer-fullscreen {
   position: relative;
   width: 100%;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 200px);
   background: #050505;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Glassmorphism floating panel */

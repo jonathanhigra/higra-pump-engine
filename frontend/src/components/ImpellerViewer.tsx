@@ -1490,9 +1490,11 @@ function PeriodicBoundaryLines({ blade0, blade1, scale }: {
 
 // ─── CFD info panel overlay ─────────────────────────────────────────────────
 
-function CFDInfoPanel({ data, meshDensity, rpm }: {
-  data: ImpellerData; meshDensity: MeshDensity; rpm: number
+function CFDInfoPanel({ data, meshDensity, rpm, flowRate, head }: {
+  data: ImpellerData; meshDensity: MeshDensity; rpm: number; flowRate: number; head: number
 }) {
+  const [downloading, setDownloading] = useState(false)
+
   // Y+ estimation
   // Re = rho * u2 * D2 / mu  (water at 20C: rho=998, mu=1.003e-3)
   const rho = 998
@@ -1518,6 +1520,31 @@ function CFDInfoPanel({ data, meshDensity, rpm }: {
   const nElements = nChordEff * nSpanEff * nPitchDiv * nBLLayers * data.blade_count
 
   const formatCount = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : `${n}`
+
+  const handleDownloadCFX = async () => {
+    setDownloading(true)
+    try {
+      const resp = await fetch('/api/v1/cfd/ansys/cfx/package', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flow_rate: flowRate / 3600, head, rpm }),
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'cfx_package.zip'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('CFX package download failed:', err)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div style={{
@@ -1549,6 +1576,22 @@ function CFDInfoPanel({ data, meshDensity, rpm }: {
           ))}
         </tbody>
       </table>
+      <button
+        onClick={handleDownloadCFX}
+        disabled={downloading}
+        style={{
+          marginTop: 8, width: '100%', padding: '6px 0',
+          background: downloading ? 'rgba(0,200,136,0.2)' : 'rgba(0,200,136,0.15)',
+          border: '1px solid rgba(0,200,136,0.5)',
+          borderRadius: 5, color: '#00cc88', fontSize: 11,
+          fontWeight: 600, cursor: downloading ? 'wait' : 'pointer',
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={e => { if (!downloading) (e.target as HTMLElement).style.background = 'rgba(0,200,136,0.3)' }}
+        onMouseLeave={e => { if (!downloading) (e.target as HTMLElement).style.background = 'rgba(0,200,136,0.15)' }}
+      >
+        {downloading ? 'Gerando...' : 'Download Pacote CFX'}
+      </button>
     </div>
   )
 }
@@ -2008,7 +2051,7 @@ export default function ImpellerViewer({
             />
           )}
           {showCFDMesh && data && (
-            <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} />
+            <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} flowRate={flowRate} head={head} />
           )}
           {showGhostOverlay && (
             <div style={{
@@ -2131,7 +2174,7 @@ export default function ImpellerViewer({
       )}
 
       {showCFDMesh && data && (
-        <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} />
+        <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} flowRate={flowRate} head={head} />
       )}
 
       {/* TOP-LEFT: Legend bar */}

@@ -163,7 +163,7 @@ def _hub_with_shaft(
     r_in, z_in = hub_rz[-1]    # inlet (r=r1)
 
     # Bore radius for the disc (visible hole)
-    r_bore = r_in * 0.25       # bore = 25% of eye radius
+    r_bore = r_out * 0.18       # bore = 18% of D2/2 — matches real pump bore
 
     # Revolution profile:
     # 1. Bore inner edge at back → disc outer at back (rim)

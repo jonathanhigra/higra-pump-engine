@@ -241,8 +241,8 @@ function buildHubDiscGeo(hubProfile: BladePoint[], segs = 96): THREE.BufferGeome
   for (const p of hubProfile) {
     if (p.x > r_outer) { r_outer = p.x; z_disc = p.z }
   }
-  // Shaft bore: ~8% of D2 radius — visible hole in the center
-  const r_inner = r_outer * 0.08
+  // Shaft bore: ~18% of D2 radius — realistic pump bore with hub boss
+  const r_inner = r_outer * 0.18
   const z = z_disc
 
   const pos: number[] = []

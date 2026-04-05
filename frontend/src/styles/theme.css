@@ -1,6 +1,7 @@
 /* HPE Dark Theme — based on higra-nexus design system */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import './theme-light.css';
 
 :root {
   /* Surfaces */
@@ -483,6 +484,3 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-
-/* ====== Light Theme ====== */
-@import './theme-light.css';

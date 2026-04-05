@@ -208,6 +208,52 @@ function buildQuadGeoWithSpanGradient(grid: BladePoint[][]): THREE.BufferGeometr
   return g
 }
 
+/** Mesh quality colormap: green (good) at mid, yellow/red (poor) at edges */
+function buildQuadGeoWithQualityColors(grid: BladePoint[][]): THREE.BufferGeometry {
+  const nSpan = grid.length
+  const nChord = grid[0]?.length ?? 0
+  const pos: number[] = []
+  const colors: number[] = []
+
+  const quality = (s: number, c: number): number => {
+    const sn = nSpan > 1 ? s / (nSpan - 1) : 0.5
+    const cn = nChord > 1 ? c / (nChord - 1) : 0.5
+    const edgePenalty = Math.min(cn, 1 - cn, sn, 1 - sn) * 4
+    return Math.min(1, edgePenalty)
+  }
+
+  const qColor = (q: number): [number, number, number] => {
+    if (q > 0.5) return [0, 0.5 + 0.3 * q, 0.2 + 0.2 * q]  // green
+    return [0.8 * (1 - q), 0.6 * q + 0.2, 0.1]  // yellow to red
+  }
+
+  const addTri = (
+    p0: BladePoint, p1: BladePoint, p2: BladePoint,
+    q0: number, q1: number, q2: number,
+  ) => {
+    pos.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z)
+    const c0 = qColor(q0), c1 = qColor(q1), c2 = qColor(q2)
+    colors.push(...c0, ...c1, ...c2)
+  }
+
+  for (let s = 0; s < nSpan - 1; s++) {
+    for (let c = 0; c < nChord - 1; c++) {
+      const p00 = grid[s][c], p10 = grid[s + 1][c]
+      const p01 = grid[s][c + 1], p11 = grid[s + 1][c + 1]
+      const q00 = quality(s, c), q10 = quality(s + 1, c)
+      const q01 = quality(s, c + 1), q11 = quality(s + 1, c + 1)
+      addTri(p00, p10, p01, q00, q10, q01)
+      addTri(p10, p11, p01, q10, q11, q01)
+    }
+  }
+
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  g.computeVertexNormals()
+  return g
+}
+
 function buildRevolutionGeo(profile: BladePoint[], segs = 128): THREE.BufferGeometry {
   if (profile.length < 2) return new THREE.BufferGeometry()
   const pos: number[] = []
@@ -402,7 +448,7 @@ function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridi
 // ─── Scene components ─────────────────────────────────────────────────────────
 
 function BladeSurfaceMesh({
-  surface, idx, showColormap, showLoadingMap, showSpanColors, showWireframe, loadingField, onSelect, isSelected, selectedBlade, sizing,
+  surface, idx, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, loadingField, onSelect, isSelected, selectedBlade, sizing,
 }: {
   surface: BladeSurface
   idx: number
@@ -410,6 +456,7 @@ function BladeSurfaceMesh({
   showLoadingMap?: boolean
   showSpanColors?: boolean
   showWireframe?: boolean
+  showCFDMesh?: boolean
   loadingField?: BladeLoadingField | null
   onSelect: (idx: number) => void
   isSelected: boolean
@@ -420,38 +467,45 @@ function BladeSurfaceMesh({
   const [hoverPos, setHoverPos] = useState<THREE.Vector3 | null>(null)
 
   const psGeo = useMemo(
-    () => showLoadingMap && loadingField?.ps_rvtheta
-      ? buildQuadGeoWithDivergingColors(surface.ps, loadingField.ps_rvtheta)
-      : showSpanColors
-        ? buildQuadGeoWithSpanGradient(surface.ps)
-        : showColormap && surface.ps_pressure
-          ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
-          : buildQuadGeo(surface.ps),
-    [surface, showColormap, showLoadingMap, showSpanColors, loadingField],
+    () => showCFDMesh
+      ? buildQuadGeoWithQualityColors(surface.ps)
+      : showLoadingMap && loadingField?.ps_rvtheta
+        ? buildQuadGeoWithDivergingColors(surface.ps, loadingField.ps_rvtheta)
+        : showSpanColors
+          ? buildQuadGeoWithSpanGradient(surface.ps)
+          : showColormap && surface.ps_pressure
+            ? buildQuadGeoWithColors(surface.ps, surface.ps_pressure)
+            : buildQuadGeo(surface.ps),
+    [surface, showColormap, showLoadingMap, showSpanColors, showCFDMesh, loadingField],
   )
   const ssGeo = useMemo(
-    () => showLoadingMap && loadingField?.ss_rvtheta
-      ? buildQuadGeoWithDivergingColors(surface.ss, loadingField.ss_rvtheta)
-      : showSpanColors
-        ? buildQuadGeoWithSpanGradient(surface.ss)
-        : showColormap && surface.ss_pressure
-          ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
-          : buildQuadGeo(surface.ss),
-    [surface, showColormap, showLoadingMap, showSpanColors, loadingField],
+    () => showCFDMesh
+      ? buildQuadGeoWithQualityColors(surface.ss)
+      : showLoadingMap && loadingField?.ss_rvtheta
+        ? buildQuadGeoWithDivergingColors(surface.ss, loadingField.ss_rvtheta)
+        : showSpanColors
+          ? buildQuadGeoWithSpanGradient(surface.ss)
+          : showColormap && surface.ss_pressure
+            ? buildQuadGeoWithColors(surface.ss, surface.ss_pressure)
+            : buildQuadGeo(surface.ss),
+    [surface, showColormap, showLoadingMap, showSpanColors, showCFDMesh, loadingField],
   )
 
   // Edge caps — close PS-SS gap to make blade look solid
   const capsGeo = useMemo(() => buildBladeEdgeCaps(surface.ps, surface.ss), [surface])
 
-  const useVertexColors = showColormap || showLoadingMap || showSpanColors
+  const useVertexColors = showColormap || showLoadingMap || showSpanColors || showCFDMesh
   const highlight = isSelected || hovered
   const otherSelected = selectedBlade !== null && !isSelected
+  // CFD passage highlight: blades 0 and 1 stay opaque, others fade
+  const isCFDPassage = showCFDMesh && (idx === 0 || idx === 1)
+  const cfdFade = showCFDMesh && !isCFDPassage
   const psColor = useVertexColors ? '#ffffff' : (highlight ? '#d0d8e0' : BLADE_COLOR)
   const ssColor = useVertexColors ? '#ffffff' : (highlight ? '#c0c8d0' : BLADE_COLOR_ALT)
   const capColor = useVertexColors ? '#ffffff' : (highlight ? '#bcc4cc' : '#8a929c')
   const emissive = isSelected ? '#1a2530' : hovered ? '#0f1a22' : '#000000'
-  const bladeOpacity = otherSelected ? 0.3 : 1.0
-  const bladeTransparent = otherSelected
+  const bladeOpacity = cfdFade ? 0.15 : otherSelected ? 0.3 : 1.0
+  const bladeTransparent = otherSelected || cfdFade
 
   return (
     <>
@@ -1135,10 +1189,127 @@ function MeridionalLines({ hubProfile, shroudProfile, scale }: {
   )
 }
 
+// ─── CFD mesh overlay components ─────────────────────────────────────────────
+
+function CFDMeshLines({ surface, scale }: { surface: BladeSurface; scale: number }) {
+  const lines = useMemo(() => {
+    const geos: THREE.BufferGeometry[] = []
+    const ps = surface.ps
+    const ss = surface.ss
+    const nSpan = ps.length
+    const nChord = ps[0]?.length ?? 0
+
+    // Chordwise lines (along each span station) -- on PS
+    for (let s = 0; s < nSpan; s++) {
+      const pts = ps[s].map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Spanwise lines (along each chord station) -- on PS
+    for (let c = 0; c < nChord; c += 2) {
+      const pts = ps.map(row => new THREE.Vector3(row[c].x * scale, row[c].y * scale, row[c].z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Chordwise lines -- on SS
+    for (let s = 0; s < nSpan; s++) {
+      const pts = ss[s].map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Spanwise lines -- on SS
+    for (let c = 0; c < nChord; c += 2) {
+      const pts = ss.map(row => new THREE.Vector3(row[c].x * scale, row[c].y * scale, row[c].z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    return geos
+  }, [surface, scale])
+
+  return (
+    <>
+      {lines.map((geo, i) => (
+        <primitive key={i} object={(() => {
+          const mat = new THREE.LineBasicMaterial({ color: '#00cc88', transparent: true, opacity: 0.6 })
+          return new THREE.Line(geo, mat)
+        })()} />
+      ))}
+    </>
+  )
+}
+
+function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
+  hubProfile: BladePoint[]
+  shroudProfile: BladePoint[]
+  scale: number
+}) {
+  const lines = useMemo(() => {
+    const geos: THREE.BufferGeometry[] = []
+    const N_CIRC = 24
+
+    // Hub: circumferential rings at several meridional stations
+    for (let i = 0; i < hubProfile.length; i += Math.max(1, Math.floor(hubProfile.length / 12))) {
+      const p = hubProfile[i]
+      const r = p.x * scale, z = p.z * scale
+      const pts: THREE.Vector3[] = []
+      for (let j = 0; j <= N_CIRC; j++) {
+        const a = (j / N_CIRC) * Math.PI * 2
+        pts.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z))
+      }
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Hub: meridional lines at several angular positions
+    for (let j = 0; j < 12; j++) {
+      const a = (j / 12) * Math.PI * 2
+      const pts = hubProfile.map(p => {
+        const r = p.x * scale, z = p.z * scale
+        return new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z)
+      })
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Shroud: circumferential rings
+    for (let i = 0; i < shroudProfile.length; i += Math.max(1, Math.floor(shroudProfile.length / 12))) {
+      const p = shroudProfile[i]
+      const r = p.x * scale, z = p.z * scale
+      const pts: THREE.Vector3[] = []
+      for (let j = 0; j <= N_CIRC; j++) {
+        const a = (j / N_CIRC) * Math.PI * 2
+        pts.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z))
+      }
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Shroud: meridional lines
+    for (let j = 0; j < 12; j++) {
+      const a = (j / 12) * Math.PI * 2
+      const pts = shroudProfile.map(p => {
+        const r = p.x * scale, z = p.z * scale
+        return new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z)
+      })
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    return geos
+  }, [hubProfile, shroudProfile, scale])
+
+  return (
+    <>
+      {lines.map((geo, i) => (
+        <primitive key={i} object={(() => {
+          const mat = new THREE.LineBasicMaterial({ color: '#00aacc', transparent: true, opacity: 0.5 })
+          return new THREE.Line(geo, mat)
+        })()} />
+      ))}
+    </>
+  )
+}
+
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, showSpanColors, showWireframe, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showVolute, displayMode,
+  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showVolute, displayMode,
   selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount,
   showVelocityArrows, showSections, turntable, sizing,
 }: {
@@ -1152,6 +1323,7 @@ function Scene({
   showLoadingMap?: boolean
   showSpanColors?: boolean
   showWireframe?: boolean
+  showCFDMesh?: boolean
   showBladeNumbers?: boolean
   showMeridionalLines?: boolean
   loadingData?: BladeLoadingData | null
@@ -1255,10 +1427,14 @@ function Scene({
                   showLoadingMap={showLoadingMap}
                   showSpanColors={showSpanColors}
                   showWireframe={showWireframe}
+                  showCFDMesh={showCFDMesh}
                   loadingField={loadingData?.blade_loading?.[i] ?? null}
                   onSelect={onSelectBlade} isSelected={selectedBlade === i}
                   selectedBlade={selectedBlade} sizing={sizing} />
                 <BladeEdgeLines surface={surf} visible={showEdges ?? true} />
+                {showCFDMesh && (
+                  <CFDMeshLines surface={surf} scale={1} />
+                )}
                 {i === 0 && showVelocityArrows && (
                   <VelocityArrows surface={surf} scale={1} sizing={sizing} />
                 )}
@@ -1293,6 +1469,10 @@ function Scene({
           {/* Meridional streamlines (hub + shroud profiles) */}
           {showMeridionalLines && (
             <MeridionalLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} />
+          )}
+          {/* CFD mesh grid lines on hub and shroud */}
+          {showCFDMesh && (
+            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} />
           )}
         </group>
       </RotatingGroup>
@@ -1381,6 +1561,7 @@ export default function ImpellerViewer({
   const [showBladeNumbers, setShowBladeNumbers] = useState(false)
   const [showSpanColors, setShowSpanColors] = useState(false)
   const [showMeridionalLines, setShowMeridionalLines] = useState(false)
+  const [showCFDMesh, setShowCFDMesh] = useState(false)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -1497,7 +1678,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -1515,7 +1696,7 @@ export default function ImpellerViewer({
         </div>
         {/* Legend / colormap legend */}
         <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {!showColormap && !showLoadingMap && !showSpanColors && (
+          {!showColormap && !showLoadingMap && !showSpanColors && !showCFDMesh && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo / Disco" />
@@ -1540,6 +1721,15 @@ export default function ImpellerViewer({
               <span>Hub</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2563eb, #e0e0e0, #dc2626)' }} />
               <span>Shroud</span>
+            </div>
+          )}
+          {showCFDMesh && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixa Q</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #cc8800, #66aa22, #00cc66)' }} />
+              <span>Alta Q</span>
+              <LegendItem color="#00cc88" label="Malha pa" />
+              <LegendItem color="#00aacc" label="Malha cubo/shroud" />
             </div>
           )}
         </div>
@@ -1572,9 +1762,10 @@ export default function ImpellerViewer({
             <ControlButton label={paused ? '▶' : '⏸'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
             <ControlButton label={turntable ? '◉ Turntable' : '○ Turntable'} onClick={() => setTurntable(t => !t)} />
             <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
-            <ControlButton label={showColormap ? '◉ Pressão' : '○ Pressão'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
-            <ControlButton label={showLoadingMap ? '◉ rVθ' : '○ rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
-            <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
+            <ControlButton label={showColormap ? '◉ Pressão' : '○ Pressão'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
+            <ControlButton label={showLoadingMap ? '◉ rVθ' : '○ rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
+            <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false); setShowCFDMesh(false) }} />
+            <ControlButton label={showCFDMesh ? '◉ Malha CFD' : '○ Malha CFD'} onClick={() => { setShowCFDMesh(m => !m); setShowColormap(false); setShowLoadingMap(false); setShowSpanColors(false) }} />
             <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
             <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
             <ControlButton label={showWireframe ? '◉ Wire' : '○ Wire'} onClick={() => setShowWireframe(w => !w)} />
@@ -1662,7 +1853,7 @@ export default function ImpellerViewer({
       <div className="viewer-overlay viewer-overlay-tl">
         <div className="glass-panel" style={{ padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 12 }}>
           <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13 }}>HPE</span>
-          {!showColormap && !showLoadingMap && !showSpanColors && (
+          {!showColormap && !showLoadingMap && !showSpanColors && !showCFDMesh && (
             <>
               <LegendItem color={BLADE_COLOR} label="Pás" />
               <LegendItem color={HUB_COLOR} label="Cubo" />
@@ -1687,6 +1878,15 @@ export default function ImpellerViewer({
               <span>Hub</span>
               <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #2563eb, #e0e0e0, #dc2626)' }} />
               <span>Shroud</span>
+            </div>
+          )}
+          {showCFDMesh && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Baixa Q</span>
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: 'linear-gradient(to right, #cc8800, #66aa22, #00cc66)' }} />
+              <span>Alta Q</span>
+              <LegendItem color="#00cc88" label="Malha pa" />
+              <LegendItem color="#00aacc" label="Malha cubo/shroud" />
             </div>
           )}
           {data && (
@@ -1736,15 +1936,16 @@ export default function ImpellerViewer({
         <div className="glass-panel" style={{ padding: '7px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 700 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.dragToRotate}</span>
           <ControlButton label={paused ? '▶ Girar' : '⏸ Pausar'} onClick={() => { if (!turntable) setPaused(p => !p) }} />
-          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false) }} />
-          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false) }} />
+          <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
+          <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
+          <ControlButton label={showCFDMesh ? '◉ Malha CFD' : '○ Malha CFD'} onClick={() => { setShowCFDMesh(m => !m); setShowColormap(false); setShowLoadingMap(false); setShowSpanColors(false) }} />
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <DisplayModeButtons displayMode={displayMode} setDisplayMode={setDisplayMode} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
           <ControlButton label={showWireframe ? '◉ Wireframe' : '○ Wireframe'} onClick={() => setShowWireframe(w => !w)} />
           <ControlButton label={showBladeNumbers ? '◉ N.' : '○ N.'} onClick={() => setShowBladeNumbers(b => !b)} />
-          <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false) }} />
+          <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false); setShowCFDMesh(false) }} />
           <ControlButton label={showMeridionalLines ? '◉ Meridional' : '○ Meridional'} onClick={() => setShowMeridionalLines(m => !m)} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Explosao</span>

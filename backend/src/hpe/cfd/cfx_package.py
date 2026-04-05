@@ -48,6 +48,15 @@ def build_cfx_package(
         )
         zf.writestr("setup.ccl", ccl)
 
+        # 1b. CFX-Post session template
+        post_template = builder.generate_post_template(
+            sizing_result,
+            operating_point.rpm,
+            operating_point.flow_rate,
+            operating_point.fluid_density,
+        )
+        zf.writestr("post_template.cse", post_template)
+
         # 2. PCF file
         from hpe.cfd.pcf_generator import generate_pcf
 

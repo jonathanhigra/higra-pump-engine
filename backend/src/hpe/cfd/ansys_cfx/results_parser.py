@@ -127,20 +127,89 @@ class CFXResultsParser:
             "torque": torque,
         }
 
-    def compute_performance(self, parsed: dict[str, Any]) -> dict[str, Any]:
+    def parse_performance_summary(self, csv_content: str) -> dict[str, Any]:
+        """Parse the performance_summary.csv from CFX-Post processing.
+
+        Reads the CSV exported by the post-processing template's
+        Performance Summary table.
+
+        Args:
+            csv_content: Raw CSV text content.
+
+        Returns:
+            Dictionary with efficiency, head_rise, power, torque.
+        """
+        reader = csv.DictReader(csv_content.strip().splitlines())
+        results: dict[str, Any] = {
+            "efficiency": 0.0,
+            "head_rise": 0.0,
+            "power": 0.0,
+            "torque": 0.0,
+        }
+        for row in reader:
+            results = {
+                "efficiency": float(row.get("Efficiency", 0)),
+                "head_rise": float(row.get("Head Rise", 0)),
+                "power": float(row.get("Power", 0)),
+                "torque": float(row.get("Torque", 0)),
+            }
+        return results
+
+    def parse_blade_loading(self, csv_content: str) -> dict[str, list[float]]:
+        """Parse blade loading curve export from CFX-Post.
+
+        Reads the CSV exported by the post-processing template's
+        Blade Loading Data table. Expected columns: Normalized Streamwise,
+        Pressure (Pressure Side), Pressure (Suction Side).
+
+        Args:
+            csv_content: Raw CSV text content.
+
+        Returns:
+            Dictionary with streamwise, pressure_ps, and pressure_ss lists.
+        """
+        lines = csv_content.strip().split("\n")
+        data: dict[str, list[float]] = {
+            "streamwise": [],
+            "pressure_ps": [],
+            "pressure_ss": [],
+        }
+        for line in lines[1:]:
+            parts = line.split(",")
+            if len(parts) >= 3:
+                try:
+                    data["streamwise"].append(float(parts[0].strip()))
+                    data["pressure_ps"].append(float(parts[1].strip()))
+                    data["pressure_ss"].append(float(parts[2].strip()))
+                except ValueError:
+                    continue
+        return data
+
+    def compute_performance(
+        self,
+        parsed: dict[str, Any],
+        rpm: float | None = None,
+        flow_rate: float | None = None,
+        fluid_density: float = 998.0,
+    ) -> dict[str, Any]:
         """Compute pump performance metrics from parsed monitor data.
 
         Uses the last converged values of pressure, mass flow, and
         torque to calculate head, efficiency, and shaft power.
 
+        When rpm and flow_rate are provided, computes derived metrics
+        including specific speed. Otherwise falls back to monitor-only
+        estimates.
+
         Args:
             parsed: Output of parse_monitor_csv.
+            rpm: Rotational speed [rev/min] (optional, improves accuracy).
+            flow_rate: Volumetric flow rate [m3/s] (optional).
+            fluid_density: Fluid density [kg/m3].
 
         Returns:
-            Dictionary with keys:
-                - head_m: Pump head [m]
-                - efficiency: Hydraulic efficiency [-]
-                - power_w: Shaft power [W]
+            Dictionary with head_m, efficiency, power_w, and optionally
+            specific_speed_nq.
         """
         # Use last available values
         p_in = parsed["pressure_inlet"][-1] if parsed["pressure_inlet"] else 0.0
@@ -148,34 +217,45 @@ class CFXResultsParser:
         m_dot = abs(parsed["mass_flow"][-1]) if parsed["mass_flow"] else 0.0
         torque_val = abs(parsed["torque"][-1]) if parsed["torque"] else 0.0
 
-        # Default density for water
-        rho = 998.0
+        rho = fluid_density
 
         # Head from total pressure difference
         delta_p = p_out - p_in
         head_m = delta_p / (rho * G) if rho > 0 else 0.0
 
+        # Derive flow rate from mass flow if not provided
+        q = flow_rate if flow_rate is not None else (m_dot / rho if rho > 0 else 0.0)
+
         # Hydraulic power
-        p_hydraulic = m_dot * G * head_m
+        p_hydraulic = rho * G * q * head_m
 
-        # Shaft power: P = torque * omega
-        # Without omega we estimate from torque and hydraulic power
-        # If torque is available, efficiency = P_hydraulic / P_shaft
-        # But we need omega — store power as torque-based if omega unknown
-        # For now compute power assuming omega was embedded in torque monitor
-        power_w = abs(delta_p * m_dot / rho) if rho > 0 else 0.0
+        # Shaft power from torque (requires RPM)
+        if rpm is not None and rpm > 0:
+            omega = rpm * 2.0 * math.pi / 60.0
+            power_w = torque_val * omega
+        else:
+            # Fallback: estimate from pressure and flow
+            power_w = abs(delta_p * m_dot / rho) if rho > 0 else 0.0
 
+        # Efficiency
         efficiency = 0.0
-        if torque_val > 0 and power_w > 0:
-            # Estimate: shaft power ~ hydraulic power / efficiency
-            # With just monitors, best we can do is ratio
-            efficiency = min(1.0, p_hydraulic / (torque_val * 100.0)) \
-                if torque_val > 0 else 0.0
+        if power_w > 1e-10:
+            efficiency = min(1.0, p_hydraulic / power_w)
 
-        return {
+        # Specific speed (Nq metric)
+        specific_speed_nq = 0.0
+        if rpm is not None and rpm > 0 and head_m > 0 and q > 0:
+            specific_speed_nq = rpm * (q ** 0.5) / (head_m ** 0.75)
+
+        result: dict[str, Any] = {
             "head_m": round(head_m, 4),
             "efficiency": round(efficiency, 4),
             "power_w": round(power_w, 2),
             "pressure_rise_pa": round(delta_p, 2),
             "mass_flow_kgs": round(m_dot, 6),
         }
+
+        if specific_speed_nq > 0:
+            result["specific_speed_nq"] = round(specific_speed_nq, 2)
+
+        return result

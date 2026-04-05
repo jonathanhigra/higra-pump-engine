@@ -1422,10 +1422,10 @@ function CFDDomainFaces({ data, scale }: { data: ImpellerData; scale: number }) 
         <meshBasicMaterial color="#0088ff" transparent opacity={0.15} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Outlet face: red semi-transparent cylindrical band at r=D2/2 */}
-      <mesh rotation={[0, 0, 0]}>
-        <cylinderGeometry args={[r2, r2, Math.abs(z_outlet_top) || r2 * 0.1, 48, 1, true]} />
-        <meshBasicMaterial color="#ff4400" transparent opacity={0.12} side={THREE.DoubleSide} />
+      {/* Outlet face: red semi-transparent ring at z=0 (disc plane), r=D2/2 */}
+      <mesh position={[0, 0, 0]} rotation={[0, 0, 0]}>
+        <ringGeometry args={[r2 * 0.95, r2 * 1.05, 48]} />
+        <meshBasicMaterial color="#ff4400" transparent opacity={0.15} side={THREE.DoubleSide} />
       </mesh>
     </>
   )

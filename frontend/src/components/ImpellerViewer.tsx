@@ -236,13 +236,14 @@ function buildRevolutionGeo(profile: BladePoint[], segs = 128): THREE.BufferGeom
 /** Hub back-disc: flat annular disc at the outlet z-plane */
 function buildHubDiscGeo(hubProfile: BladePoint[], segs = 96): THREE.BufferGeometry {
   if (hubProfile.length < 2) return new THREE.BufferGeometry()
-  // Last point = outlet (r=r2, z~0)
-  const outlet = hubProfile[hubProfile.length - 1]
-  // First point = shaft (r=r_shaft, z=z_shaft)
-  const shaft = hubProfile[0]
-  const z = outlet.z
-  const r_outer = outlet.x   // in mm already
-  const r_inner = Math.min(shaft.x, r_outer * 0.25)
+  // Find the disc plane: the point with largest r at lowest z (back disc outer edge)
+  let r_outer = 0, z_disc = 0
+  for (const p of hubProfile) {
+    if (p.x > r_outer) { r_outer = p.x; z_disc = p.z }
+  }
+  // Shaft bore: ~8% of D2 radius — visible hole in the center
+  const r_inner = r_outer * 0.08
+  const z = z_disc
 
   const pos: number[] = []
   for (let j = 0; j < segs; j++) {

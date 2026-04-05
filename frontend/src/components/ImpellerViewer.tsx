@@ -714,8 +714,8 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
       if (p.x > r_outer_disc) { r_outer_disc = p.x; z_disc = p.z }
     }
     const r_bore = r_outer_disc * 0.18
-    const r_boss = r_bore * 2.0   // boss is 2x bore radius
-    const boss_height = r_bore * 1.5  // extends above disc
+    const r_boss = r_bore * 1.5   // boss must be smaller than blade inlet radius
+    const boss_height = r_bore * 1.0  // shorter, proportional
 
     // Create a hollow cylinder (ring) from r_bore to r_boss
     const segs = 48

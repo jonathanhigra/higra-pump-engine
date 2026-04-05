@@ -704,16 +704,19 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
   const geo = useMemo(() => buildRevolutionGeo(profile, 96), [profile])
   const discGeo = useMemo(() => buildHubDiscGeo(profile, 96), [profile])
   const showDisc = displayMode !== 'aberto'
+
+  // Slightly lighter hub color for better visibility from front
+  const hubColor = '#808898'
   return (
     <>
-      {/* Hub curve surface — always visible */}
+      {/* Hub curve surface — always visible, matte like blades */}
       <mesh geometry={geo} receiveShadow castShadow>
-        <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} />
+        <meshStandardMaterial color={hubColor} metalness={0.15} roughness={0.65} side={THREE.DoubleSide} />
       </mesh>
-      {/* Hub back disc — hidden in 'aberto' mode */}
+      {/* Hub back disc */}
       {showDisc && (
         <mesh geometry={discGeo} receiveShadow castShadow>
-          <meshStandardMaterial color={HUB_COLOR} metalness={0.80} roughness={0.20} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={hubColor} metalness={0.15} roughness={0.65} side={THREE.DoubleSide} />
         </mesh>
       )}
     </>
@@ -817,6 +820,10 @@ function SceneLights() {
       <directionalLight position={[-3, 2, 4]} intensity={0.8} color="#f4f4f4" />
       {/* Under fill — prevents dark underside */}
       <directionalLight position={[0, -3, 2]} intensity={0.4} color="#e8e8e8" />
+      {/* Back light — illuminates hub disc and back face */}
+      <directionalLight position={[0, 0, -4]} intensity={0.5} color="#d0d4dc" />
+      {/* Side rim — defines blade edges from the side */}
+      <directionalLight position={[4, -1, -1]} intensity={0.3} color="#e0e4ec" />
     </>
   )
 }
@@ -1307,7 +1314,7 @@ export default function ImpellerViewer({
   const [resolution, setResolution] = useState<string>('high')
   const [showDimensions, setShowDimensions] = useState(false)
   const [showGhostOverlay, setShowGhostOverlay] = useState(false)
-  const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.5, 1.8, 3.5])
+  const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.8, 2.0, 2.8])
   const [showEdges, setShowEdges] = useState(true)
   const [explodeAmount, setExplodeAmount] = useState(0)
   const [showVelocityArrows, setShowVelocityArrows] = useState(false)

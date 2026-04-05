@@ -1315,7 +1315,7 @@ export default function ImpellerViewer({
   const [resolution, setResolution] = useState<string>('high')
   const [showDimensions, setShowDimensions] = useState(false)
   const [showGhostOverlay, setShowGhostOverlay] = useState(false)
-  const [cameraPos, setCameraPos] = useState<[number, number, number]>([2.8, 2.0, 2.8])
+  const [cameraPos, setCameraPos] = useState<[number, number, number]>([3.0, 2.5, 2.5])
   const [showEdges, setShowEdges] = useState(true)
   const [explodeAmount, setExplodeAmount] = useState(0)
   const [showVelocityArrows, setShowVelocityArrows] = useState(false)

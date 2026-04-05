@@ -237,7 +237,7 @@ def _integrate_camber_logarithmic(
     r_outlet = hub_rev[-1][0] + s * (shr_rev[-1][0] - hub_rev[-1][0])
     r_inlet = hub_rev[0][0] + s * (shr_rev[0][0] - hub_rev[0][0])
     # Target wrap at this span (hub gets more, shroud gets less)
-    target_wrap = math.radians(115 + 25 * (1 - s))  # hub~140°, shroud~115°
+    target_wrap = math.radians(80 + 20 * (1 - s))  # hub~100°, shroud~80°
 
     # Compute what beta_eff gives target wrap: wrap = ln(r2/r1)/tan(beta_eff)
     r_ratio = r_outlet / max(r_inlet, 0.001)

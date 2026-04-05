@@ -1184,6 +1184,27 @@ function Scene({
         <group scale={[scale, scale, scale]}>
           <HubMesh profile={data.hub_profile} displayMode={displayMode} />
           <ShroudMesh profile={data.shroud_profile} displayMode={displayMode} />
+          {/* Shaft nose cone — small cylinder + cone inside the eye */}
+          {(() => {
+            const shaftR = (data.d1 || data.d2 * 0.35) * 500 * 0.12  // shaft radius in mm
+            const eyeZ = data.shroud_profile?.length > 0
+              ? Math.max(...data.shroud_profile.map((p: any) => p.z))
+              : r2_mm * 0.4
+            return (
+              <group rotation={[Math.PI / 2, 0, 0]}>
+                {/* Shaft cylinder — along Z axis (rotated from Y) */}
+                <mesh position={[0, -eyeZ * 0.5, 0]} castShadow>
+                  <cylinderGeometry args={[shaftR, shaftR, eyeZ, 32]} />
+                  <meshStandardMaterial color="#707888" metalness={0.15} roughness={0.65} />
+                </mesh>
+                {/* Nose cone on top of shaft */}
+                <mesh position={[0, -(eyeZ + shaftR * 0.6), 0]} castShadow>
+                  <coneGeometry args={[shaftR * 1.2, shaftR * 2, 32]} />
+                  <meshStandardMaterial color="#707888" metalness={0.15} roughness={0.65} />
+                </mesh>
+              </group>
+            )
+          })()}
           {data.blade_surfaces.map((surf, i) => {
             const bladeAngle = (i / data.blade_count) * Math.PI * 2
             const eased = 1 - Math.pow(1 - assemblyT, 3)

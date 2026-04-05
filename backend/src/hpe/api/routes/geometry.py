@@ -163,27 +163,17 @@ def _hub_with_shaft(
     r_out, z_out = hub_rz[0]   # outlet
     r_in, z_in = hub_rz[-1]    # inlet (r=r1, at top of blade channel)
 
-    # Eye tube height above blade channel
-    z_eye_top = z_in + r1_hub * 1.5
-
-    # Revolution profile:
-    # 1. Back disc (z=-3mm rim)
-    # 2. Hub blade surface (r2→r1)
-    # 3. Eye tube (r1→r1_hub, vertical)
-    # 4. Shaft + nose cone
+    # Revolution profile — OPEN at the eye (no closing wall)
+    # The profile goes from the back disc up to the blade inlet,
+    # then STOPS at r1. The eye is left open (hollow).
     profile = [
-        (r_shaft, -0.003),      # shaft at back
+        (r_shaft, -0.003),      # shaft bore at back
         (r_out, -0.003),        # disc outer, back face (rim)
         (r_out, 0.0),           # disc outer, front face
     ]
-    profile += hub_rz           # blade channel hub (outlet→inlet)
-    profile += [
-        (r1_hub, z_in),         # eye tube: narrows from r1 to r1_hub
-        (r1_hub, z_eye_top),    # eye tube top
-        (r_shaft, z_eye_top),   # shaft at eye level
-        (r_shaft * 0.6, z_eye_top + r_shaft * 0.3),  # nose taper
-        (0.0, z_eye_top + r_shaft * 0.45),            # nose tip
-    ]
+    profile += hub_rz           # blade channel hub (r2→r1, outlet→inlet)
+    # Profile ends at r=r1, z=z_in — eye is OPEN here
+    # The shaft/nose is a separate small cylinder inside the eye
     return profile
 
 

@@ -208,18 +208,35 @@ function buildQuadGeoWithSpanGradient(grid: BladePoint[][]): THREE.BufferGeometr
   return g
 }
 
-/** Mesh quality colormap: green (good) at mid, yellow/red (poor) at edges */
+/** Mesh quality colormap: green (good AR~1) → yellow → red (poor AR>10) using actual aspect ratio */
 function buildQuadGeoWithQualityColors(grid: BladePoint[][]): THREE.BufferGeometry {
   const nSpan = grid.length
   const nChord = grid[0]?.length ?? 0
   const pos: number[] = []
   const colors: number[] = []
 
-  const quality = (s: number, c: number): number => {
-    const sn = nSpan > 1 ? s / (nSpan - 1) : 0.5
-    const cn = nChord > 1 ? c / (nChord - 1) : 0.5
-    const edgePenalty = Math.min(cn, 1 - cn, sn, 1 - sn) * 4
-    return Math.min(1, edgePenalty)
+  const dist = (a: BladePoint, b: BladePoint) =>
+    Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+
+  // Compute aspect-ratio-based quality at each grid node
+  const qualityGrid: number[][] = []
+  for (let s = 0; s < nSpan; s++) {
+    const row: number[] = []
+    for (let c = 0; c < nChord; c++) {
+      // Chordwise cell size (dx)
+      const dx = c < nChord - 1
+        ? dist(grid[s][c], grid[s][c + 1])
+        : dist(grid[s][c - 1], grid[s][c])
+      // Spanwise cell size (dy)
+      const dy = s < nSpan - 1
+        ? dist(grid[s][c], grid[s + 1][c])
+        : dist(grid[s - 1][c], grid[s][c])
+      const ar = (dx > 0 && dy > 0) ? Math.max(dx / dy, dy / dx) : 1
+      // Quality: AR=1 is perfect (q=1), AR>=11 is worst (q=0)
+      const q = 1.0 - Math.min(1.0, (ar - 1) / 10)
+      row.push(q)
+    }
+    qualityGrid.push(row)
   }
 
   const qColor = (q: number): [number, number, number] => {
@@ -240,8 +257,8 @@ function buildQuadGeoWithQualityColors(grid: BladePoint[][]): THREE.BufferGeomet
     for (let c = 0; c < nChord - 1; c++) {
       const p00 = grid[s][c], p10 = grid[s + 1][c]
       const p01 = grid[s][c + 1], p11 = grid[s + 1][c + 1]
-      const q00 = quality(s, c), q10 = quality(s + 1, c)
-      const q01 = quality(s, c + 1), q11 = quality(s + 1, c + 1)
+      const q00 = qualityGrid[s][c], q10 = qualityGrid[s + 1][c]
+      const q01 = qualityGrid[s][c + 1], q11 = qualityGrid[s + 1][c + 1]
       addTri(p00, p10, p01, q00, q10, q01)
       addTri(p10, p11, p01, q10, q11, q01)
     }
@@ -1191,7 +1208,9 @@ function MeridionalLines({ hubProfile, shroudProfile, scale }: {
 
 // ─── CFD mesh overlay components ─────────────────────────────────────────────
 
-function CFDMeshLines({ surface, scale }: { surface: BladeSurface; scale: number }) {
+type MeshDensity = 'grosso' | 'medio' | 'fino'
+
+function CFDMeshLines({ surface, scale, meshDensity = 'medio' }: { surface: BladeSurface; scale: number; meshDensity?: MeshDensity }) {
   const lines = useMemo(() => {
     const geos: THREE.BufferGeometry[] = []
     const ps = surface.ps
@@ -1199,32 +1218,36 @@ function CFDMeshLines({ surface, scale }: { surface: BladeSurface; scale: number
     const nSpan = ps.length
     const nChord = ps[0]?.length ?? 0
 
+    // Skip factor: grosso=4, medio=2, fino=1
+    const chordSkip = meshDensity === 'grosso' ? 4 : meshDensity === 'medio' ? 2 : 1
+    const spanSkip = chordSkip
+
     // Chordwise lines (along each span station) -- on PS
-    for (let s = 0; s < nSpan; s++) {
+    for (let s = 0; s < nSpan; s += spanSkip) {
       const pts = ps[s].map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
       geos.push(new THREE.BufferGeometry().setFromPoints(pts))
     }
 
     // Spanwise lines (along each chord station) -- on PS
-    for (let c = 0; c < nChord; c += 2) {
+    for (let c = 0; c < nChord; c += chordSkip) {
       const pts = ps.map(row => new THREE.Vector3(row[c].x * scale, row[c].y * scale, row[c].z * scale))
       geos.push(new THREE.BufferGeometry().setFromPoints(pts))
     }
 
     // Chordwise lines -- on SS
-    for (let s = 0; s < nSpan; s++) {
+    for (let s = 0; s < nSpan; s += spanSkip) {
       const pts = ss[s].map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
       geos.push(new THREE.BufferGeometry().setFromPoints(pts))
     }
 
     // Spanwise lines -- on SS
-    for (let c = 0; c < nChord; c += 2) {
+    for (let c = 0; c < nChord; c += chordSkip) {
       const pts = ss.map(row => new THREE.Vector3(row[c].x * scale, row[c].y * scale, row[c].z * scale))
       geos.push(new THREE.BufferGeometry().setFromPoints(pts))
     }
 
     return geos
-  }, [surface, scale])
+  }, [surface, scale, meshDensity])
 
   return (
     <>
@@ -1238,17 +1261,21 @@ function CFDMeshLines({ surface, scale }: { surface: BladeSurface; scale: number
   )
 }
 
-function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
+function HubShroudMeshLines({ hubProfile, shroudProfile, scale, meshDensity = 'medio' }: {
   hubProfile: BladePoint[]
   shroudProfile: BladePoint[]
   scale: number
+  meshDensity?: MeshDensity
 }) {
   const lines = useMemo(() => {
     const geos: THREE.BufferGeometry[] = []
-    const N_CIRC = 24
+    // Circumferential divisions: grosso=6, medio=12, fino=24
+    const N_CIRC = meshDensity === 'grosso' ? 6 : meshDensity === 'medio' ? 12 : 24
+    // Number of meridional rings
+    const nRings = meshDensity === 'grosso' ? 6 : meshDensity === 'medio' ? 12 : 24
 
     // Hub: circumferential rings at several meridional stations
-    for (let i = 0; i < hubProfile.length; i += Math.max(1, Math.floor(hubProfile.length / 12))) {
+    for (let i = 0; i < hubProfile.length; i += Math.max(1, Math.floor(hubProfile.length / nRings))) {
       const p = hubProfile[i]
       const r = p.x * scale, z = p.z * scale
       const pts: THREE.Vector3[] = []
@@ -1260,8 +1287,9 @@ function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
     }
 
     // Hub: meridional lines at several angular positions
-    for (let j = 0; j < 12; j++) {
-      const a = (j / 12) * Math.PI * 2
+    const nMeridional = meshDensity === 'grosso' ? 6 : meshDensity === 'medio' ? 12 : 24
+    for (let j = 0; j < nMeridional; j++) {
+      const a = (j / nMeridional) * Math.PI * 2
       const pts = hubProfile.map(p => {
         const r = p.x * scale, z = p.z * scale
         return new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z)
@@ -1270,7 +1298,7 @@ function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
     }
 
     // Shroud: circumferential rings
-    for (let i = 0; i < shroudProfile.length; i += Math.max(1, Math.floor(shroudProfile.length / 12))) {
+    for (let i = 0; i < shroudProfile.length; i += Math.max(1, Math.floor(shroudProfile.length / nRings))) {
       const p = shroudProfile[i]
       const r = p.x * scale, z = p.z * scale
       const pts: THREE.Vector3[] = []
@@ -1282,8 +1310,8 @@ function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
     }
 
     // Shroud: meridional lines
-    for (let j = 0; j < 12; j++) {
-      const a = (j / 12) * Math.PI * 2
+    for (let j = 0; j < nMeridional; j++) {
+      const a = (j / nMeridional) * Math.PI * 2
       const pts = shroudProfile.map(p => {
         const r = p.x * scale, z = p.z * scale
         return new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z)
@@ -1292,7 +1320,7 @@ function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
     }
 
     return geos
-  }, [hubProfile, shroudProfile, scale])
+  }, [hubProfile, shroudProfile, scale, meshDensity])
 
   return (
     <>
@@ -1308,10 +1336,229 @@ function HubShroudMeshLines({ hubProfile, shroudProfile, scale }: {
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
+// ─── O-grid boundary layer around blade ──────────────────────────────────────
+
+function BladeBoundaryLayer({ surface, scale, nLayers = 5 }: { surface: BladeSurface; scale: number; nLayers?: number }) {
+  const lines = useMemo(() => {
+    const geos: THREE.BufferGeometry[] = []
+    const ps = surface.ps, ss = surface.ss
+    const nSpan = ps.length, nChord = ps[0]?.length ?? 0
+    if (nSpan < 3 || nChord < 2) return geos
+
+    // Draw offset curves at mid-span around the blade profile
+    const midS = Math.floor(nSpan / 2)
+
+    for (let layer = 1; layer <= nLayers; layer++) {
+      // Offset distance grows exponentially (first cell ratio ~1.3)
+      const offset = 0.5 * Math.pow(1.3, layer) // mm
+
+      // PS offset outward (toward next span = away from blade center)
+      const psPts: THREE.Vector3[] = []
+      for (let c = 0; c < nChord; c++) {
+        const p = ps[midS][c]
+        const pInner = ps[Math.max(0, midS - 1)][c]
+        const pOuter = ps[Math.min(nSpan - 1, midS + 1)][c]
+        const nx = pOuter.x - pInner.x, ny = pOuter.y - pInner.y, nz = pOuter.z - pInner.z
+        const mag = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+        psPts.push(new THREE.Vector3(
+          (p.x + nx / mag * offset) * scale,
+          (p.y + ny / mag * offset) * scale,
+          (p.z + nz / mag * offset) * scale,
+        ))
+      }
+      geos.push(new THREE.BufferGeometry().setFromPoints(psPts))
+
+      // SS offset (opposite direction)
+      const ssPts: THREE.Vector3[] = []
+      for (let c = 0; c < nChord; c++) {
+        const p = ss[midS][c]
+        const pInner = ss[Math.max(0, midS - 1)][c]
+        const pOuter = ss[Math.min(nSpan - 1, midS + 1)][c]
+        const nx = pOuter.x - pInner.x, ny = pOuter.y - pInner.y, nz = pOuter.z - pInner.z
+        const mag = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+        ssPts.push(new THREE.Vector3(
+          (p.x - nx / mag * offset) * scale,
+          (p.y - ny / mag * offset) * scale,
+          (p.z - nz / mag * offset) * scale,
+        ))
+      }
+      geos.push(new THREE.BufferGeometry().setFromPoints(ssPts))
+    }
+    return geos
+  }, [surface, scale, nLayers])
+
+  return (
+    <>
+      {lines.map((geo, i) => (
+        <primitive key={i} object={new THREE.Line(geo, new THREE.LineBasicMaterial({
+          color: '#ffaa00', transparent: true, opacity: 0.4 + (i % 5) * 0.05,
+        }))} />
+      ))}
+    </>
+  )
+}
+
+// ─── CFD domain inlet/outlet faces ──────────────────────────────────────────
+
+function CFDDomainFaces({ data, scale }: { data: ImpellerData; scale: number }) {
+  const r2 = data.d2 * 500 * scale
+  const r1 = (data.d1 || data.d2 * 0.35) * 500 * scale
+  const z_inlet = data.shroud_profile?.length > 0
+    ? Math.max(...data.shroud_profile.map(p => p.z)) * scale
+    : r2 * 0.3
+  // Hub bore radius for inlet ring inner edge
+  const r_bore = r1 * 0.3
+
+  // Outlet height: from hub z=0 to shroud z at outlet (last point of shroud profile)
+  const z_outlet_top = data.shroud_profile?.length > 0
+    ? data.shroud_profile[data.shroud_profile.length - 1].z * scale
+    : 0
+
+  return (
+    <>
+      {/* Inlet face: blue semi-transparent annular ring at z=z_inlet */}
+      <mesh position={[0, 0, z_inlet]} rotation={[0, 0, 0]}>
+        <ringGeometry args={[r_bore, r1, 48]} />
+        <meshBasicMaterial color="#0088ff" transparent opacity={0.15} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Outlet face: red semi-transparent cylindrical band at r=D2/2 */}
+      <mesh rotation={[0, 0, 0]}>
+        <cylinderGeometry args={[r2, r2, Math.abs(z_outlet_top) || r2 * 0.1, 48, 1, true]} />
+        <meshBasicMaterial color="#ff4400" transparent opacity={0.12} side={THREE.DoubleSide} />
+      </mesh>
+    </>
+  )
+}
+
+// ─── Periodic boundary lines ────────────────────────────────────────────────
+
+function PeriodicBoundaryLines({ blade0, blade1, scale }: {
+  blade0: BladeSurface; blade1: BladeSurface; scale: number
+}) {
+  const lines = useMemo(() => {
+    const geos: THREE.BufferGeometry[] = []
+
+    // Periodic boundary 1: PS edge of blade 0 (hub + shroud chordwise lines)
+    const ps0Hub = blade0.ps[0]
+    if (ps0Hub?.length > 1) {
+      const pts = ps0Hub.map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+    const ps0Shr = blade0.ps[blade0.ps.length - 1]
+    if (ps0Shr?.length > 1) {
+      const pts = ps0Shr.map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    // Periodic boundary 2: SS edge of blade 1 (hub + shroud chordwise lines)
+    const ss1Hub = blade1.ss[0]
+    if (ss1Hub?.length > 1) {
+      const pts = ss1Hub.map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+    const ss1Shr = blade1.ss[blade1.ss.length - 1]
+    if (ss1Shr?.length > 1) {
+      const pts = ss1Shr.map(p => new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale))
+      geos.push(new THREE.BufferGeometry().setFromPoints(pts))
+    }
+
+    return geos
+  }, [blade0, blade1, scale])
+
+  // Apply dashed line rendering: must call computeLineDistances for dashed material
+  const lineObjects = useMemo(() => {
+    return lines.map(geo => {
+      const mat = new THREE.LineDashedMaterial({
+        color: '#ffdd00', transparent: true, opacity: 0.7,
+        dashSize: 0.02, gapSize: 0.01,
+      })
+      const line = new THREE.Line(geo, mat)
+      line.computeLineDistances()
+      return line
+    })
+  }, [lines])
+
+  return (
+    <>
+      {lineObjects.map((obj, i) => (
+        <primitive key={i} object={obj} />
+      ))}
+    </>
+  )
+}
+
+// ─── CFD info panel overlay ─────────────────────────────────────────────────
+
+function CFDInfoPanel({ data, meshDensity, rpm }: {
+  data: ImpellerData; meshDensity: MeshDensity; rpm: number
+}) {
+  // Y+ estimation
+  // Re = rho * u2 * D2 / mu  (water at 20C: rho=998, mu=1.003e-3)
+  const rho = 998
+  const mu = 1.003e-3
+  const u2 = Math.PI * data.d2 * rpm / 60  // tip speed m/s
+  const Re = rho * u2 * data.d2 / mu
+  const Cf = 0.058 * Math.pow(Math.max(Re, 1), -0.2)
+  const u_tau = u2 * Math.sqrt(Cf / 2)
+
+  // First cell height based on density
+  const y1Map: Record<MeshDensity, number> = { grosso: 0.5e-3, medio: 0.15e-3, fino: 0.01e-3 }  // meters
+  const y1 = y1Map[meshDensity]
+  const yPlus = (y1 * u_tau * rho) / mu
+
+  // Element count estimation
+  const nSpan = data.blade_surfaces[0]?.ps?.length ?? 10
+  const nChord = data.blade_surfaces[0]?.ps?.[0]?.length ?? 10
+  const skip = meshDensity === 'grosso' ? 4 : meshDensity === 'medio' ? 2 : 1
+  const nSpanEff = Math.ceil(nSpan / skip)
+  const nChordEff = Math.ceil(nChord / skip)
+  const nPitchDiv = meshDensity === 'grosso' ? 8 : meshDensity === 'medio' ? 16 : 32
+  const nBLLayers = meshDensity === 'grosso' ? 3 : meshDensity === 'medio' ? 8 : 20
+  const nElements = nChordEff * nSpanEff * nPitchDiv * nBLLayers * data.blade_count
+
+  const formatCount = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : `${n}`
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: 16, left: 16,
+      background: 'rgba(10,15,20,0.92)',
+      border: '1px solid rgba(0,200,136,0.4)',
+      borderRadius: 8, padding: '10px 14px', minWidth: 200,
+      backdropFilter: 'blur(12px)',
+      zIndex: 10, fontSize: 11,
+    }}>
+      <div style={{ color: '#00cc88', fontWeight: 600, fontSize: 12, marginBottom: 8 }}>
+        Malha CFD
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {([
+            ['Y+ estimado', `~${yPlus.toFixed(0)}`],
+            ['Elementos estimados', `~${formatCount(nElements)}`],
+            ['Tipo de malha', 'H/O-grid estruturada'],
+            ['Solver sugerido', 'SST k-\u03C9'],
+            ['Re (ponta)', `${(Re / 1e6).toFixed(2)}M`],
+            ['u2 (ponta)', `${u2.toFixed(1)} m/s`],
+            ['Exportar malha', 'STEP + ANSYS TurboGrid'],
+          ] as [string, string][]).map(([label, val]) => (
+            <tr key={label}>
+              <td style={{ color: 'var(--text-muted)', paddingBottom: 3, paddingRight: 8 }}>{label}</td>
+              <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{val}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── Scene ────────────────────────────────────────────────────────────────────
+
 function Scene({
   data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showVolute, displayMode,
   selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount,
-  showVelocityArrows, showSections, turntable, sizing,
+  showVelocityArrows, showSections, turntable, sizing, meshDensity,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -1340,6 +1587,7 @@ function Scene({
   showSections?: boolean
   turntable?: boolean
   sizing?: SizingResult | null
+  meshDensity?: MeshDensity
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -1433,7 +1681,10 @@ function Scene({
                   selectedBlade={selectedBlade} sizing={sizing} />
                 <BladeEdgeLines surface={surf} visible={showEdges ?? true} />
                 {showCFDMesh && (
-                  <CFDMeshLines surface={surf} scale={1} />
+                  <CFDMeshLines surface={surf} scale={1} meshDensity={meshDensity} />
+                )}
+                {showCFDMesh && (i === 0 || i === 1) && (
+                  <BladeBoundaryLayer surface={surf} scale={1} />
                 )}
                 {i === 0 && showVelocityArrows && (
                   <VelocityArrows surface={surf} scale={1} sizing={sizing} />
@@ -1472,7 +1723,15 @@ function Scene({
           )}
           {/* CFD mesh grid lines on hub and shroud */}
           {showCFDMesh && (
-            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} />
+            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} meshDensity={meshDensity} />
+          )}
+          {/* CFD domain inlet/outlet faces */}
+          {showCFDMesh && (
+            <CFDDomainFaces data={data} scale={1} />
+          )}
+          {/* Periodic boundary lines (between blade 0 PS and blade 1 SS) */}
+          {showCFDMesh && data.blade_surfaces.length >= 2 && (
+            <PeriodicBoundaryLines blade0={data.blade_surfaces[0]} blade1={data.blade_surfaces[1]} scale={1} />
           )}
         </group>
       </RotatingGroup>
@@ -1562,6 +1821,7 @@ export default function ImpellerViewer({
   const [showSpanColors, setShowSpanColors] = useState(false)
   const [showMeridionalLines, setShowMeridionalLines] = useState(false)
   const [showCFDMesh, setShowCFDMesh] = useState(false)
+  const [meshDensity, setMeshDensity] = useState<MeshDensity>('medio')
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -1678,7 +1938,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -1730,6 +1990,10 @@ export default function ImpellerViewer({
               <span>Alta Q</span>
               <LegendItem color="#00cc88" label="Malha pa" />
               <LegendItem color="#00aacc" label="Malha cubo/shroud" />
+              <LegendItem color="#ffaa00" label="Camada limite" />
+              <LegendItem color="#0088ff" label="Inlet" />
+              <LegendItem color="#ff4400" label="Outlet" />
+              <LegendItem color="#ffdd00" label="Periodico" />
             </div>
           )}
         </div>
@@ -1742,6 +2006,9 @@ export default function ImpellerViewer({
               sizing={sizing}
               onClose={() => setSelectedBlade(null)}
             />
+          )}
+          {showCFDMesh && data && (
+            <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} />
           )}
           {showGhostOverlay && (
             <div style={{
@@ -1766,6 +2033,20 @@ export default function ImpellerViewer({
             <ControlButton label={showLoadingMap ? '◉ rVθ' : '○ rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
             <ControlButton label={showSpanColors ? '◉ Span' : '○ Span'} onClick={() => { setShowSpanColors(s => !s); setShowColormap(false); setShowLoadingMap(false); setShowCFDMesh(false) }} />
             <ControlButton label={showCFDMesh ? '◉ Malha CFD' : '○ Malha CFD'} onClick={() => { setShowCFDMesh(m => !m); setShowColormap(false); setShowLoadingMap(false); setShowSpanColors(false) }} />
+            {showCFDMesh && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Refinamento</span>
+                {(['grosso', 'medio', 'fino'] as MeshDensity[]).map(d => (
+                  <button key={d} onClick={() => setMeshDensity(d)} style={{
+                    fontSize: 9, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                    border: `1px solid ${meshDensity === d ? 'var(--accent)' : 'var(--border-primary)'}`,
+                    background: meshDensity === d ? 'rgba(0,160,223,0.2)' : 'transparent',
+                    color: meshDensity === d ? 'var(--accent)' : 'var(--text-muted)',
+                    fontWeight: meshDensity === d ? 600 : 400,
+                  }}>{d.charAt(0).toUpperCase() + d.slice(1)}</button>
+                ))}
+              </div>
+            )}
             <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
             <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
             <ControlButton label={showWireframe ? '◉ Wire' : '○ Wire'} onClick={() => setShowWireframe(w => !w)} />
@@ -1849,6 +2130,10 @@ export default function ImpellerViewer({
         />
       )}
 
+      {showCFDMesh && data && (
+        <CFDInfoPanel data={data} meshDensity={meshDensity} rpm={rpm} />
+      )}
+
       {/* TOP-LEFT: Legend bar */}
       <div className="viewer-overlay viewer-overlay-tl">
         <div className="glass-panel" style={{ padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 12 }}>
@@ -1887,6 +2172,10 @@ export default function ImpellerViewer({
               <span>Alta Q</span>
               <LegendItem color="#00cc88" label="Malha pa" />
               <LegendItem color="#00aacc" label="Malha cubo/shroud" />
+              <LegendItem color="#ffaa00" label="Camada limite" />
+              <LegendItem color="#0088ff" label="Inlet" />
+              <LegendItem color="#ff4400" label="Outlet" />
+              <LegendItem color="#ffdd00" label="Periodico" />
             </div>
           )}
           {data && (
@@ -1939,6 +2228,20 @@ export default function ImpellerViewer({
           <ControlButton label={showColormap ? 'Mapa P ON' : 'Mapa P'} onClick={() => { setShowColormap(c => !c); setShowLoadingMap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
           <ControlButton label={showLoadingMap ? 'Mapa rVθ ON' : 'Mapa rVθ'} onClick={() => { setShowLoadingMap(l => !l); setShowColormap(false); setShowSpanColors(false); setShowCFDMesh(false) }} />
           <ControlButton label={showCFDMesh ? '◉ Malha CFD' : '○ Malha CFD'} onClick={() => { setShowCFDMesh(m => !m); setShowColormap(false); setShowLoadingMap(false); setShowSpanColors(false) }} />
+          {showCFDMesh && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Refinamento</span>
+              {(['grosso', 'medio', 'fino'] as MeshDensity[]).map(d => (
+                <button key={d} onClick={() => setMeshDensity(d)} style={{
+                  fontSize: 9, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                  border: `1px solid ${meshDensity === d ? 'var(--accent)' : 'var(--border-primary)'}`,
+                  background: meshDensity === d ? 'rgba(0,160,223,0.2)' : 'transparent',
+                  color: meshDensity === d ? 'var(--accent)' : 'var(--text-muted)',
+                  fontWeight: meshDensity === d ? 600 : 400,
+                }}>{d.charAt(0).toUpperCase() + d.slice(1)}</button>
+              ))}
+            </div>
+          )}
           <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
           <DisplayModeButtons displayMode={displayMode} setDisplayMode={setDisplayMode} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />

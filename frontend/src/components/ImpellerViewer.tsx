@@ -366,8 +366,8 @@ void pressureColor
 // ─── Materials ────────────────────────────────────────────────────────────────
 
 // Inventor-style solid matte palette (no shine, no reflections)
-const BLADE_COLOR = '#a0a5ad'    // blade PS — matte steel gray
-const BLADE_COLOR_ALT = '#8e939b' // blade SS — slightly darker
+const BLADE_COLOR = '#b0b5bd'    // blade PS — matte steel gray
+const BLADE_COLOR_ALT = '#9ea3ab' // blade SS — slightly darker
 const HUB_COLOR = '#6a7080'       // hub — subtle dark matte (doesn't compete with blades)
 const SPLITTER_COLOR = '#969ba3'  // splitter
 
@@ -706,6 +706,55 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
   const discGeo = useMemo(() => buildHubDiscGeo(profile, 96), [profile])
   const showDisc = displayMode !== 'aberto'
 
+  // Hub boss: a short cylinder (ring) around the bore hole
+  const bossGeo = useMemo(() => {
+    // Find bore radius and disc z from profile
+    let r_outer_disc = 0, z_disc = 0
+    for (const p of profile) {
+      if (p.x > r_outer_disc) { r_outer_disc = p.x; z_disc = p.z }
+    }
+    const r_bore = r_outer_disc * 0.18
+    const r_boss = r_bore * 2.0   // boss is 2x bore radius
+    const boss_height = r_bore * 1.5  // extends above disc
+
+    // Create a hollow cylinder (ring) from r_bore to r_boss
+    const segs = 48
+    const pos: number[] = []
+    for (let j = 0; j < segs; j++) {
+      const a0 = (j / segs) * Math.PI * 2
+      const a1 = ((j + 1) / segs) * Math.PI * 2
+
+      // Top face (z = z_disc + boss_height)
+      const zt = z_disc + boss_height
+      pos.push(r_bore*Math.cos(a0), r_bore*Math.sin(a0), zt,
+               r_boss*Math.cos(a0), r_boss*Math.sin(a0), zt,
+               r_bore*Math.cos(a1), r_bore*Math.sin(a1), zt)
+      pos.push(r_boss*Math.cos(a0), r_boss*Math.sin(a0), zt,
+               r_boss*Math.cos(a1), r_boss*Math.sin(a1), zt,
+               r_bore*Math.cos(a1), r_bore*Math.sin(a1), zt)
+
+      // Outer wall (r = r_boss, from z_disc to z_disc+boss_height)
+      pos.push(r_boss*Math.cos(a0), r_boss*Math.sin(a0), z_disc,
+               r_boss*Math.cos(a0), r_boss*Math.sin(a0), zt,
+               r_boss*Math.cos(a1), r_boss*Math.sin(a1), z_disc)
+      pos.push(r_boss*Math.cos(a0), r_boss*Math.sin(a0), zt,
+               r_boss*Math.cos(a1), r_boss*Math.sin(a1), zt,
+               r_boss*Math.cos(a1), r_boss*Math.sin(a1), z_disc)
+
+      // Inner wall (r = r_bore, from z_disc to z_disc+boss_height) — bore wall
+      pos.push(r_bore*Math.cos(a0), r_bore*Math.sin(a0), zt,
+               r_bore*Math.cos(a0), r_bore*Math.sin(a0), z_disc,
+               r_bore*Math.cos(a1), r_bore*Math.sin(a1), zt)
+      pos.push(r_bore*Math.cos(a0), r_bore*Math.sin(a0), z_disc,
+               r_bore*Math.cos(a1), r_bore*Math.sin(a1), z_disc,
+               r_bore*Math.cos(a1), r_bore*Math.sin(a1), zt)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
+  }, [profile])
+
   // Slightly lighter hub color for better visibility from front
   const hubColor = '#808898'
   return (
@@ -718,6 +767,12 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
       {showDisc && (
         <mesh geometry={discGeo} receiveShadow castShadow>
           <meshStandardMaterial color={hubColor} metalness={0.15} roughness={0.65} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {/* Hub boss: raised ring around bore hole */}
+      {showDisc && (
+        <mesh geometry={bossGeo} castShadow receiveShadow>
+          <meshStandardMaterial color="#808898" metalness={0.15} roughness={0.60} side={THREE.DoubleSide} />
         </mesh>
       )}
     </>
@@ -800,7 +855,7 @@ function SceneLights() {
   // CAD-style lighting: high ambient + soft shadow from key light for depth
   return (
     <>
-      <ambientLight intensity={0.75} />
+      <ambientLight intensity={0.85} />
       {/* Key light with soft shadow — gives blade-on-hub depth cues */}
       <directionalLight
         position={[3, 4, 5]}

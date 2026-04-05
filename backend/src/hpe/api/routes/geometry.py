@@ -102,52 +102,41 @@ def _meridional_curves(
     This produces the classic centrifugal pump impeller shape:
     flat disc with concave hub rising to axial eye.
     """
-    # Eye height: 0.20*D2 for proper depth (aspect ratio ~5:1)
-    z_eye = 0.20 * (2 * r2)
+    # Blade channel: from r2 (outlet) to r1 (inlet eye radius)
+    # Blades do NOT extend below r1 — the shaft/eye tube is visual only
+    z_base = b2 * 0.10          # hub surface height above back-disc
+    z_inlet = r1 * 0.85         # inlet height at r1 (axial extent of blade channel)
 
-    # Hub surface: blades sit here (slightly above back-disc z=0)
-    z_base = b2 * 0.10
-
-    # Bend elbow radius
-    r_bend = r1_hub + (r1 - r1_hub) * 0.45
-    bend_r = r_bend - r1_hub
-
-    # Eye shroud radius: D1/2 (outer wall of inlet tube)
-    r_eye_shroud = r1
+    # Bend: quarter-arc with radius = z_inlet (controls axial depth)
+    arc_r = z_inlet  # arc radius determines how deep the eye goes
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
 
     for i in range(n_chord):
         t = i / (n_chord - 1)
+        # t=0: outlet (r=r2, z≈0), t=1: inlet (r=r1, z=z_inlet)
 
         # --- HUB ---
-        if t < 0.55:
-            # Radial zone: flat disc
-            s = t / 0.55
-            r_h = r2 - (r2 - r_bend) * s
+        if t < 0.65:
+            # Radial zone: flat disc from r2 toward r1+arc_r
+            s = t / 0.65
+            r_h = r2 - (r2 - r1 - arc_r) * s
             z_h = z_base
-        elif t < 0.78:
-            # Bend zone: quarter-arc
-            s = (t - 0.55) / 0.23
-            arc = (math.pi / 2) * (s ** 2.5)
-            r_h = r1_hub + bend_r * math.cos(arc)
-            z_h = z_base + bend_r * math.sin(arc)
         else:
-            # Eye tube: vertical at r=r1_hub
-            s = (t - 0.78) / 0.22
-            z_bend_top = z_base + bend_r
-            r_h = r1_hub
-            z_h = z_bend_top + s * (z_eye - z_bend_top)
+            # Bend: quarter-arc sweeping from radial to axial
+            s = (t - 0.65) / 0.35
+            arc = (math.pi / 2) * (s ** 2.0)
+            r_h = r1 + arc_r * (1.0 - math.sin(arc))
+            z_h = z_base + arc_r * (1.0 - math.cos(arc))
 
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
 
-        # --- SHROUD (strictly monotonic r: r2 → r_eye_shroud) ---
-        # Simple approach: shroud r decreases linearly from r2 to r_eye_shroud
-        # over the full chord, with z offset that tapers from b2 to 0
-        r_s = r2 + t * (r_eye_shroud - r2)  # linear r2 → r_eye
-        z_s = z_h + b_t * (1.0 - t * 0.7)   # z offset tapers but keeps some at inlet
+        # --- SHROUD ---
+        # Linear r from r2 to r1, z offset tapers
+        r_s = r2 + t * (r1 - r2)
+        z_s = z_h + b_t * (1.0 - t * 0.5)
 
         hub_rz.append((r_h, z_h))
         shroud_rz.append((r_s, z_s))
@@ -170,27 +159,30 @@ def _hub_with_shaft(
         return hub_rz
     r_shaft = r1_hub * 0.35
 
-    # hub_rz[0] = outlet (r2, z_base), hub_rz[-1] = inlet (r1_hub, z_eye)
-    r_out, z_out = hub_rz[0]   # outlet (r=r2, z=z_base ~2mm)
-    r_in, z_in = hub_rz[-1]    # inlet eye top
+    # hub_rz[0] = outlet (r2, z_base), hub_rz[-1] = inlet (r1, z_inlet)
+    r_out, z_out = hub_rz[0]   # outlet
+    r_in, z_in = hub_rz[-1]    # inlet (r=r1, at top of blade channel)
 
-    # Revolution profile (r increasing order for clean geometry):
-    # 1. Shaft center at back → shaft outer at back (back disc inner)
-    # 2. Disc outer at back (r=r2, z=-3mm rim)
-    # 3. Disc outer at surface (r=r2, z=0)
-    # 4. Hub curve (r=r2→r1_hub, z=z_base→z_eye) — the hub_rz data
-    # 5. Shaft at eye + nose cone
+    # Eye tube height above blade channel
+    z_eye_top = z_in + r1_hub * 1.5
+
+    # Revolution profile:
+    # 1. Back disc (z=-3mm rim)
+    # 2. Hub blade surface (r2→r1)
+    # 3. Eye tube (r1→r1_hub, vertical)
+    # 4. Shaft + nose cone
     profile = [
         (r_shaft, -0.003),      # shaft at back
-        (r_out, -0.003),        # disc outer, back face (3mm rim)
+        (r_out, -0.003),        # disc outer, back face (rim)
         (r_out, 0.0),           # disc outer, front face
     ]
-    profile += hub_rz           # hub surface (outlet→inlet)
+    profile += hub_rz           # blade channel hub (outlet→inlet)
     profile += [
-        (r_shaft, z_in),        # shaft at eye level
-        (r_shaft * 0.7, z_in + r_shaft * 0.3),  # nose taper
-        (r_shaft * 0.3, z_in + r_shaft * 0.5),
-        (0.0, z_in + r_shaft * 0.55),            # nose tip
+        (r1_hub, z_in),         # eye tube: narrows from r1 to r1_hub
+        (r1_hub, z_eye_top),    # eye tube top
+        (r_shaft, z_eye_top),   # shaft at eye level
+        (r_shaft * 0.6, z_eye_top + r_shaft * 0.3),  # nose taper
+        (0.0, z_eye_top + r_shaft * 0.45),            # nose tip
     ]
     return profile
 
@@ -245,7 +237,7 @@ def _integrate_camber_logarithmic(
     r_outlet = hub_rev[-1][0] + s * (shr_rev[-1][0] - hub_rev[-1][0])
     r_inlet = hub_rev[0][0] + s * (shr_rev[0][0] - hub_rev[0][0])
     # Target wrap at this span (hub gets more, shroud gets less)
-    target_wrap = math.radians(130 + 30 * (1 - s))  # hub~160°, shroud~130°
+    target_wrap = math.radians(115 + 25 * (1 - s))  # hub~140°, shroud~115°
 
     # Compute what beta_eff gives target wrap: wrap = ln(r2/r1)/tan(beta_eff)
     r_ratio = r_outlet / max(r_inlet, 0.001)

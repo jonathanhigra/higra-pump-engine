@@ -157,23 +157,26 @@ def _hub_with_shaft(
     """
     if not hub_rz:
         return hub_rz
-    r_shaft = r1_hub * 0.35
 
     # hub_rz[0] = outlet (r2, z_base), hub_rz[-1] = inlet (r1, z_inlet)
-    r_out, z_out = hub_rz[0]   # outlet
-    r_in, z_in = hub_rz[-1]    # inlet (r=r1, at top of blade channel)
+    r_out, z_out = hub_rz[0]   # outlet (r=r2)
+    r_in, z_in = hub_rz[-1]    # inlet (r=r1)
 
-    # Revolution profile — OPEN at the eye (no closing wall)
-    # The profile goes from the back disc up to the blade inlet,
-    # then STOPS at r1. The eye is left open (hollow).
+    # Bore radius for the disc (visible hole)
+    r_bore = r_in * 0.25       # bore = 25% of eye radius
+
+    # Revolution profile:
+    # 1. Bore inner edge at back → disc outer at back (rim)
+    # 2. Disc outer front face
+    # 3. Hub blade channel (r2 → r1)
+    # Profile stops at r1 — eye is open
     profile = [
-        (r_shaft, -0.003),      # shaft bore at back
-        (r_out, -0.003),        # disc outer, back face (rim)
+        (r_bore, -0.003),       # bore edge, back face
+        (r_out, -0.003),        # disc outer, back face (3mm rim)
         (r_out, 0.0),           # disc outer, front face
     ]
-    profile += hub_rz           # blade channel hub (r2→r1, outlet→inlet)
-    # Profile ends at r=r1, z=z_in — eye is OPEN here
-    # The shaft/nose is a separate small cylinder inside the eye
+    profile += hub_rz           # blade channel hub (r2→r1)
+    # Eye is OPEN — no wall closing it
     return profile
 
 

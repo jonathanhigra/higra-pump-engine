@@ -192,16 +192,11 @@ export default function TemplateSelector({ onSelect, loading }: Props) {
   }
 
   return (
-    <div style={{
-      background: 'var(--bg-card, #1e1e2e)',
-      borderRadius: 8,
-      padding: 16,
-      border: '1px solid var(--border-primary, #333)',
-    }}>
+    <div>
       <h3 style={{
-        color: 'var(--accent, #60a5fa)',
-        margin: '0 0 12px',
-        fontSize: 14,
+        color: 'var(--text-primary)',
+        margin: '0 0 16px',
+        fontSize: 18,
         fontWeight: 600,
       }}>
         Exemplos de Projeto
@@ -213,17 +208,12 @@ export default function TemplateSelector({ onSelect, loading }: Props) {
         placeholder="Filtrar templates..."
         value={search}
         onChange={e => setSearch(e.target.value)}
+        className="input"
         style={{
           width: '100%',
           boxSizing: 'border-box',
-          padding: '8px 12px',
-          marginBottom: 12,
-          background: 'var(--bg-surface, #2a2a3e)',
-          border: '1px solid var(--border-primary, #444)',
-          borderRadius: 6,
-          color: 'var(--text-primary, #e0e0e0)',
-          fontSize: 13,
-          outline: 'none',
+          marginBottom: 16,
+          fontSize: 14,
         }}
       />
 
@@ -231,7 +221,7 @@ export default function TemplateSelector({ onSelect, loading }: Props) {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 8,
+        gap: 12,
       }}>
         {filtered.map(t => {
           const cat = getCategory(t)
@@ -244,63 +234,63 @@ export default function TemplateSelector({ onSelect, loading }: Props) {
               key={t.key}
               onClick={() => handleClick(t)}
               style={{
-                background: isSelected
-                  ? color
-                  : 'var(--bg-surface, #2a2a3e)',
-                border: `1px solid ${isSelected ? color : 'var(--border-primary, #444)'}`,
-                borderRadius: 6,
-                padding: '10px 8px',
+                background: isSelected ? color : 'var(--card-bg)',
+                border: `1px solid ${isSelected ? color : 'var(--card-border)'}`,
+                borderRadius: 8,
+                padding: '14px 16px',
                 cursor: 'pointer',
-                color: isSelected ? '#fff' : 'var(--text-primary, #e0e0e0)',
+                color: isSelected ? '#fff' : 'var(--text-primary)',
                 textAlign: 'left',
                 transition: 'all 0.15s',
-                borderLeft: `3px solid ${color}`,
+                borderLeft: `4px solid ${color}`,
+                fontFamily: 'var(--font-family)',
               }}
+              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderColor = color }}
+              onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = 'var(--card-border)' }}
             >
-              <div style={{ marginBottom: 4 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isSelected ? '#fff' : color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d={iconPath} />
                 </svg>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  lineHeight: 1.3,
+                }}>
+                  {t.name}
+                </div>
               </div>
               <div style={{
-                fontSize: 11,
-                fontWeight: 600,
-                lineHeight: 1.3,
-                marginBottom: 4,
-              }}>
-                {t.name}
-              </div>
-              <div style={{
-                fontSize: 10,
-                color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-muted, #888)',
-                lineHeight: 1.3,
-                marginBottom: 6,
+                fontSize: 12,
+                color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)',
+                lineHeight: 1.4,
+                marginBottom: 10,
               }}>
                 {t.description}
               </div>
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                fontSize: 10,
-                color: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary, #aaa)',
+                fontSize: 13,
+                fontWeight: 500,
+                color: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)',
               }}>
-                <span>Nq {t.expected_nq}</span>
-                <span>{'\u03B7'} {(t.expected_eta * 100).toFixed(0)}%</span>
+                <span>Nq <b>{t.expected_nq}</b></span>
+                <span>{'\u03B7'} <b>{(t.expected_eta * 100).toFixed(0)}%</b></span>
               </div>
               <div style={{
-                fontSize: 9,
-                color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--text-muted, #666)',
-                marginTop: 2,
+                fontSize: 11,
+                color: isSelected ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)',
+                marginTop: 4,
               }}>
-                {t.flow_rate_m3h} m{'\u00B3'}/h | {t.head_m} m | {t.rpm} rpm
+                {t.flow_rate_m3h} m{'\u00B3'}/h · {t.head_m} m · {t.rpm} rpm
               </div>
               {/* CTA hint */}
               <div style={{
-                marginTop: 6,
-                fontSize: 10,
+                marginTop: 8,
+                fontSize: 11,
                 fontWeight: 600,
                 color: isSelected ? '#fff' : color,
-                opacity: isSelected ? 1 : 0.7,
               }}>
                 {isSelected && loading ? 'Calculando...' : isSelected ? 'Carregado — ver resultados' : 'Clique para carregar'}
               </div>

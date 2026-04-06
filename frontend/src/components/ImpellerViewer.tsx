@@ -2500,7 +2500,9 @@ export default function ImpellerViewer({
             </div>
           )}
         </div>
-        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)', position: 'relative' }}>
+        {/* TODO: Add ViewCube (rotation helper cube) similar to Fusion 360 */}
+        <div style={{ height: 440, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-primary)', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)', position: 'relative' }}
+          onDoubleClick={() => setCameraPos([3.0, 2.5, 2.5])}>
           {canvasEl}
           {data && selectedBlade !== null && (
             <BladeInfoPanel
@@ -2698,7 +2700,8 @@ export default function ImpellerViewer({
   // ── FULLSCREEN MODE ──────────────────────────────────────────────────────────
   return (
     <div className="viewer-fullscreen">
-      <div style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)', position: 'relative' }}>
+      <div style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)', position: 'relative' }}
+        onDoubleClick={() => setCameraPos([3.0, 2.5, 2.5])}>
         {canvasEl}
         {showGhostOverlay && (
           <div style={{

@@ -84,22 +84,30 @@ interface SidebarItem {
   icon: React.ReactNode
   defaultTab?: Tab
   isPage?: 'projects'
+  description?: string
 }
 
 const NAV_ITEMS: SidebarItem[] = [
   { key: 'projects', label: t.navProjects, isPage: 'projects',
+    description: 'Gerenciar projetos salvos e criar novos',
     icon: <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /> },
   { key: 'templates', label: 'Templates', defaultTab: 'templates',
+    description: 'Modelos pre-configurados para bombas, turbinas e ventiladores',
     icon: <I d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm10 0a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z" /> },
   { key: 'design', label: 'Design', defaultTab: 'results',
+    description: 'Dimensionamento 1D, curvas H-Q e resultados do rotor',
     icon: <I d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" /> },
   { key: 'geometry', label: 'Geometria', defaultTab: 'meridional-drag',
+    description: 'Rotor 3D, perfil meridional, LE/TE e lean/sweep',
     icon: <I d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /> },
-  { key: 'analysis', label: 'Análise', defaultTab: 'velocity',
+  { key: 'analysis', label: 'Analise', defaultTab: 'velocity',
+    description: 'Velocidades, perdas, pressao, ruido e comparacao',
     icon: <I d="M3 12h4l3-9 4 18 3-9h4" /> },
-  { key: 'optimization', label: 'Otimização', defaultTab: 'optimize',
+  { key: 'optimization', label: 'Otimizacao', defaultTab: 'optimize',
+    description: 'NSGA-II, Bayesian, DoE, Pareto e batch parametrico',
     icon: <I d="M13 10V3L4 14h7v7l9-11h-7z" /> },
   { key: 'assistant', label: 'Assistente', defaultTab: 'assistant',
+    description: 'Chat com IA para duvidas de projeto e sugestoes',
     icon: <I d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /> },
 ]
 
@@ -221,7 +229,7 @@ export default function Sidebar({
             key={item.key}
             className={`menu-item${activeSection === item.key ? ' active' : ''}`}
             onClick={() => handleClick(item)}
-            title={isCollapsed ? item.label : undefined}
+            title={isCollapsed ? item.label : (item.description || item.label)}
             style={{ position: 'relative' }}
           >
             <span className="icon">{item.icon}</span>

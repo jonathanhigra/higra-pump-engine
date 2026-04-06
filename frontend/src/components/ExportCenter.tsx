@@ -93,8 +93,9 @@ export default function ExportCenter({ open, onClose, onExport, sizing, opPoint,
             <ExportCard label="CSV" desc="Planilha de dados" onClick={() => onExport('csv')} />
             <ExportCard label="PNG" desc="Screenshot 3D" onClick={() => onExport('png')} />
             {sizing && opPoint && (
-              <ExportCard label="Resumo Executivo" desc="HTML — imprimir/PDF" onClick={() => generateExecutiveSummary(sizing, opPoint, projectName)} />
+              <ExportCard label="Resumo Executivo" desc="HTML -- imprimir/PDF" onClick={() => generateExecutiveSummary(sizing, opPoint, projectName)} />
             )}
+            <ExportCard label="Email" desc="Enviar resultados por email" onClick={() => onExport('email')} />
           </div>
         </div>
       </div>

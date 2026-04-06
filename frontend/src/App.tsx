@@ -815,6 +815,17 @@ export default function App() {
             extRpm={opPoint.rpm}
           />
           <ExportPanel sizing={sizing} op={sizing ? opPoint : null} curves={curves} projectName={currentProject?.name} onExported={() => markStep('exportar')} />
+          {sizing && (
+            <div className="card" style={{ marginTop: 12, padding: 12 }}>
+              <ProjectChecklist
+                hasSizing={completedSteps.includes('sizing')}
+                hasViewedGeometry={completedSteps.includes('geometria')}
+                hasViewedAnalysis={completedSteps.includes('analise')}
+                hasCheckedNpsh={completedSteps.includes('sizing')}
+                hasExported={completedSteps.includes('exportar')}
+              />
+            </div>
+          )}
         </div>
 
         {/* RIGHT PANEL — results area */}

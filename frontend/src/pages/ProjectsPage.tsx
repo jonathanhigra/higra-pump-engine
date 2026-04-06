@@ -165,8 +165,24 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
               border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer', fontSize: 14,
               fontFamily: 'var(--font-family)', fontWeight: 500,
             }}>
-              Projeto Rápido (sem salvar)
+              Projeto Rapido (sem salvar)
             </button>
+          </div>
+
+          {/* Video tutorial placeholder */}
+          <div style={{
+            marginTop: 24, padding: 20, background: 'var(--bg-surface)', borderRadius: 8,
+            border: '1px solid var(--border-primary)', textAlign: 'center',
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" style={{ opacity: 0.5, marginBottom: 8 }}>
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
+              Como projetar uma bomba em 3 minutos
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Tutorial em video -- em breve
+            </div>
           </div>
         </div>
       )}

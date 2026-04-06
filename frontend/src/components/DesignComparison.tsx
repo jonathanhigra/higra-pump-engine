@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { runSizing } from '../services/api'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 import type { SizingResult } from '../App'
 
 interface DesignEntry { label: string; flowRate: number; head: number; rpm: number; result: SizingResult | null }

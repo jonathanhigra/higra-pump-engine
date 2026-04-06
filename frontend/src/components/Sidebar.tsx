@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import t from '../i18n/pt-br'
+import t, { setLang, getCurrentLang, type LangKey } from '../i18n'
 
 /* ── Tab type — every sub-page the app can show ────────────────────────────── */
 export type Tab =
@@ -154,6 +154,7 @@ export default function Sidebar({
               <div className="user-name">{userName.length > 15 ? userName.slice(0, 15) + '...' : userName}</div>
               <div className="user-role" style={{ cursor: 'pointer' }} onClick={onLogout}>{t.logout}</div>
             </div>
+            <LangSelector />
             <ThemeToggle />
           </>
         )}
@@ -173,8 +174,38 @@ export default function Sidebar({
             {isCollapsed ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
           </svg>
         </button>
+        {isCollapsed && <LangSelector />}
         {isCollapsed && <ThemeToggle />}
       </div>
+    </div>
+  )
+}
+
+/* ── Language Selector (flag buttons) ─────────────────────────────────────── */
+function LangSelector() {
+  const current = getCurrentLang()
+  const langs: { key: LangKey; flag: string }[] = [
+    { key: 'pt-br', flag: '\uD83C\uDDE7\uD83C\uDDF7' },
+    { key: 'en', flag: '\uD83C\uDDFA\uD83C\uDDF8' },
+    { key: 'es', flag: '\uD83C\uDDEA\uD83C\uDDF8' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 2 }}>
+      {langs.map(l => (
+        <button
+          key={l.key}
+          onClick={() => { setLang(l.key); window.location.reload() }}
+          title={l.key.toUpperCase()}
+          style={{
+            background: current === l.key ? 'var(--bg-surface)' : 'none',
+            border: current === l.key ? '1px solid var(--border-primary)' : '1px solid transparent',
+            borderRadius: 4, cursor: 'pointer', padding: '2px 4px',
+            fontSize: 14, lineHeight: 1,
+          }}
+        >
+          {l.flag}
+        </button>
+      ))}
     </div>
   )
 }

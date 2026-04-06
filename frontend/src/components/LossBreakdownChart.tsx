@@ -1,5 +1,5 @@
 import React from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 
 interface Props { losses: any }
 

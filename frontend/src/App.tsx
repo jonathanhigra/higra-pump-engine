@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import t from './i18n/pt-br'
+import t from './i18n'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import ProjectsPage from './pages/ProjectsPage'

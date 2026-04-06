@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, Environment, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 import type { SizingResult } from '../App'
 
 interface BladePoint { x: number; y: number; z: number }
@@ -1850,7 +1850,17 @@ export default function ImpellerViewer({
   const [showParticles, setShowParticles] = useState(false)
   const [showVolute, setShowVolute] = useState(false)
   const [selectedBlade, setSelectedBlade] = useState<number | null>(null)
-  const [resolution, setResolution] = useState<string>('high')
+  const [resolution, setResolution] = useState<string>(() => {
+    // Auto-detect: use 'medium' on mobile/weak GPU, 'high' on desktop
+    const isMobile = window.innerWidth < 768
+    const isWeakGPU = navigator.hardwareConcurrency < 4
+    if (isMobile || isWeakGPU) return 'medium'
+    return 'high'
+  })
+  // TODO: Future improvement — temporarily reduce rendering quality while
+  // the user is orbiting (dragging). Approach: listen to OrbitControls
+  // 'start'/'end' events, set a transient low-res flag, and restore after
+  // a short debounce when dragging stops.
   const [showDimensions, setShowDimensions] = useState(false)
   const [showGhostOverlay, setShowGhostOverlay] = useState(false)
   const [cameraPos, setCameraPos] = useState<[number, number, number]>([3.0, 2.5, 2.5])

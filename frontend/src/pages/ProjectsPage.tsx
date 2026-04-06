@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 
 interface Project {
   id: string; name: string; description: string | null

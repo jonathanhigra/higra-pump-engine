@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 
 interface CurvePoint { flow_rate: number; head: number; efficiency: number; power: number; npsh_required: number; is_unstable?: boolean }
 interface Props {

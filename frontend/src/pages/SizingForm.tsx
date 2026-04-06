@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 
 interface DesignHint {

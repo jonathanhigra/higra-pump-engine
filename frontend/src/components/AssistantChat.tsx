@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 import type { SizingResult } from '../App'
 
 interface Props { sizing: SizingResult | null }

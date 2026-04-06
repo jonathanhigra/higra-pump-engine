@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import t from '../i18n/pt-br'
+import t from '../i18n'
 
 interface Triangle { u: number; cm: number; cu: number; c: number; w: number; beta: number; alpha: number }
 interface CurveTriangles { flow_ratio: number; inlet: Triangle; outlet: Triangle; euler_head: number }

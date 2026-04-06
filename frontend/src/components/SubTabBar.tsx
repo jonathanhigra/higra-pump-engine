@@ -4,9 +4,10 @@ import { type Tab, type Section, sectionForTab, SUB_TABS } from './Sidebar'
 interface Props {
   activeTab: Tab
   onTabChange: (tab: Tab) => void
+  recentTabs?: Tab[]
 }
 
-export default function SubTabBar({ activeTab, onTabChange }: Props) {
+export default function SubTabBar({ activeTab, onTabChange, recentTabs = [] }: Props) {
   const section: Section = sectionForTab(activeTab)
   const tabs = SUB_TABS[section]
 
@@ -38,6 +39,7 @@ export default function SubTabBar({ activeTab, onTabChange }: Props) {
               whiteSpace: 'nowrap',
               transition: 'color 0.15s, border-color 0.15s',
               fontFamily: 'var(--font-family)',
+              position: 'relative',
             }}
             onMouseEnter={e => {
               if (!isActive) (e.target as HTMLElement).style.color = 'var(--text-secondary)'
@@ -47,6 +49,13 @@ export default function SubTabBar({ activeTab, onTabChange }: Props) {
             }}
           >
             {t.label}
+            {!isActive && recentTabs.includes(t.key) && (
+              <span style={{
+                position: 'absolute', top: 6, right: 6,
+                width: 5, height: 5, borderRadius: '50%',
+                background: 'var(--accent)', opacity: 0.5,
+              }} />
+            )}
           </button>
         )
       })}

@@ -921,6 +921,7 @@ function ShortcutsHelpModal({ onClose }: { onClose: () => void }) {
     { keys: 'Ctrl+S', desc: 'Salvar design' },
     { keys: 'F5 / Ctrl+Enter', desc: 'Executar dimensionamento' },
     { keys: '1-7', desc: 'Navegar entre secoes' },
+    { keys: 'Ctrl+E', desc: 'Abrir Export Center' },
     { keys: 'F1', desc: 'Ajuda contextual' },
     { keys: 'Esc', desc: 'Fechar modal/palette' },
   ]

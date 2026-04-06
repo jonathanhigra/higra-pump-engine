@@ -17,6 +17,8 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
+  const PROJECT_COLORS = ['#00a0df', '#22c55e', '#a855f7', '#ef4444', '#f59e0b', '#06b6d4']
+  const [projectColor, setProjectColor] = useState(PROJECT_COLORS[0])
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -97,9 +99,27 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
       </div>
 
       {showCreate && (
-        <form onSubmit={createProject} className="card" style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <form onSubmit={(e) => {
+          createProject(e).then(() => {
+            // Store color for the project name in localStorage
+            if (name.trim()) localStorage.setItem(`hpe_project_color_${name.trim()}`, projectColor)
+          })
+        }} className="card" style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input className="input" placeholder={t.projectName} value={name} onChange={e => setName(e.target.value)} required />
           <input className="input" placeholder={t.descriptionOptional} value={description} onChange={e => setDescription(e.target.value)} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cor:</span>
+            {PROJECT_COLORS.map(c => (
+              <button key={c} type="button" onClick={() => setProjectColor(c)}
+                style={{
+                  width: 20, height: 20, borderRadius: '50%', background: c,
+                  border: projectColor === c ? '2px solid #fff' : '2px solid transparent',
+                  outline: projectColor === c ? `2px solid ${c}` : 'none',
+                  cursor: 'pointer', padding: 0, flexShrink: 0,
+                }}
+              />
+            ))}
+          </div>
           <button type="submit" className="btn-primary" disabled={loading} style={{ alignSelf: 'flex-start', padding: '8px 20px', fontSize: 13 }}>
             {loading ? t.creating : t.create}
           </button>
@@ -110,12 +130,19 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t.noProjectsYet}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {projects.map(p => (
-            <div key={p.id} onClick={() => onSelectProject(p)} className="card" style={{
+          {projects.map(p => {
+            const pColor = localStorage.getItem(`hpe_project_color_${p.name}`) || '#00a0df'
+            return (
+            <div key={p.id} onClick={() => {
+              // Apply project accent color
+              document.documentElement.style.setProperty('--accent', pColor)
+              onSelectProject(p)
+            }} className="card" style={{
               cursor: 'pointer', transition: 'border-color 0.15s',
+              borderLeft: `3px solid ${pColor}`,
             }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--card-border)')}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = pColor)}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--card-border)'; e.currentTarget.style.borderLeftColor = pColor }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <div>
@@ -128,7 +155,7 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

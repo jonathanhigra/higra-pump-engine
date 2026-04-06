@@ -86,6 +86,24 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
         {s.blade_count} pas, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
         NPSHr=<b>{s.estimated_npsh_r.toFixed(1)}m</b>
         {s.estimated_efficiency > 0.80 ? ' — Bom' : s.estimated_efficiency > 0.70 ? ' — Aceitavel' : ' — Revisar'}
+        {(() => {
+          const benchmarkEta = (nq: number): number => {
+            if (nq < 15) return 0.72
+            if (nq < 25) return 0.78
+            if (nq < 40) return 0.83
+            if (nq < 60) return 0.86
+            if (nq < 100) return 0.88
+            return 0.87
+          }
+          const benchEta = benchmarkEta(s.specific_speed_nq)
+          const diff = (s.estimated_efficiency - benchEta) * 100
+          if (diff === 0) return null
+          return (
+            <div style={{ fontSize: 11, color: diff > 0 ? 'var(--accent-success, #4caf50)' : '#facc15', marginTop: 4 }}>
+              {diff > 0 ? '\u2191' : '\u2193'} {Math.abs(diff).toFixed(1)}% {diff > 0 ? 'acima' : 'abaixo'} da media para Nq={s.specific_speed_nq.toFixed(0)} (base: 847 bombas)
+            </div>
+          )
+        })()}
       </div>
 
       {/* Hero strip */}

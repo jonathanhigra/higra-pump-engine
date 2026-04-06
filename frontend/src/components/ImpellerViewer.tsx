@@ -2003,8 +2003,7 @@ function Scene({
           </group>
           <group position={[0, 0, (componentExplode ?? 0) / 100 * 0.3 * data.d2 * 1000]}>
             <ShroudMesh profile={data.shroud_profile} displayMode={displayMode} />
-            {/* Wear ring (selo de desgaste) at eye — shown in fechado/semiaberto */}
-            <WearRing data={data} scale={1} displayMode={displayMode} />
+            {/* Wear ring removed — part of casing, not impeller */}
           </group>
           {/* No separate shaft geometry — hub revolution includes the bore */}
           {data.blade_surfaces.map((surf, i) => {

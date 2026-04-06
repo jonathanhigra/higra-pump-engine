@@ -5,7 +5,7 @@ interface Props {
   sizing: SizingResult
 }
 
-type Quality = 'green' | 'yellow' | 'red'
+type Quality = 'good' | 'ok' | 'bad'
 
 function evaluateQuality(sizing: SizingResult): { quality: Quality; label: string } {
   const eta = sizing.estimated_efficiency
@@ -13,23 +13,22 @@ function evaluateQuality(sizing: SizingResult): { quality: Quality; label: strin
   const deHaller = (sizing as any).diffusion_ratio ?? (sizing.velocity_triangles?.de_haller ?? 0.75)
 
   if (eta > 0.80 && npsh < 6 && deHaller > 0.72) {
-    return { quality: 'green', label: 'Bom' }
+    return { quality: 'good', label: 'Bom' }
   }
   if (eta > 0.70 && npsh < 10) {
-    return { quality: 'yellow', label: 'Aceitavel' }
+    return { quality: 'ok', label: 'Aceitavel' }
   }
-  return { quality: 'red', label: 'Revisar' }
+  return { quality: 'bad', label: 'Revisar' }
 }
 
-const QUALITY_COLORS: Record<Quality, string> = {
-  green: '#22c55e',
-  yellow: '#f59e0b',
-  red: '#ef4444',
-}
+/* Colorblind-friendly: blue/orange/red + shape icons (#8) */
+const QUALITY_ICONS: Record<Quality, string> = { good: '\u2713', ok: '\u26A0', bad: '\u2717' }
+const QUALITY_COLORS_CB: Record<Quality, string> = { good: '#2563eb', ok: '#d97706', bad: '#dc2626' }
 
 export default function DesignQualityBadge({ sizing }: Props) {
   const { quality, label } = evaluateQuality(sizing)
-  const color = QUALITY_COLORS[quality]
+  const color = QUALITY_COLORS_CB[quality]
+  const icon = QUALITY_ICONS[quality]
 
   return (
     <div style={{
@@ -45,13 +44,7 @@ export default function DesignQualityBadge({ sizing }: Props) {
       color,
       whiteSpace: 'nowrap',
     }}>
-      <span style={{
-        width: 12,
-        height: 12,
-        borderRadius: '50%',
-        background: color,
-        flexShrink: 0,
-      }} />
+      <span style={{ fontSize: 12, flexShrink: 0, lineHeight: 1 }}>{icon}</span>
       {label}
     </div>
   )

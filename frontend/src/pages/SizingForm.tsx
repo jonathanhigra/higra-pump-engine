@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import t from '../i18n'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 import ReverseCalc from '../components/ReverseCalc'
@@ -157,6 +157,33 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [reverseOpen, setReverseOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+
+  /* ── Preventive validation (#5) ─────────────────────────────────────── */
+  const preventiveWarning = useMemo(() => {
+    const q = parseFloat(flowRate) || 0
+    const h = parseFloat(head) || 0
+    const n = parseFloat(rpm) || 0
+    if (q <= 0 || h <= 0 || n <= 0) return null
+    const nqCalc = n * Math.sqrt(q / 3600) / Math.pow(h, 0.75)
+    if (nqCalc < 5) return `Nq~${nqCalc.toFixed(1)} e extremamente baixo. Aumente RPM ou reduza H.`
+    if (nqCalc > 300) return `Nq~${nqCalc.toFixed(1)} e muito alto. Considere bomba axial.`
+    if (n > 6000) return `RPM=${n} e muito alto para bomba convencional.`
+    if (h > 300 && n < 1000) return `H=${h}m com ${n}rpm requer multi-estagio.`
+    return null
+  }, [flowRate, head, rpm])
+
+  /* ── Real-time mini preview (#7) ────────────────────────────────────── */
+  const quickEstimate = useMemo(() => {
+    const q = parseFloat(flowRate) || 0
+    const h = parseFloat(head) || 0
+    const n = parseFloat(rpm) || 0
+    if (q <= 0 || h <= 0 || n <= 0) return null
+    const nqCalc = n * Math.sqrt(q / 3600) / Math.pow(h, 0.75)
+    // Quick eta estimate from Gulich correlation
+    const eta = nqCalc < 10 ? 0.65 : nqCalc < 20 ? 0.72 + (nqCalc - 10) * 0.008 : nqCalc < 40 ? 0.80 + (nqCalc - 20) * 0.003 : nqCalc < 80 ? 0.86 + (nqCalc - 40) * 0.001 : 0.88
+    const d2 = 4.5 * Math.sqrt(q / 3600 / n) * Math.pow(h, 0.25) * 1000
+    return { nq: nqCalc, eta: Math.min(0.92, eta), d2 }
+  }, [flowRate, head, rpm])
 
   // Sticky button — shows when the submit button scrolls out of view
   useEffect(() => {
@@ -373,6 +400,14 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           </div>
         )}
 
+        {/* Real-time mini preview (#7) */}
+        {quickEstimate && (
+          <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, padding: '4px 0' }}>
+            <span>~eta: <b style={{ color: 'var(--accent)' }}>{(quickEstimate.eta * 100).toFixed(0)}%</b></span>
+            <span>~D2: <b>{quickEstimate.d2.toFixed(0)}mm</b></span>
+          </div>
+        )}
+
         {/* Design Hints panel */}
         {designHint && nq > 0 && (
           <div style={{
@@ -576,6 +611,17 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           </div>
         )}
       </div>
+
+      {/* Preventive validation (#5) */}
+      {preventiveWarning && (
+        <div style={{
+          padding: '6px 10px', background: 'rgba(250,204,21,0.1)',
+          border: '1px solid rgba(250,204,21,0.3)', borderRadius: 6,
+          fontSize: 11, color: '#facc15', marginBottom: 8,
+        }}>
+          ! {preventiveWarning}
+        </div>
+      )}
 
       <button type="submit" className="btn-primary" disabled={loading}
         style={{

@@ -50,6 +50,9 @@ import WhatsNew from './components/WhatsNew'
 import FeatureTip from './components/FeatureTip'
 import ActionTimeline from './components/ActionTimeline'
 import type { TimelineEntry } from './components/ActionTimeline'
+import SectionGuide from './components/SectionGuide'
+import Glossary from './components/Glossary'
+import CompleteResultView from './components/CompleteResultView'
 import useDynamicFavicon from './hooks/useDynamicFavicon'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -197,6 +200,8 @@ export default function App() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [timelineOpen, setTimelineOpen] = useState(false)
   const [showWhatsNew, setShowWhatsNew] = useState(() => localStorage.getItem('hpe_whats_new_seen') !== '0.2.0')
+  const [glossaryOpen, setGlossaryOpen] = useState(false)
+  const [overviewTab, setOverviewTab] = useState(false)  // CompleteResultView toggle (#10)
   const [showAutoRestore, setShowAutoRestore] = useState(false)
   const { toasts, toast, dismiss } = useToast()
 
@@ -393,6 +398,47 @@ export default function App() {
 
       toast('Dimensionamento concluido', 'success')
       logAction('Dimensionamento executado', `Q=${q} m3/h H=${h}m n=${n}rpm`)
+
+      // Proactive suggestions (#4) — delayed to not overlap loading toast
+      setTimeout(() => {
+        if (result.estimated_efficiency < 0.75) {
+          toast('eta abaixo de 75%. Tente aumentar o numero de pas ou ajustar beta2.', 'warning')
+        }
+        if (result.estimated_npsh_r > 8) {
+          toast(`NPSHr=${result.estimated_npsh_r.toFixed(1)}m e alto. Reduza RPM para ~${Math.round(n * 0.85)}.`, 'warning')
+        }
+        if (result.specific_speed_nq < 10) {
+          toast('Nq muito baixo -- considere multi-estagio ou aumente RPM.', 'info')
+        }
+        if (result.specific_speed_nq > 200) {
+          toast('Nq alto -- considere bomba axial ou mixed-flow.', 'info')
+        }
+      }, 2000)
+
+      // Inline tutorial (#6) — compare with previous on 2nd-4th runs
+      if (sizing && history.length >= 1 && history.length <= 3) {
+        setTimeout(() => {
+          if (result.estimated_efficiency > (sizing?.estimated_efficiency || 0)) {
+            toast('eta aumentou! A mudanca melhorou o projeto.', 'success')
+          } else if (sizing && result.estimated_efficiency < sizing.estimated_efficiency) {
+            toast('eta diminuiu. Tente ajustar outros parametros.', 'info')
+          }
+        }, 3500)
+      }
+
+      // Encouragement (#9)
+      setTimeout(() => {
+        const eta = result.estimated_efficiency
+        const msgs_excellent = ['Excelente projeto!', 'Top 10% para este Nq!', 'Projeto de referencia!']
+        const msgs_good = ['Bom projeto!', 'Parametros bem equilibrados.', 'Design solido.']
+        const msgs_ok = ['Aceitavel. Pequenos ajustes podem melhorar.', 'Bom ponto de partida para otimizacao.']
+        const msgs_bad = ['Nao desanime! Ajuste os parametros.', 'Tente variar RPM ou numero de pas.']
+        const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
+        if (eta > 0.85) toast(pick(msgs_excellent), 'success')
+        else if (eta > 0.78) toast(pick(msgs_good), 'success')
+        else if (eta > 0.70) toast(pick(msgs_ok), 'info')
+        else toast(pick(msgs_bad), 'info')
+      }, 4500)
     } catch {
       toast('Erro ao calcular', 'error')
     } finally {
@@ -458,6 +504,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onRunSizing={handleRunSizingShortcut}
         onStartTour={() => setTourActive(true)}
+        onGlossary={() => setGlossaryOpen(true)}
         sizing={sizing}
       />
       <Toast messages={toasts} onDismiss={dismiss} />
@@ -485,6 +532,7 @@ export default function App() {
       <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
       <ContextualHelp open={helpOpen} onClose={() => setHelpOpen(false)} currentTab={tab} />
       <ActionTimeline entries={timeline} open={timelineOpen} onClose={() => setTimelineOpen(false)} />
+      <Glossary open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />
       <ExportCenter
         open={exportCenterOpen}
         onClose={() => setExportCenterOpen(false)}
@@ -843,10 +891,51 @@ export default function App() {
 
         {/* RIGHT PANEL — results area */}
         <div ref={resultsRef}>
+          {/* Section guide (#2) */}
+          <SectionGuide tab={tab} />
+
           {sizing ? (
             <>
-              {/* Results: dashboard overview + detailed results + reference */}
+              {/* Overview toggle (#10) */}
               {tab === 'results' && (
+                <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+                  <button onClick={() => setOverviewTab(false)} style={{
+                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                    border: `1px solid ${!overviewTab ? 'var(--accent)' : 'var(--border-primary)'}`,
+                    background: !overviewTab ? 'rgba(0,160,223,0.15)' : 'transparent',
+                    color: !overviewTab ? 'var(--accent)' : 'var(--text-muted)',
+                    fontWeight: 500, transition: 'all 0.15s',
+                  }}>Detalhado</button>
+                  <button onClick={() => setOverviewTab(true)} style={{
+                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                    border: `1px solid ${overviewTab ? 'var(--accent)' : 'var(--border-primary)'}`,
+                    background: overviewTab ? 'rgba(0,160,223,0.15)' : 'transparent',
+                    color: overviewTab ? 'var(--accent)' : 'var(--text-muted)',
+                    fontWeight: 500, transition: 'all 0.15s',
+                  }}>Visao Geral</button>
+                  <button onClick={() => setGlossaryOpen(true)} style={{
+                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                    border: '1px solid var(--border-primary)', background: 'transparent',
+                    color: 'var(--text-muted)', fontWeight: 500, transition: 'all 0.15s',
+                    marginLeft: 'auto',
+                  }}>Glossario</button>
+                </div>
+              )}
+
+              {/* Complete result single-page view (#10) */}
+              {tab === 'results' && overviewTab && (
+                <CompleteResultView
+                  sizing={sizing}
+                  curves={curves}
+                  losses={losses}
+                  stress={stress}
+                  opPoint={opPoint}
+                  onNavigateTab={(t: string) => { setOverviewTab(false); handleNavigate('design', t as Tab) }}
+                />
+              )}
+
+              {/* Results: dashboard overview + detailed results + reference */}
+              {tab === 'results' && !overviewTab && (
                 <>
                   <DesignDashboard
                     sizing={sizing}

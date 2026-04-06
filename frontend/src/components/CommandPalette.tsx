@@ -51,11 +51,12 @@ interface Props {
   onNavigate: (page: 'projects' | 'design', tab?: Tab) => void
   onRunSizing?: () => void
   onStartTour?: () => void
+  onGlossary?: () => void
   sizing?: SizingResult | null
 }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
-export default function CommandPalette({ open, onClose, onNavigate, onRunSizing, onStartTour, sizing }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, onRunSizing, onStartTour, onGlossary, sizing }: Props) {
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -136,6 +137,13 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing,
       icon: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01',
       action: () => { onStartTour?.(); onClose() },
     })
+    list.push({
+      id: 'action-glossary',
+      label: 'Glossario de Turbomaquinas',
+      category: 'Ajuda',
+      icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+      action: () => { onGlossary?.(); onClose() },
+    })
 
     // Sizing result values — searchable when sizing exists
     if (sizing) {
@@ -152,7 +160,7 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing,
     }
 
     return list
-  }, [onNavigate, onClose, onRunSizing, onStartTour, sizing])
+  }, [onNavigate, onClose, onRunSizing, onStartTour, onGlossary, sizing])
 
   /* Filtered results */
   const filtered = useMemo(() => {

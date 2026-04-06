@@ -33,10 +33,12 @@ function GaugeArc({ pct, color }: { pct: number; color: string }) {
   )
 }
 
+/* Colorblind-friendly status indicators (#8): shape + blue/orange/red */
 function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
-  const color = ok ? '#4caf50' : warn ? '#FFD54F' : '#ef4444'
+  const color = ok ? '#2563eb' : warn ? '#d97706' : '#dc2626'
+  const icon = ok ? '\u2713' : warn ? '\u26A0' : '\u2717'
   return (
-    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 5, flexShrink: 0 }} />
+    <span style={{ display: 'inline-block', width: 14, fontSize: 10, color, marginRight: 4, flexShrink: 0, textAlign: 'center', lineHeight: 1 }}>{icon}</span>
   )
 }
 
@@ -47,7 +49,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
   const u = s.uncertainty || {}
   const mp = s.meridional_profile || {}
   const eta = (s.estimated_efficiency || 0) * 100
-  const etaColor = eta >= 80 ? '#4caf50' : eta >= 70 ? '#FFD54F' : '#ef4444'
+  const etaColor = eta >= 80 ? '#2563eb' : eta >= 70 ? '#d97706' : '#dc2626'
   const dr = s.diffusion_ratio || 0
   const tipSpeed = s.velocity_triangles?.outlet?.u || 0
 
@@ -85,7 +87,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
         <b style={{ color: 'var(--accent)' }}>{(s.impeller_d2*1000).toFixed(0)}mm</b> com{' '}
         {s.blade_count} pas, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
         NPSHr=<b>{s.estimated_npsh_r.toFixed(1)}m</b>
-        {s.estimated_efficiency > 0.80 ? ' — Bom' : s.estimated_efficiency > 0.70 ? ' — Aceitavel' : ' — Revisar'}
+        {s.estimated_efficiency > 0.85 ? ' -- Excelente projeto!' : s.estimated_efficiency > 0.78 ? ' -- Bom projeto!' : s.estimated_efficiency > 0.70 ? ' -- Aceitavel, ajustes podem melhorar.' : ' -- Revisar parametros.'}
         {(() => {
           const benchmarkEta = (nq: number): number => {
             if (nq < 15) return 0.72

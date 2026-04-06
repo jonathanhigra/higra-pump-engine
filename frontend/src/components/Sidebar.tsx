@@ -110,6 +110,17 @@ export default function Sidebar({
 
   const activeSection = activeTab ? sectionForTab(activeTab) : (page === 'projects' ? 'projects' : 'design')
 
+  /* ── Simple / Advanced mode toggle (#1) ───────────────────────────────── */
+  const SIMPLE_SECTIONS: Section[] = ['projects', 'templates', 'design', 'geometry', 'assistant']
+  const [mode, setMode] = useState<'simple' | 'advanced'>(() =>
+    (localStorage.getItem('hpe_mode') as 'simple' | 'advanced') || 'simple'
+  )
+  const toggleMode = () => {
+    const next = mode === 'simple' ? 'advanced' : 'simple'
+    setMode(next)
+    localStorage.setItem('hpe_mode', next)
+  }
+
   /* ── Unexplored features counter (feature #3) ─────────────────────────── */
   const [visited, setVisited] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('hpe_visited_tabs') || '[]')) } catch { return new Set() }
@@ -134,10 +145,13 @@ export default function Sidebar({
   const totalSections = NAV_ITEMS.filter(i => i.key !== 'projects').length
   const unvisited = totalSections - visited.size
 
-  // Show design items only when not on projects page
-  const visibleItems = page === 'projects'
+  // Show design items only when not on projects page, filter by mode
+  const allItems = page === 'projects'
     ? NAV_ITEMS.filter(i => i.key === 'projects' || i.key === 'templates')
     : NAV_ITEMS
+  const visibleItems = mode === 'simple' && page !== 'projects'
+    ? allItems.filter(i => SIMPLE_SECTIONS.includes(i.key))
+    : allItems
 
   return (
     <div className={`sidebar${isCollapsed ? ' collapsed' : ''}`}>
@@ -153,6 +167,25 @@ export default function Sidebar({
           }} title={`${unvisited} secoes nao exploradas`}>{unvisited}</span>
         )}
       </div>
+
+      {/* Simple / Advanced mode toggle */}
+      {!isCollapsed && page === 'design' && (
+        <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+          <span style={{ color: mode === 'simple' ? 'var(--accent)' : 'var(--text-muted)' }}>Simples</span>
+          <div onClick={toggleMode} style={{
+            width: 32, height: 16, borderRadius: 8, cursor: 'pointer',
+            background: mode === 'advanced' ? 'var(--accent)' : 'var(--border-primary)',
+            position: 'relative', transition: 'background 0.2s',
+          }}>
+            <div style={{
+              width: 12, height: 12, borderRadius: 6, background: '#fff',
+              position: 'absolute', top: 2, transition: 'left 0.2s',
+              left: mode === 'advanced' ? 18 : 2,
+            }} />
+          </div>
+          <span style={{ color: mode === 'advanced' ? 'var(--accent)' : 'var(--text-muted)' }}>Avancado</span>
+        </div>
+      )}
 
       {/* ── Quick-access buttons (design mode only) ───────────────────── */}
       {page === 'design' && !isCollapsed && (

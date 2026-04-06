@@ -479,6 +479,13 @@ body {
   to   { transform: translateX(100%); opacity: 0; }
 }
 
+/* ====== Loading Progress Bar ====== */
+@keyframes progress-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ====== Skeleton Shimmer ====== */
 @keyframes shimmer {
   0% { background-position: 200% 0; }

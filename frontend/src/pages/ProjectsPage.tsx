@@ -34,8 +34,53 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
     } finally { setLoading(false) }
   }
 
+  const outlineBtn: React.CSSProperties = {
+    padding: '10px 24px', background: 'transparent', color: 'var(--accent)',
+    border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer',
+    fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-family)',
+  }
+
   return (
     <div style={{ maxWidth: 700 }}>
+      {/* Hero banner — full when 0 projects, compact when projects exist */}
+      {projects.length === 0 ? (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,160,223,0.08) 0%, rgba(0,80,120,0.08) 100%)',
+          border: '1px solid rgba(0,160,223,0.2)',
+          borderRadius: 12, padding: '32px 28px', marginBottom: 24, textAlign: 'center',
+        }}>
+          <h2 style={{ color: 'var(--accent)', margin: '0 0 8px', fontSize: 22 }}>
+            Projete rotores de turbomaquinas em minutos
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: '0 0 20px' }}>
+            Dimensionamento 1D, geometria 3D, analise de perdas e otimizacao — tudo na web.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button className="btn-primary" onClick={() => onSelectProject(null)} style={{ padding: '10px 24px' }}>
+              Projeto Rapido
+            </button>
+            <button style={{...outlineBtn}} onClick={() => onSelectProject(null)}>
+              Ver Templates
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,160,223,0.05) 0%, rgba(0,80,120,0.05) 100%)',
+          border: '1px solid rgba(0,160,223,0.12)',
+          borderRadius: 8, padding: '10px 16px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            Dimensionamento 1D, geometria 3D, analise e otimizacao — tudo na web.
+          </span>
+          <button className="btn-primary" onClick={() => onSelectProject(null)}
+            style={{ padding: '5px 14px', fontSize: 12 }}>
+            Projeto Rapido
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: 20 }}>{t.projects}</h2>
         <div style={{ display: 'flex', gap: 8 }}>

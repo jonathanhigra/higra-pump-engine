@@ -133,7 +133,17 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [error, setError] = useState<string | null>(null)
   const [designHint, setDesignHint] = useState<DesignHint | null>(null)
   const [calculated, setCalculated] = useState(false)
+  const [stickyBtn, setStickyBtn] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  // Sticky button — shows when the submit button scrolls out of view
+  useEffect(() => {
+    if (!btnRef.current) return
+    const obs = new IntersectionObserver(([entry]) => setStickyBtn(!entry.isIntersecting), { threshold: 0 })
+    obs.observe(btnRef.current)
+    return () => obs.disconnect()
+  }, [])
 
   const fluid = FLUIDS.find(f => f.id === fluidId) || FLUIDS[0]
   const q_m3h = parseFloat(flowRate) || 0

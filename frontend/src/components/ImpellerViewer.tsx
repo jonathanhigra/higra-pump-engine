@@ -436,7 +436,7 @@ const SPLITTER_COLOR = '#969ba3'  // splitter
 
 // ─── ClipController ───────────────────────────────────────────────────────────
 
-function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridionalCut?: boolean }) {
+function ClipController({ clipZ, meridionalCut, freeClipAngle }: { clipZ: number | null; meridionalCut?: boolean; freeClipAngle?: number | null }) {
   const { gl } = useThree()
   useEffect(() => {
     const planes: THREE.Plane[] = []
@@ -446,6 +446,12 @@ function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridi
     if (meridionalCut) {
       // Meridional section: clip at Y=0 plane (shows half the impeller)
       planes.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+    }
+    if (freeClipAngle != null) {
+      // Free rotation clipping plane around Z axis
+      const rad = freeClipAngle * Math.PI / 180
+      const normal = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0)
+      planes.push(new THREE.Plane(normal, 0))
     }
     if (planes.length > 0) {
       gl.localClippingEnabled = true
@@ -458,7 +464,7 @@ function ClipController({ clipZ, meridionalCut }: { clipZ: number | null; meridi
       gl.clippingPlanes = []
       gl.localClippingEnabled = false
     }
-  }, [clipZ, meridionalCut, gl])
+  }, [clipZ, meridionalCut, freeClipAngle, gl])
   return null
 }
 
@@ -596,6 +602,76 @@ function BladeSurfaceMesh({
         </Html>
       )}
     </>
+  )
+}
+
+/** Hub-blade fillet: small ramp mesh at span=0 to smooth the sharp 90-degree edge */
+function BladeFilletMesh({ surface }: { surface: BladeSurface }) {
+  const filletGeo = useMemo(() => {
+    const ps = surface.ps
+    const ss = surface.ss
+    const nChord = ps[0]?.length ?? 0
+    if (nChord < 2 || ps.length < 2) return null
+    const filletR = 1.5 // mm fillet radius
+    const FILLET_SEGS = 4
+    const pos: number[] = []
+
+    for (let c = 0; c < nChord - 1; c++) {
+      const ps0 = ps[0][c], ps1 = ps[0][c + 1]
+      const ss0 = ss[0][c], ss1 = ss[0][c + 1]
+      const r0 = Math.sqrt(ps0.x * ps0.x + ps0.y * ps0.y) || 1
+      const r1 = Math.sqrt(ps1.x * ps1.x + ps1.y * ps1.y) || 1
+      const sr0 = Math.sqrt(ss0.x * ss0.x + ss0.y * ss0.y) || 1
+      const sr1 = Math.sqrt(ss1.x * ss1.x + ss1.y * ss1.y) || 1
+
+      for (let f = 0; f < FILLET_SEGS; f++) {
+        const a0 = (f / FILLET_SEGS) * Math.PI / 2
+        const a1 = ((f + 1) / FILLET_SEGS) * Math.PI / 2
+
+        const px00 = ps0.x + (ps0.x / r0) * filletR * Math.sin(a0)
+        const py00 = ps0.y + (ps0.y / r0) * filletR * Math.sin(a0)
+        const pz00 = ps0.z - filletR * (1 - Math.cos(a0))
+        const px01 = ps0.x + (ps0.x / r0) * filletR * Math.sin(a1)
+        const py01 = ps0.y + (ps0.y / r0) * filletR * Math.sin(a1)
+        const pz01 = ps0.z - filletR * (1 - Math.cos(a1))
+        const px10 = ps1.x + (ps1.x / r1) * filletR * Math.sin(a0)
+        const py10 = ps1.y + (ps1.y / r1) * filletR * Math.sin(a0)
+        const pz10 = ps1.z - filletR * (1 - Math.cos(a0))
+        const px11 = ps1.x + (ps1.x / r1) * filletR * Math.sin(a1)
+        const py11 = ps1.y + (ps1.y / r1) * filletR * Math.sin(a1)
+        const pz11 = ps1.z - filletR * (1 - Math.cos(a1))
+        pos.push(px00, py00, pz00, px01, py01, pz01, px10, py10, pz10)
+        pos.push(px01, py01, pz01, px11, py11, pz11, px10, py10, pz10)
+
+        const sx00 = ss0.x + (ss0.x / sr0) * filletR * Math.sin(a0)
+        const sy00 = ss0.y + (ss0.y / sr0) * filletR * Math.sin(a0)
+        const sz00 = ss0.z - filletR * (1 - Math.cos(a0))
+        const sx01 = ss0.x + (ss0.x / sr0) * filletR * Math.sin(a1)
+        const sy01 = ss0.y + (ss0.y / sr0) * filletR * Math.sin(a1)
+        const sz01 = ss0.z - filletR * (1 - Math.cos(a1))
+        const sx10 = ss1.x + (ss1.x / sr1) * filletR * Math.sin(a0)
+        const sy10 = ss1.y + (ss1.y / sr1) * filletR * Math.sin(a0)
+        const sz10 = ss1.z - filletR * (1 - Math.cos(a0))
+        const sx11 = ss1.x + (ss1.x / sr1) * filletR * Math.sin(a1)
+        const sy11 = ss1.y + (ss1.y / sr1) * filletR * Math.sin(a1)
+        const sz11 = ss1.z - filletR * (1 - Math.cos(a1))
+        pos.push(sx00, sy00, sz00, sx10, sy10, sz10, sx01, sy01, sz01)
+        pos.push(sx01, sy01, sz01, sx10, sy10, sz10, sx11, sy11, sz11)
+      }
+    }
+
+    if (pos.length === 0) return null
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
+  }, [surface])
+
+  if (!filletGeo) return null
+  return (
+    <mesh geometry={filletGeo}>
+      <meshStandardMaterial color="#808898" metalness={0.15} roughness={0.65} side={THREE.DoubleSide} />
+    </mesh>
   )
 }
 
@@ -826,6 +902,19 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
     return g
   }, [profile])
 
+  // Keyway dimensions based on bore
+  const keyDims = useMemo(() => {
+    let r_outer_disc = 0, z_disc = 0
+    for (const p of profile) {
+      if (p.x > r_outer_disc) { r_outer_disc = p.x; z_disc = p.z }
+    }
+    const boreR = r_outer_disc * 0.18
+    const keyWidth = boreR * 0.3
+    const keyDepth = boreR * 0.2
+    const keyHeight = boreR * 3
+    return { boreR, keyWidth, keyDepth, keyHeight, z_disc }
+  }, [profile])
+
   // Slightly lighter hub color for better visibility from front
   const hubColor = '#808898'
   return (
@@ -844,6 +933,13 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
       {showDisc && (
         <mesh geometry={bossGeo} castShadow receiveShadow>
           <meshStandardMaterial color="#808898" metalness={0.15} roughness={0.60} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {/* Keyway (chaveta): rectangular notch in the bore */}
+      {showDisc && (
+        <mesh position={[keyDims.boreR + keyDims.keyDepth / 2, 0, keyDims.z_disc + keyDims.keyHeight / 2]}>
+          <boxGeometry args={[keyDims.keyDepth, keyDims.keyWidth, keyDims.keyHeight]} />
+          <meshStandardMaterial color="#505868" metalness={0.15} roughness={0.65} />
         </mesh>
       )}
     </>
@@ -902,6 +998,63 @@ function ShroudMesh({ profile, displayMode }: { profile: BladePoint[]; displayMo
         </mesh>
       )}
     </>
+  )
+}
+
+/** Wear ring (selo de desgaste): thin cylindrical sleeve at the eye opening */
+function WearRing({ data, scale, displayMode }: { data: ImpellerData; scale: number; displayMode: DisplayMode }) {
+  if (displayMode === 'aberto') return null
+
+  const ringGeo = useMemo(() => {
+    const r1 = (data.d1 || data.d2 * 0.35) * 500  // eye radius in mm
+    const z_eye = data.shroud_profile?.length > 0
+      ? Math.max(...data.shroud_profile.map(p => p.z))
+      : r1 * 0.6
+
+    const ringR = r1 * 1.02   // slightly larger than eye
+    const ringHeight = 3       // mm axial extent
+    const segs = 48
+    const pos: number[] = []
+
+    // Open cylinder (wear ring sleeve)
+    for (let j = 0; j < segs; j++) {
+      const a0 = (j / segs) * Math.PI * 2
+      const a1 = ((j + 1) / segs) * Math.PI * 2
+      const z0 = z_eye - ringHeight / 2
+      const z1 = z_eye + ringHeight / 2
+      // Outer wall
+      pos.push(ringR * Math.cos(a0), ringR * Math.sin(a0), z0,
+               ringR * Math.cos(a0), ringR * Math.sin(a0), z1,
+               ringR * Math.cos(a1), ringR * Math.sin(a1), z0)
+      pos.push(ringR * Math.cos(a0), ringR * Math.sin(a0), z1,
+               ringR * Math.cos(a1), ringR * Math.sin(a1), z1,
+               ringR * Math.cos(a1), ringR * Math.sin(a1), z0)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
+  }, [data])
+
+  const z_eye = data.shroud_profile?.length > 0
+    ? Math.max(...data.shroud_profile.map(p => p.z))
+    : ((data.d1 || data.d2 * 0.35) * 500) * 0.6
+  const r1 = (data.d1 || data.d2 * 0.35) * 500
+  const ringR = r1 * 1.02
+
+  return (
+    <group scale={[scale, scale, scale]}>
+      <mesh geometry={ringGeo}>
+        <meshStandardMaterial color="#607080" metalness={0.2} roughness={0.6} side={THREE.DoubleSide} />
+      </mesh>
+      <Html position={[ringR * 1.08 * scale, 0, z_eye * scale]} center distanceFactor={8}
+        style={{ pointerEvents: 'none' }}>
+        <div style={{
+          fontSize: 9, background: 'rgba(0,0,0,0.7)', color: '#8af',
+          padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap',
+        }}>Selo</div>
+      </Html>
+    </group>
   )
 }
 
@@ -1085,49 +1238,53 @@ function ParticleSystem({
 
 function buildVoluteGeo(d2Mm: number): THREE.BufferGeometry {
   /**
-   * Archimedean spiral volute in the Z=0 plane.
-   * r(θ) = r2 + (r_collector - r2) * θ/(2π)   — spiral from tongue to discharge
-   * Cross-section: circle of radius growing from 0 at tongue to r_max at 2π
+   * Realistic volute with tongue, growing circular cross-sections, and
+   * tangential discharge nozzle. 48 circumferential x 16 cross-section segments.
    */
-  const r2 = d2Mm / 2           // impeller outlet radius [mm]
-  const gap = r2 * 0.06         // radial gap between impeller and tongue
-  const r_tongue = r2 + gap     // tongue radius
-  const r_collector = r2 * 1.60 // outer scroll radius at 360°
-  const b_volute = r2 * 0.55    // axial width of volute (slightly wider than b2)
+  const r2 = d2Mm / 2                    // impeller outlet radius [mm]
+  const r_tongue = r2 * 1.05             // tongue at 5% gap from impeller
+  const r_collector = r2 * 1.50          // outer scroll radius at 360 deg
+  const b_volute = r2 * 0.50             // axial half-width of volute
 
-  const N_THETA = 48            // circumferential divisions
-  const N_SECT = 10             // cross-section divisions (tube segments)
+  // Tongue cross-section radius (very small) and discharge cross-section radius
+  const sect_r_min = r2 * 0.04           // small opening at tongue (0 deg)
+  const sect_r_max = (r_collector - r_tongue) * 0.52 // large opening at 360 deg
+
+  const N_THETA = 48                     // circumferential divisions
+  const N_SECT = 16                      // cross-section divisions (circular ring)
 
   const pos: number[] = []
+
+  const getRing = (theta: number): Array<[number, number, number]> => {
+    const frac = theta / (Math.PI * 2)
+    // Spiral center radius grows linearly
+    const r_center = r_tongue + (r_collector - r_tongue) * frac * 0.5
+    // Cross-section radius grows linearly from tongue to discharge
+    const sect_r = sect_r_min + (sect_r_max - sect_r_min) * frac
+    // Aspect ratio: slightly taller than wide (axial > radial)
+    const aspectZ = Math.min(1.3, 0.8 + frac * 0.5)
+    const ring: Array<[number, number, number]> = []
+    for (let j = 0; j <= N_SECT; j++) {
+      const phi = (j / N_SECT) * Math.PI * 2
+      const dr = sect_r * Math.cos(phi)
+      const dz = sect_r * Math.sin(phi) * aspectZ
+      // Clamp dz to volute axial width
+      const dzClamped = Math.max(-b_volute, Math.min(b_volute, dz))
+      const r = r_center + dr
+      const x = r * Math.cos(theta)
+      const y = r * Math.sin(theta)
+      ring.push([x, y, dzClamped])
+    }
+    return ring
+  }
 
   for (let i = 0; i < N_THETA; i++) {
     const theta0 = (i / N_THETA) * Math.PI * 2
     const theta1 = ((i + 1) / N_THETA) * Math.PI * 2
 
-    // For each theta station, build a ring cross-section
-    const getRing = (theta: number): Array<[number, number, number]> => {
-      const frac = theta / (Math.PI * 2)
-      const r_center = r_tongue + (r_collector - r_tongue) * frac
-      const sect_r = (r_collector - r_tongue) * frac * 0.5 + gap * 0.5
-      // Cross-section in the r-z plane around center (r_center, 0)
-      const ring: Array<[number, number, number]> = []
-      for (let j = 0; j <= N_SECT; j++) {
-        const phi = (j / N_SECT) * Math.PI * 2
-        const dr = sect_r * Math.cos(phi)
-        const dz = sect_r * Math.sin(phi) * (b_volute / (sect_r * 2 + 1e-3))
-        const r = r_center + dr
-        const x = r * Math.cos(theta)
-        const y = r * Math.sin(theta)
-        const z = dz
-        ring.push([x, y, z])
-      }
-      return ring
-    }
-
     const ring0 = getRing(theta0)
     const ring1 = getRing(theta1)
 
-    // Connect rings with quads
     for (let j = 0; j < N_SECT; j++) {
       const [x00, y00, z00] = ring0[j]
       const [x01, y01, z01] = ring0[j + 1]
@@ -1138,22 +1295,45 @@ function buildVoluteGeo(d2Mm: number): THREE.BufferGeometry {
     }
   }
 
-  // Discharge nozzle: a short cylinder tangent to the scroll at 360°
-  const r_exit = r_collector
-  const nozzle_len = r2 * 0.8
-  const nozzle_r = (r_collector - r_tongue) * 0.5
-  const N_CIRC = 16
-  for (let j = 0; j < N_CIRC; j++) {
-    const phi0 = (j / N_CIRC) * Math.PI * 2
-    const phi1 = ((j + 1) / N_CIRC) * Math.PI * 2
-    // Nozzle along +x direction from (r_exit, 0, 0) for nozzle_len
-    const x0 = r_exit + nozzle_r * Math.cos(phi0)
-    const z0 = nozzle_r * Math.sin(phi0)
-    const x1 = r_exit + nozzle_r * Math.cos(phi1)
-    const z1 = nozzle_r * Math.sin(phi1)
-    // Along Y (tangential exit)
-    pos.push(x0, 0, z0, x0, nozzle_len, z0, x1, 0, z1)
-    pos.push(x0, nozzle_len, z0, x1, nozzle_len, z1, x1, 0, z1)
+  // Tongue cap: close the smallest cross-section at theta=0 with a filled disc
+  const tongueRing = getRing(0)
+  const tcx = tongueRing.reduce((s, p) => s + p[0], 0) / tongueRing.length
+  const tcy = tongueRing.reduce((s, p) => s + p[1], 0) / tongueRing.length
+  const tcz = tongueRing.reduce((s, p) => s + p[2], 0) / tongueRing.length
+  for (let j = 0; j < N_SECT; j++) {
+    const [x0, y0, z0] = tongueRing[j]
+    const [x1, y1, z1] = tongueRing[j + 1]
+    pos.push(tcx, tcy, tcz, x0, y0, z0, x1, y1, z1)
+  }
+
+  // Discharge nozzle: conical transition at 360 deg, tangential direction
+  // At theta=2pi the scroll exits tangentially (along +Y at x=r_center)
+  const lastRing = getRing(Math.PI * 2 * (N_THETA - 0.5) / N_THETA)
+  const nozzle_len = r2 * 0.9
+  const nozzle_taper = 0.85 // slight conical taper
+  const exitTheta = Math.PI * 2 // tangent direction at 360 deg
+  // Tangent direction at exit: perpendicular to radial = (-sin, cos, 0)
+  const tx = -Math.sin(exitTheta)
+  const ty = Math.cos(exitTheta)
+  const N_NOZZLE = 16
+  // Build exit ring (slightly smaller = conical)
+  const exitRing: Array<[number, number, number]> = lastRing.map(([x, y, z]) => {
+    const cx = lastRing.reduce((s, p) => s + p[0], 0) / lastRing.length
+    const cy = lastRing.reduce((s, p) => s + p[1], 0) / lastRing.length
+    const cz = lastRing.reduce((s, p) => s + p[2], 0) / lastRing.length
+    return [
+      cx + (x - cx) * nozzle_taper + tx * nozzle_len,
+      cy + (y - cy) * nozzle_taper + ty * nozzle_len,
+      cz + (z - cz) * nozzle_taper,
+    ]
+  })
+  for (let j = 0; j < Math.min(N_NOZZLE, lastRing.length - 1); j++) {
+    const [x00, y00, z00] = lastRing[j]
+    const [x01, y01, z01] = lastRing[j + 1]
+    const [x10, y10, z10] = exitRing[j]
+    const [x11, y11, z11] = exitRing[j + 1]
+    pos.push(x00, y00, z00, x10, y10, z10, x01, y01, z01)
+    pos.push(x10, y10, z10, x11, y11, z11, x01, y01, z01)
   }
 
   const geo = new THREE.BufferGeometry()
@@ -1176,6 +1356,116 @@ function VoluteMesh({ d2Mm }: { d2Mm: number }) {
         depthWrite={false}
       />
     </mesh>
+  )
+}
+
+// ─── Flow streamlines (realistic passage flow) ─────────────────────────────
+
+function FlowStreamlines({ data, scale, active }: { data: ImpellerData; scale: number; active: boolean }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const clockRef = useRef(0)
+
+  const N_LINES = 6
+  const N_PTS = 50
+
+  // Build streamline curves
+  const curves = useMemo(() => {
+    const bc = data.blade_count || 5
+    const pitchAngle = (Math.PI * 2) / bc
+    const hub = data.hub_profile
+    const shr = data.shroud_profile
+    if (!hub.length || !shr.length) return []
+
+    const wrapRad = (data.actual_wrap_angle ?? 90) * Math.PI / 180
+
+    const result: THREE.CatmullRomCurve3[] = []
+    for (let lane = 0; lane < N_LINES; lane++) {
+      // Distribute lanes across the first blade passage, at varying span positions
+      const spanR = (lane + 0.5) / N_LINES
+      const thetaBase = pitchAngle * 0.5 // mid-passage
+
+      const pts: THREE.Vector3[] = []
+      for (let k = 0; k < N_PTS; k++) {
+        const t = k / (N_PTS - 1)
+        const idx = Math.min(Math.floor(t * (hub.length - 1)), hub.length - 2)
+        const frac = t * (hub.length - 1) - idx
+
+        const hx = hub[idx].x + frac * (hub[idx + 1].x - hub[idx].x)
+        const hz = hub[idx].z + frac * (hub[idx + 1].z - hub[idx].z)
+        const sx = shr[idx].x + frac * (shr[idx + 1].x - shr[idx].x)
+        const sz = shr[idx].z + frac * (shr[idx + 1].z - shr[idx].z)
+
+        const r = (hx + spanR * (sx - hx)) * scale
+        const z = (hz + spanR * (sz - hz)) * scale
+        const theta = thetaBase + t * wrapRad
+
+        pts.push(new THREE.Vector3(r * Math.cos(theta), r * Math.sin(theta), z))
+      }
+      result.push(new THREE.CatmullRomCurve3(pts))
+    }
+    return result
+  }, [data, scale])
+
+  // Build tube geometries and color attributes
+  const tubes = useMemo(() => {
+    return curves.map((curve) => {
+      const tubeGeo = new THREE.TubeGeometry(curve, N_PTS - 1, 0.0005 * (1 / scale), 4, false)
+      // Add vertex colors: blue at inlet -> green at outlet
+      const count = tubeGeo.attributes.position.count
+      const colors = new Float32Array(count * 3)
+      // Get bounding box to map position to progress
+      tubeGeo.computeBoundingBox()
+      const positions = tubeGeo.attributes.position
+      for (let i = 0; i < count; i++) {
+        // Use the progress along curve as approximation via distance from first point
+        const px = positions.getX(i), py = positions.getY(i), pz = positions.getZ(i)
+        // Approximate progress: project onto the curve direction
+        const firstPt = curve.getPoint(0)
+        const lastPt = curve.getPoint(1)
+        const totalDist = firstPt.distanceTo(lastPt)
+        const curDist = new THREE.Vector3(px, py, pz).distanceTo(firstPt)
+        const t = Math.min(1, curDist / (totalDist || 1))
+        // Blue (0,0.3,1) -> Cyan (0,0.8,0.8) -> Green (0.2,0.9,0.3)
+        colors[i * 3] = t * 0.2
+        colors[i * 3 + 1] = 0.3 + t * 0.6
+        colors[i * 3 + 2] = 1.0 - t * 0.7
+      }
+      tubeGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      return tubeGeo
+    })
+  }, [curves, scale])
+
+  // Animate: shift material offset for flowing effect
+  useFrame((_, delta) => {
+    if (!active || !groupRef.current) return
+    clockRef.current += delta
+    // Rotate streamlines group slightly to simulate flow (visual trick)
+    groupRef.current.children.forEach((child) => {
+      if ((child as THREE.Mesh).material) {
+        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial
+        if (mat.opacity !== undefined) {
+          // Pulsing opacity for flow animation
+          mat.opacity = 0.6 + 0.3 * Math.sin(clockRef.current * 3)
+        }
+      }
+    })
+  })
+
+  if (!active || tubes.length === 0) return null
+
+  return (
+    <group ref={groupRef}>
+      {tubes.map((geo, i) => (
+        <mesh key={i} geometry={geo}>
+          <meshBasicMaterial
+            vertexColors
+            transparent
+            opacity={0.8}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -1599,8 +1889,8 @@ function CFDInfoPanel({ data, meshDensity, rpm, flowRate, head }: {
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
-  data, paused, rpm, showSplitters, clipZ, meridionalCut, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showVolute, displayMode,
-  selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount,
+  data, paused, rpm, showSplitters, clipZ, meridionalCut, freeClipAngle, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showStreamlines, showVolute, displayMode,
+  selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount, componentExplode,
   showVelocityArrows, showSections, turntable, sizing, meshDensity,
 }: {
   data: ImpellerData
@@ -1609,6 +1899,7 @@ function Scene({
   showSplitters?: boolean
   clipZ: number | null
   meridionalCut?: boolean
+  freeClipAngle?: number | null
   showColormap: boolean
   showLoadingMap?: boolean
   showSpanColors?: boolean
@@ -1618,6 +1909,7 @@ function Scene({
   showMeridionalLines?: boolean
   loadingData?: BladeLoadingData | null
   showParticles: boolean
+  showStreamlines?: boolean
   showVolute: boolean
   displayMode: DisplayMode
   selectedBlade: number | null
@@ -1626,11 +1918,15 @@ function Scene({
   cameraPos?: [number, number, number]
   showEdges?: boolean
   explodeAmount?: number
+  componentExplode?: number
   showVelocityArrows?: boolean
   showSections?: boolean
   turntable?: boolean
   sizing?: SizingResult | null
   meshDensity?: MeshDensity
+  measureMode?: boolean
+  measurePoints?: {x:number,y:number,z:number}[]
+  onMeasureClick?: (point: {x:number,y:number,z:number}) => void
 }) {
   // Normalize scale to fit in a ~2-unit radius
   const r2_mm = (data.d2 * 500) || 1   // d2 in m → r2 in mm → scale factor
@@ -1686,7 +1982,7 @@ function Scene({
       <OrbitControls enableDamping dampingFactor={0.08} minDistance={1.5} maxDistance={12} target={[0, 0, 0]} />
       <SceneLights />
       {/* No environment map — solid matte look like Inventor/SolidWorks */}
-      <ClipController clipZ={clipZ} meridionalCut={meridionalCut} />
+      <ClipController clipZ={clipZ} meridionalCut={meridionalCut} freeClipAngle={freeClipAngle} />
 
       {/* Fix 6: Light background plane for CAD-style */}
       <mesh position={[0, 0, -3]} rotation={[0, 0, 0]}>
@@ -1700,8 +1996,15 @@ function Scene({
       <group ref={sceneGroupRef}>
       <RotatingGroup paused={paused} rpm={rpm} turntable={turntable}>
         <group scale={[scale, scale, scale]}>
-          <HubMesh profile={data.hub_profile} displayMode={displayMode} />
-          <ShroudMesh profile={data.shroud_profile} displayMode={displayMode} />
+          {/* Component explode: hub disc moves down, shroud moves up */}
+          <group position={[0, 0, -(componentExplode ?? 0) / 100 * 0.3 * data.d2 * 1000]}>
+            <HubMesh profile={data.hub_profile} displayMode={displayMode} />
+          </group>
+          <group position={[0, 0, (componentExplode ?? 0) / 100 * 0.3 * data.d2 * 1000]}>
+            <ShroudMesh profile={data.shroud_profile} displayMode={displayMode} />
+            {/* Wear ring (selo de desgaste) at eye — shown in fechado/semiaberto */}
+            <WearRing data={data} scale={1} displayMode={displayMode} />
+          </group>
           {/* No separate shaft geometry — hub revolution includes the bore */}
           {data.blade_surfaces.map((surf, i) => {
             const bladeAngle = (i / data.blade_count) * Math.PI * 2
@@ -1723,8 +2026,10 @@ function Scene({
                   onSelect={onSelectBlade} isSelected={selectedBlade === i}
                   selectedBlade={selectedBlade} sizing={sizing} />
                 <BladeEdgeLines surface={surf} visible={showEdges ?? true} />
+                {/* Hub-blade fillet: rendered only for first 2 blades for performance */}
+                {i < 2 && <BladeFilletMesh surface={surf} />}
                 {showCFDMesh && (
-                  <CFDMeshLines surface={surf} scale={1} meshDensity={meshDensity} />
+                  <CFDMeshLines surface={surf} scale={1} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
                 )}
                 {showCFDMesh && (i === 0 || i === 1) && (
                   <BladeBoundaryLayer surface={surf} scale={1} />
@@ -1766,7 +2071,7 @@ function Scene({
           )}
           {/* CFD mesh grid lines on hub and shroud */}
           {showCFDMesh && (
-            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} meshDensity={meshDensity} />
+            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
           )}
           {/* CFD domain inlet/outlet faces */}
           {showCFDMesh && (
@@ -1794,7 +2099,13 @@ function Scene({
         </group>
       )}
 
-      <ParticleSystem data={data} active={showParticles} paused={paused} />
+      <ParticleSystem data={data} active={showParticles && !showStreamlines} paused={paused} />
+
+      {showStreamlines && (
+        <group scale={[scale, scale, scale]}>
+          <FlowStreamlines data={data} scale={1} active={showStreamlines ?? false} />
+        </group>
+      )}
 
       {/* Dimension annotations */}
       {showDimensions && (
@@ -1823,10 +2134,124 @@ function Scene({
         </group>
       )}
 
+      {/* Interactive measurement line */}
+      {measureMode && measurePoints && measurePoints.length === 2 && (() => {
+        const p1 = measurePoints[0], p2 = measurePoints[1]
+        const dist = Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2 + (p1.z-p2.z)**2)
+        // Convert back from scale to mm
+        const distMm = dist / scale
+        const mid = { x: (p1.x+p2.x)/2, y: (p1.y+p2.y)/2, z: (p1.z+p2.z)/2 }
+        const pts = new Float32Array([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z])
+        const lineGeo = new THREE.BufferGeometry()
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3))
+        return (
+          <group>
+            <primitive object={new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: '#ffff00', linewidth: 2 }))} />
+            <Html position={[mid.x, mid.y, mid.z]} center>
+              <div style={{
+                background: 'rgba(255,255,0,0.9)', color: '#000', padding: '2px 8px',
+                borderRadius: 4, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}>{distMm.toFixed(1)} mm</div>
+            </Html>
+            {/* Point markers */}
+            <mesh position={[p1.x, p1.y, p1.z]}>
+              <sphereGeometry args={[0.015, 8, 8]} />
+              <meshBasicMaterial color="#ff0" />
+            </mesh>
+            <mesh position={[p2.x, p2.y, p2.z]}>
+              <sphereGeometry args={[0.015, 8, 8]} />
+              <meshBasicMaterial color="#ff0" />
+            </mesh>
+          </group>
+        )
+      })()}
+
+      {/* Measure click handler: invisible sphere covering scene for click capture */}
+      {measureMode && (
+        <mesh visible={false}
+          onClick={(e) => { e.stopPropagation(); if (onMeasureClick) onMeasureClick({x: e.point.x, y: e.point.y, z: e.point.z}) }}>
+          <sphereGeometry args={[5, 16, 16]} />
+          <meshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
       {/* Floor grid */}
       {/* Fix 6: Light grid for CAD-style background */}
       <gridHelper args={[6, 24, '#2a3545', '#222838']} position={[0, 0, -2.2]} rotation={[Math.PI / 2, 0, 0]} />
     </>
+  )
+}
+
+// ─── Passage cross-section area chart ────────────────────────────────────────
+
+function PassageAreaChart({ data }: { data: ImpellerData }) {
+  const stations = useMemo(() => {
+    const hub = data.hub_profile
+    const shr = data.shroud_profile
+    const Z = data.blade_count
+    if (!hub?.length || !shr?.length) return []
+
+    const n = Math.min(hub.length, shr.length)
+    const step = Math.max(1, Math.floor(n / 20))
+    const result: { m: number; A: number; b: number }[] = []
+
+    for (let i = 0; i < n; i += step) {
+      const r_h = hub[i].x, z_h = hub[i].z
+      const r_s = shr[i].x, z_s = shr[i].z
+      const b = Math.sqrt((r_s - r_h) ** 2 + (z_s - z_h) ** 2) // passage width mm
+      const r_mid = (r_h + r_s) / 2
+      const A = 2 * Math.PI * r_mid * b / Z // area per passage mm^2
+      result.push({ m: i / (n - 1), A, b })
+    }
+    return result
+  }, [data])
+
+  if (stations.length < 2) return null
+
+  const maxA = Math.max(...stations.map(s => s.A))
+  const W = 200, H = 120, pad = 25
+  const plotW = W - pad * 2, plotH = H - pad * 2
+
+  const points = stations.map((s, i) => {
+    const x = pad + s.m * plotW
+    const y = H - pad - (s.A / (maxA || 1)) * plotH
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: 16, left: 16,
+      background: 'rgba(10,15,20,0.88)', borderRadius: 8,
+      border: '1px solid rgba(0,160,223,0.3)',
+      padding: 8, zIndex: 10, backdropFilter: 'blur(8px)',
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, marginBottom: 4 }}>
+        Area da Passagem (mm2)
+      </div>
+      <svg width={W} height={H} style={{ display: 'block' }}>
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map(f => (
+          <line key={f} x1={pad} y1={H - pad - f * plotH} x2={W - pad} y2={H - pad - f * plotH}
+            stroke="#333" strokeWidth={0.5} />
+        ))}
+        {/* Axes */}
+        <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke="#556" strokeWidth={1} />
+        <line x1={pad} y1={pad} x2={pad} y2={H - pad} stroke="#556" strokeWidth={1} />
+        {/* Area curve */}
+        <path d={points} fill="none" stroke="#00a0df" strokeWidth={2} />
+        {/* Fill area */}
+        <path d={`${points} L${(W - pad).toFixed(1)},${(H - pad).toFixed(1)} L${pad},${(H - pad).toFixed(1)} Z`}
+          fill="rgba(0,160,223,0.1)" />
+        {/* Labels */}
+        <text x={W / 2} y={H - 3} textAnchor="middle" fill="#888" fontSize={8}>Inlet → Outlet</text>
+        <text x={5} y={H / 2} textAnchor="middle" fill="#888" fontSize={8}
+          transform={`rotate(-90, 5, ${H / 2})`}>A</text>
+        <text x={W - pad} y={H - pad + 10} textAnchor="end" fill="#666" fontSize={7}>
+          max {(maxA / 100).toFixed(0)} cm2
+        </text>
+      </svg>
+    </div>
   )
 }
 
@@ -1875,6 +2300,14 @@ export default function ImpellerViewer({
   const [showMeridionalLines, setShowMeridionalLines] = useState(false)
   const [showCFDMesh, setShowCFDMesh] = useState(false)
   const [meshDensity, setMeshDensity] = useState<MeshDensity>('medio')
+  const [measureMode, setMeasureMode] = useState(false)
+  const [measurePoints, setMeasurePoints] = useState<{x:number,y:number,z:number}[]>([])
+  const [showPassageArea, setShowPassageArea] = useState(false)
+  const [showPrintDialog, setShowPrintDialog] = useState(false)
+  const [printScale, setPrintScale] = useState(100)
+  const [showStreamlines, setShowStreamlines] = useState(false)
+  const [freeClipAngle, setFreeClipAngle] = useState<number | null>(null)
+  const [componentExplode, setComponentExplode] = useState(0)
 
   // Floating form state
   const [fQ, setFQ] = useState(String(flowRate))
@@ -1991,7 +2424,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} freeClipAngle={freeClipAngle} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showStreamlines={showStreamlines} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} componentExplode={componentExplode} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -2074,7 +2507,65 @@ export default function ImpellerViewer({
               Sobreposicao 3D disponivel em versao futura
             </div>
           )}
+          {/* Passage area chart overlay */}
+          {showPassageArea && data && !showCFDMesh && (
+            <PassageAreaChart data={data} />
+          )}
+          {/* Measure mode cursor indicator */}
+          {measureMode && (
+            <div style={{
+              position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(255,255,0,0.9)', color: '#000', padding: '3px 12px',
+              borderRadius: 4, fontSize: 11, fontWeight: 600, pointerEvents: 'none', zIndex: 20,
+            }}>
+              Modo Medir: clique em 2 pontos na geometria
+            </div>
+          )}
         </div>
+        {/* 3D Print Dialog Modal */}
+        {showPrintDialog && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }} onClick={() => setShowPrintDialog(false)}>
+            <div style={{
+              background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+              borderRadius: 12, padding: 24, minWidth: 320, maxWidth: 400,
+            }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ margin: '0 0 16px', fontSize: 15, color: 'var(--accent)' }}>
+                Exportar STL para Impressao 3D
+              </h3>
+              <label style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+                <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Escala (%)</span>
+                <input type="number" className="input" value={printScale} min={1} max={1000} step={1}
+                  onChange={e => setPrintScale(parseInt(e.target.value) || 100)}
+                  style={{ width: '100%', padding: '6px 8px' }} />
+              </label>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+                Para impressao 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
+                {printScale !== 100 && (
+                  <span style={{ display: 'block', marginTop: 4, color: '#f59e0b' }}>
+                    Escala {printScale}%: D2 real {((data?.d2 ?? 0) * 1000).toFixed(0)}mm → impresso {((data?.d2 ?? 0) * 1000 * printScale / 100).toFixed(0)}mm
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowPrintDialog(false)}
+                  style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={() => {
+                  handleExport('stl')
+                  setShowPrintDialog(false)
+                }}
+                  className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: 12 }}>
+                  Exportar STL ({printScale}%)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Controls organized in rows by category */}
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {/* Row 1: Play + Colormaps + Display */}
@@ -2109,18 +2600,46 @@ export default function ImpellerViewer({
           {/* Row 2: Geometry + Cortes + Vistas */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <DisplayModeButtons displayMode={displayMode} setDisplayMode={setDisplayMode} />
-            <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+            <ControlButton label={showParticles ? '◉ Partículas' : '○ Partículas'} onClick={() => { setShowParticles(p => !p); setShowStreamlines(false) }} />
+            <ControlButton label={showStreamlines ? '◉ Fluxo' : '○ Fluxo'} onClick={() => { setShowStreamlines(s => !s); setShowParticles(false) }} />
             <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
             <ControlButton label={showMeridionalLines ? '◉ Merid.' : '○ Merid.'} onClick={() => setShowMeridionalLines(m => !m)} />
             <ControlButton label={showVelocityArrows ? '◉ Vel.' : '○ Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
             <ControlButton label={showSections ? '◉ Seções' : '○ Seções'} onClick={() => setShowSections(s => !s)} />
             <ControlButton label={meridionalCut ? '◉ Corte M' : '○ Corte M'} onClick={() => setMeridionalCut(v => !v)} />
+            <ControlButton label={measureMode ? '◉ Medir' : '○ Medir'} onClick={() => { setMeasureMode(m => !m); setMeasurePoints([]) }} />
+            <ControlButton label={showPassageArea ? '◉ Area' : '○ Area'} onClick={() => setShowPassageArea(a => !a)} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
               <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Explosão</span>
               <input type="range" min={0} max={100} step={1} value={explodeAmount}
                 onChange={e => setExplodeAmount(parseFloat(e.target.value))}
                 style={{ width: 50, accentColor: 'var(--accent)' }} />
             </div>
+            {displayMode === 'fechado' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Componentes</span>
+                <input type="range" min={0} max={100} step={1} value={componentExplode}
+                  onChange={e => setComponentExplode(parseFloat(e.target.value))}
+                  style={{ width: 50, accentColor: 'var(--accent)' }} />
+              </div>
+            )}
+            {clipZ === null && !meridionalCut && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Corte Livre</span>
+                <input type="range" min={0} max={360} step={1} value={freeClipAngle ?? 0}
+                  onChange={e => setFreeClipAngle(freeClipAngle === null ? null : parseFloat(e.target.value))}
+                  style={{ width: 50, accentColor: '#f59e0b' }} />
+                <button
+                  onClick={() => setFreeClipAngle(c => c === null ? 0 : null)}
+                  style={{
+                    fontSize: 9, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                    border: `1px solid ${freeClipAngle !== null ? '#f59e0b' : 'var(--border-primary)'}`,
+                    background: freeClipAngle !== null ? 'rgba(245,158,11,0.15)' : 'transparent',
+                    color: freeClipAngle !== null ? '#f59e0b' : 'var(--text-muted)',
+                  }}
+                >{freeClipAngle !== null ? 'ON' : 'OFF'}</button>
+              </div>
+            )}
             <span style={{ width: 1, height: 16, background: 'var(--border-primary)' }} />
             <ControlButton label="Front" onClick={() => setCameraPos([0, 0, 5])} />
             <ControlButton label="Lat" onClick={() => setCameraPos([5, 0, 0])} />
@@ -2143,11 +2662,14 @@ export default function ImpellerViewer({
             <option value="high">High</option>
             <option value="ultra">Ultra</option>
           </select>
-          {['STEP', 'STL'].map(fmt => (
-            <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
-              className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
-            </button>
-          ))}
+          <button onClick={() => handleExport('step')}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>STEP</button>
+          <button onClick={() => handleExport('stl')}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>STL</button>
+          <button onClick={() => setShowPrintDialog(true)}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11, background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.4)', color: '#a78bfa' }}>
+            STL (3D Print)
+          </button>
           <button onClick={handleGltfExport} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>
             glTF
           </button>
@@ -2295,7 +2817,8 @@ export default function ImpellerViewer({
               ))}
             </div>
           )}
-          <ControlButton label={showParticles ? '◉ Fluxo' : '○ Fluxo'} onClick={() => setShowParticles(p => !p)} />
+          <ControlButton label={showParticles ? '◉ Particulas' : '○ Particulas'} onClick={() => { setShowParticles(p => !p); setShowStreamlines(false) }} />
+          <ControlButton label={showStreamlines ? '◉ Fluxo' : '○ Fluxo'} onClick={() => { setShowStreamlines(s => !s); setShowParticles(false) }} />
           <DisplayModeButtons displayMode={displayMode} setDisplayMode={setDisplayMode} />
           <ControlButton label={showVolute ? '◉ Voluta' : '○ Voluta'} onClick={() => setShowVolute(v => !v)} />
           <ControlButton label={showEdges ? '◉ Arestas' : '○ Arestas'} onClick={() => setShowEdges(e => !e)} />
@@ -2309,6 +2832,14 @@ export default function ImpellerViewer({
               onChange={e => setExplodeAmount(parseFloat(e.target.value))}
               style={{ width: 60, accentColor: 'var(--accent)' }} />
           </div>
+          {displayMode === 'fechado' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Componentes</span>
+              <input type="range" min={0} max={100} step={1} value={componentExplode}
+                onChange={e => setComponentExplode(parseFloat(e.target.value))}
+                style={{ width: 60, accentColor: 'var(--accent)' }} />
+            </div>
+          )}
 
           {/* Clip plane slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2348,7 +2879,28 @@ export default function ImpellerViewer({
             {meridionalCut ? 'Corte Meridional ON' : 'Corte Meridional'}
           </button>
 
+          {/* Free clip plane slider — shown when Corte Z and Corte M are off */}
+          {clipZ === null && !meridionalCut && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Corte Livre</span>
+              <input type="range" min={0} max={360} step={1} value={freeClipAngle ?? 0}
+                onChange={e => setFreeClipAngle(freeClipAngle === null ? null : parseFloat(e.target.value))}
+                style={{ width: 60, accentColor: '#f59e0b' }} />
+              <button
+                onClick={() => setFreeClipAngle(c => c === null ? 0 : null)}
+                style={{
+                  fontSize: 9, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                  border: `1px solid ${freeClipAngle !== null ? '#f59e0b' : 'var(--border-primary)'}`,
+                  background: freeClipAngle !== null ? 'rgba(245,158,11,0.15)' : 'transparent',
+                  color: freeClipAngle !== null ? '#f59e0b' : 'var(--text-muted)',
+                }}
+              >{freeClipAngle !== null ? 'ON' : 'OFF'}</button>
+            </div>
+          )}
+
           <ControlButton label={showDimensions ? 'Cotas ON' : 'Cotas'} onClick={() => setShowDimensions(d => !d)} />
+          <ControlButton label={measureMode ? 'Medir ON' : 'Medir'} onClick={() => { setMeasureMode(m => !m); setMeasurePoints([]) }} />
+          <ControlButton label={showPassageArea ? 'Area ON' : 'Area'} onClick={() => setShowPassageArea(a => !a)} />
           <ControlButton label={showGhostOverlay ? 'Sobrepor V ON' : 'Sobrepor V anterior'} onClick={() => setShowGhostOverlay(g => !g)} />
           <span style={{ fontSize: 9, color: 'var(--text-muted)', borderLeft: '1px solid var(--border-primary)', paddingLeft: 6 }}>Vistas:</span>
           <ControlButton label="Frontal" onClick={() => setCameraPos([0, 0, 5])} />
@@ -2375,11 +2927,14 @@ export default function ImpellerViewer({
             <option value="high">High</option>
             <option value="ultra">Ultra</option>
           </select>
-          {['STEP', 'STL'].map(fmt => (
-            <button key={fmt} onClick={() => handleExport(fmt.toLowerCase())}
-              className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>{fmt}
-            </button>
-          ))}
+          <button onClick={() => handleExport('step')}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>STEP</button>
+          <button onClick={() => handleExport('stl')}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>STL</button>
+          <button onClick={() => setShowPrintDialog(true)}
+            className="btn-primary" style={{ padding: '4px 10px', fontSize: 11, background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.4)', color: '#a78bfa' }}>
+            STL (3D Print)
+          </button>
           <button onClick={handleGltfExport} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>
             glTF
           </button>

@@ -64,6 +64,7 @@ export default function Breadcrumb({ projectName, section, tab, onNavigate, onRe
       padding: '0 24px',
       background: 'var(--bg-elevated)',
       borderBottom: '1px solid var(--border-subtle)',
+      marginBottom: 16,
       fontSize: 12,
       fontFamily: 'var(--font-family)',
       flexShrink: 0,

@@ -2,14 +2,14 @@ import React, { useState } from 'react'
 import Skeleton from './Skeleton'
 
 const FUN_FACTS = [
-  'A bomba centrifuga foi inventada em 1689 por Denis Papin.',
-  'Bombas consomem 20% da energia eletrica industrial mundial.',
-  'A velocidade especifica Nq foi introduzida por Camerer em 1914.',
-  'Uma bomba operando fora do BEP pode ter vida util reduzida pela metade.',
-  'A maior estacao de bombeamento move 540 m\u00B3/s em Kinderdijk, Holanda.',
-  'Francis turbines podem alcancar rendimento acima de 95%.',
+  'A bomba centrífuga foi inventada em 1689 por Denis Papin.',
+  'Bombas consomem 20% da energia elétrica industrial mundial.',
+  'A velocidade específica Nq foi introduzida por Camerer em 1914.',
+  'Uma bomba operando fora do BEP pode ter vida útil reduzida pela metade.',
+  'A maior estação de bombeamento move 540 m\u00B3/s em Kinderdijk, Holanda.',
+  'Francis turbines podem alcançar rendimento acima de 95%.',
   'O conceito de NPSH foi formalizado por Thoma em 1925.',
-  'Rotores fechados tem melhor rendimento que abertos em geral.',
+  'Rotores fechados têm melhor rendimento que abertos em geral.',
 ]
 
 /**

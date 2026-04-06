@@ -178,11 +178,11 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const opSuggestion = useMemo(() => {
     const q = parseFloat(flowRate)
     if (!q || q <= 0) return null
-    if (q < 30) return { h: '40-80', n: '3550', note: 'Bomba alta pressao' }
-    if (q < 150) return { h: '20-45', n: '1750', note: 'Bomba industrial padrao' }
+    if (q < 30) return { h: '40-80', n: '3550', note: 'Bomba alta pressão' }
+    if (q < 150) return { h: '20-45', n: '1750', note: 'Bomba industrial padrão' }
     if (q < 500) return { h: '10-30', n: '1750', note: 'Bomba de processo' }
-    if (q < 2000) return { h: '5-20', n: '1150', note: 'Bomba de grande vazao' }
-    return { h: '3-15', n: '980', note: 'Estacao de bombeamento' }
+    if (q < 2000) return { h: '5-20', n: '1150', note: 'Bomba de grande vazão' }
+    return { h: '3-15', n: '980', note: 'Estação de bombeamento' }
   }, [flowRate])
 
   /* ── Fluid comparison message ──────────────────────────────────────── */
@@ -509,12 +509,12 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
           <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Dica: use Multi-Velocidade para ver o desempenho em faixa de vazao.
+            Dica: use Multi-Velocidade para ver o desempenho em faixa de vazão.
           </div>
           {opSuggestion && !head && !rpm && (
             <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2, cursor: 'pointer' }}
               onClick={() => { setHead(opSuggestion.h.split('-')[0]); setRpm(opSuggestion.n) }}>
-              Sugestao: H~{opSuggestion.h}m, n~{opSuggestion.n}rpm ({opSuggestion.note}) -- clique para aplicar
+              Sugestão: H~{opSuggestion.h}m, n~{opSuggestion.n}rpm ({opSuggestion.note}) -- clique para aplicar
             </div>
           )}
           <RecalcChip field="q" />
@@ -626,7 +626,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
 
       {/* Presets */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>Exemplos rapidos:</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>Exemplos rápidos:</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {PRESETS.map(p => (
             <button key={p.label} type="button" onClick={() => applyPreset(p)}
@@ -749,7 +749,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
 
       <input
         type="text"
-        placeholder="Observacao desta versao..."
+        placeholder="Observação desta versão..."
         value={versionNote}
         onChange={e => setVersionNote(e.target.value)}
         style={{ ...inputStyle, fontSize: 11, marginTop: 6 }}

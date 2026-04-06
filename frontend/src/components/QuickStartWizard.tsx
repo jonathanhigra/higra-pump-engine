@@ -34,15 +34,15 @@ export default function QuickStartWizard({ onRunSizing, onNavigate, onComplete }
 
   const steps = [
     {
-      title: 'Vamos projetar uma bomba centrifuga?',
-      description: 'Em 30 segundos voce tera um rotor dimensionado com geometria 3D, curvas de desempenho e analise de perdas.',
+      title: 'Vamos projetar uma bomba centrífuga?',
+      description: 'Em 30 segundos você terá um rotor dimensionado com geometria 3D, curvas de desempenho e análise de perdas.',
       action: 'Iniciar',
       onAction: () => setStep(1),
       icon: 'M13 10V3L4 14h7v7l9-11h-7z',
     },
     {
-      title: 'Ponto de operacao — Bomba Tipica',
-      description: `Q = ${DRAGON_PARAMS.q} m\u00B3/h, H = ${DRAGON_PARAMS.h} m, n = ${DRAGON_PARAMS.n} rpm. Estes parametros geram uma bomba centrifuga radial classica (Nq \u2248 26).`,
+      title: 'Ponto de operação — Bomba Típica',
+      description: `Q = ${DRAGON_PARAMS.q} m\u00B3/h, H = ${DRAGON_PARAMS.h} m, n = ${DRAGON_PARAMS.n} rpm. Estes parâmetros geram uma bomba centrífuga radial clássica (Nq \u2248 26).`,
       action: 'Calcular Agora',
       onAction: () => {
         onRunSizing(DRAGON_PARAMS.q, DRAGON_PARAMS.h, DRAGON_PARAMS.n)
@@ -54,23 +54,23 @@ export default function QuickStartWizard({ onRunSizing, onNavigate, onComplete }
     {
       title: sizingDone ? 'Pronto! O rotor ficou assim:' : 'Calculando...',
       description: sizingDone
-        ? 'Nq \u2248 26 (radial) \u2014 Rotor com ~7 pas, D2 \u2248 310mm, \u03B7 \u2248 82%. Explore os resultados nas abas.'
-        : 'Aguarde o dimensionamento ser concluido...',
+        ? 'Nq \u2248 26 (radial) \u2014 Rotor com ~7 pás, D2 \u2248 310mm, \u03B7 \u2248 82%. Explore os resultados nas abas.'
+        : 'Aguarde o dimensionamento ser concluído...',
       action: 'Ver Resultados',
       onAction: () => setStep(3),
       icon: 'M3 12h4l3-9 4 18 3-9h4',
     },
     {
       title: 'Agora explore!',
-      description: 'Use as abas para geometria, analise e otimizacao.',
+      description: 'Use as abas para geometria, análise e otimização.',
       action: 'Concluir',
       onAction: finish,
       icon: 'M22 11.08V12a10 10 0 11-5.93-9.14',
       cards: [
         { label: 'Geometria 3D', tab: '3d', icon: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0022 16z' },
         { label: 'Curvas H-Q', tab: 'curves', icon: 'M3 12h4l3-9 4 18 3-9h4' },
-        { label: 'Analise Perdas', tab: 'losses', icon: 'M22 12h-4l-3 9-4-18-3 9H4' },
-        { label: 'Otimizacao', tab: 'optimize', icon: 'M12 20V10M18 20V4M6 20v-4' },
+        { label: 'Análise Perdas', tab: 'losses', icon: 'M22 12h-4l-3 9-4-18-3 9H4' },
+        { label: 'Otimização', tab: 'optimize', icon: 'M12 20V10M18 20V4M6 20v-4' },
       ],
     },
   ]

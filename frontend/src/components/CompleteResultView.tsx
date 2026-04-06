@@ -40,12 +40,12 @@ export default function CompleteResultView({ sizing, curves, losses, stress, opP
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, textAlign: 'center' }}>
             {[
-              { label: 'Diametro D2', value: `${d2mm} mm`, color: 'var(--accent)' },
-              { label: 'Eficiencia', value: `${eta}%`, color: parseFloat(eta) > 80 ? '#22c55e' : '#d97706' },
+              { label: 'Diâmetro D2', value: `${d2mm} mm`, color: 'var(--accent)' },
+              { label: 'Eficiência', value: `${eta}%`, color: parseFloat(eta) > 80 ? '#22c55e' : '#d97706' },
               { label: 'NPSHr', value: `${sizing.estimated_npsh_r.toFixed(1)} m`, color: sizing.estimated_npsh_r < 6 ? '#22c55e' : '#dc2626' },
-              { label: 'Potencia', value: `${(sizing.estimated_power / 1000).toFixed(1)} kW`, color: '#a78bfa' },
+              { label: 'Potência', value: `${(sizing.estimated_power / 1000).toFixed(1)} kW`, color: '#a78bfa' },
               { label: 'Nq', value: sizing.specific_speed_nq.toFixed(0), color: '#a78bfa' },
-              { label: 'Pas', value: String(sizing.blade_count), color: 'var(--text-primary)' },
+              { label: 'Pás', value: String(sizing.blade_count), color: 'var(--text-primary)' },
             ].map(m => (
               <div key={m.label}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{m.label}</div>
@@ -54,7 +54,7 @@ export default function CompleteResultView({ sizing, curves, losses, stress, opP
             ))}
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Ponto de operacao: Q={opPoint.flowRate} m3/h, H={opPoint.head}m, n={opPoint.rpm}rpm
+            Ponto de operação: Q={opPoint.flowRate} m³/h, H={opPoint.head}m, n={opPoint.rpm}rpm
           </div>
         </div>
       </section>
@@ -127,12 +127,12 @@ export default function CompleteResultView({ sizing, curves, losses, stress, opP
 
       {/* Section 6: Next steps */}
       <section style={{ marginBottom: 24 }}>
-        <h3 style={{ color: 'var(--accent)', fontSize: 16 }}>Proximos Passos</h3>
+        <h3 style={{ color: 'var(--accent)', fontSize: 16 }}>Próximos Passos</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {[
             { label: 'Visualizar 3D', tab: '3d', desc: 'Rotor completo em 3D interativo' },
-            { label: 'Curvas H-Q', tab: 'curves', desc: 'Desempenho em faixa de vazao' },
-            { label: 'Perdas', tab: 'losses', desc: 'Distribuicao de perdas hidraulicas' },
+            { label: 'Curvas H-Q', tab: 'curves', desc: 'Desempenho em faixa de vazão' },
+            { label: 'Perdas', tab: 'losses', desc: 'Distribuição de perdas hidráulicas' },
             { label: 'Otimizar', tab: 'optimize', desc: 'Encontre o melhor compromisso' },
           ].map(s => (
             <button key={s.tab} onClick={() => onNavigateTab(s.tab)} className="card" style={{

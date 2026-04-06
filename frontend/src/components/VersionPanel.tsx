@@ -74,7 +74,7 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
   }
 
   const currentVersion = versions.find(v => v.id === currentVersionId)
-  const badgeLabel = currentVersion ? `V${currentVersion.version_number}` : versions.length > 0 ? `V${versions[0].version_number}` : 'V0'
+  const badgeLabel = currentVersion ? `V${currentVersion.version_number}` : versions.length > 0 ? `V${versions[0].version_number}` : ''
 
   return (
     <div ref={panelRef} style={{ position: 'relative', display: 'inline-block' }}>
@@ -82,7 +82,7 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        title="Historico de versoes"
+        title="Histórico de versões"
         style={{
           background: open ? 'rgba(0,160,223,0.15)' : 'transparent',
           border: `1px solid ${open ? 'var(--accent)' : 'var(--border-primary)'}`,
@@ -150,14 +150,14 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
-            VERSOES ({versions.length})
+            VERSÕES ({versions.length})
           </div>
 
           {/* Version list */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {versions.length === 0 ? (
               <div style={{ padding: '30px 14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>
-                Nenhuma versao salva
+                Nenhuma versão salva
               </div>
             ) : (
               versions.map(v => {
@@ -233,7 +233,7 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
                     {onDuplicate && (
                       <div
                         onClick={(e) => { e.stopPropagation(); onDuplicate(v); setOpen(false) }}
-                        title="Duplicar versao"
+                        title="Duplicar versão"
                         style={{
                           width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -254,7 +254,7 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
                     <div
                       className="version-delete-btn"
                       onClick={(e) => handleDelete(v.id, e)}
-                      title="Excluir versao"
+                      title="Excluir versão"
                       style={{
                         width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',

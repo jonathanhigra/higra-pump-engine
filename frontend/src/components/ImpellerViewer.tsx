@@ -2523,7 +2523,7 @@ export default function ImpellerViewer({
               padding: '6px 14px', fontSize: 11, color: '#f59e0b',
               whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              Sobreposicao 3D disponivel em versao futura
+              Sobreposição 3D disponível em versão futura
             </div>
           )}
           {/* Passage area chart overlay */}
@@ -2553,7 +2553,7 @@ export default function ImpellerViewer({
               borderRadius: 12, padding: 24, minWidth: 320, maxWidth: 400,
             }} onClick={e => e.stopPropagation()}>
               <h3 style={{ margin: '0 0 16px', fontSize: 15, color: 'var(--accent)' }}>
-                Exportar STL para Impressao 3D
+                Exportar STL para Impressão 3D
               </h3>
               <label style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
                 <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Escala (%)</span>
@@ -2562,7 +2562,7 @@ export default function ImpellerViewer({
                   style={{ width: '100%', padding: '6px 8px' }} />
               </label>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
-                Para impressao 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
+                Para impressão 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
                 {printScale !== 100 && (
                   <span style={{ display: 'block', marginTop: 4, color: '#f59e0b' }}>
                     Escala {printScale}%: D2 real {((data?.d2 ?? 0) * 1000).toFixed(0)}mm → impresso {((data?.d2 ?? 0) * 1000 * printScale / 100).toFixed(0)}mm
@@ -2711,7 +2711,7 @@ export default function ImpellerViewer({
             padding: '6px 14px', fontSize: 11, color: '#f59e0b',
             whiteSpace: 'nowrap', pointerEvents: 'none',
           }}>
-            Sobreposicao 3D disponivel em versao futura
+            Sobreposição 3D disponível em versão futura
           </div>
         )}
         {/* Passage area chart overlay (fullscreen) */}
@@ -2744,7 +2744,7 @@ export default function ImpellerViewer({
             borderRadius: 12, padding: 24, minWidth: 320, maxWidth: 400,
           }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px', fontSize: 15, color: 'var(--accent)' }}>
-              Exportar STL para Impressao 3D
+              Exportar STL para Impressão 3D
             </h3>
             <label style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
               <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Escala (%)</span>
@@ -2753,7 +2753,7 @@ export default function ImpellerViewer({
                 style={{ width: '100%', padding: '6px 8px' }} />
             </label>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
-              Para impressao 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
+              Para impressão 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
               {printScale !== 100 && (
                 <span style={{ display: 'block', marginTop: 4, color: '#f59e0b' }}>
                   Escala {printScale}%: D2 real {((data?.d2 ?? 0) * 1000).toFixed(0)}mm → impresso {((data?.d2 ?? 0) * 1000 * printScale / 100).toFixed(0)}mm

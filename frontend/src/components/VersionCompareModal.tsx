@@ -20,8 +20,8 @@ const METRICS: MetricDef[] = [
   { key: 'eta', label: '\u03B7', unit: '%', decimals: 2, direction: 'higher' },
   { key: 'd2_mm', label: 'D2', unit: 'mm', decimals: 1, direction: 'neutral' },
   { key: 'npsh', label: 'NPSHr', unit: 'm', decimals: 2, direction: 'lower' },
-  { key: 'power_kw', label: 'Potencia', unit: 'kW', decimals: 2, direction: 'lower' },
-  { key: 'blade_count', label: 'Z (pas)', unit: '', decimals: 0, direction: 'neutral' },
+  { key: 'power_kw', label: 'Potência', unit: 'kW', decimals: 2, direction: 'lower' },
+  { key: 'blade_count', label: 'Z (pás)', unit: '', decimals: 0, direction: 'neutral' },
   { key: 'beta1', label: '\u03B2\u2081', unit: '\u00B0', decimals: 1, direction: 'neutral' },
   { key: 'beta2', label: '\u03B2\u2082', unit: '\u00B0', decimals: 1, direction: 'neutral' },
 ]
@@ -179,7 +179,7 @@ export default function VersionCompareModal({ data, onClose }: Props) {
           fontSize: 13, fontWeight: 600,
           color: improvements > total / 2 ? '#4caf50' : improvements === 0 ? '#ef5350' : 'var(--text-secondary)',
         }}>
-          V{vb.version_number} melhor em {improvements} de {total} metricas comparaveis
+          V{vb.version_number} melhor em {improvements} de {total} métricas comparáveis
         </div>
       </div>
     </div>

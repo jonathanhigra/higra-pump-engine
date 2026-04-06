@@ -41,12 +41,12 @@ const SEVERITY_CONFIG: Record<Severity, { bg: string; border: string; color: str
 }
 
 const HUMAN_MAP: [RegExp, string][] = [
-  [/euler head.*above/i, 'A pa esta gerando mais pressao do que necessario. Margem de seguranca, mas aumenta o consumo.'],
-  [/choke/i, 'Velocidade na garganta muito alta — risco de bloqueio. Aumente a area de passagem.'],
-  [/npsh/i, 'Pressao na succao e baixa — risco de cavitacao. Reduza RPM ou aumente diametro de entrada.'],
-  [/de haller/i, 'Desaceleracao excessiva do fluido na pa — risco de separacao do escoamento.'],
-  [/throat/i, 'Garganta do canal muito estreita para a vazao de projeto.'],
-  [/excess margin/i, 'Margem de head excessiva — a bomba esta superdimensionada para esta aplicacao.'],
+  [/euler head.*above/i, 'A pá está gerando mais pressão do que necessário. Margem de segurança, mas aumenta o consumo.'],
+  [/choke/i, 'Velocidade na garganta muito alta — risco de bloqueio. Aumente a área de passagem.'],
+  [/npsh/i, 'Pressão na sucção é baixa — risco de cavitação. Reduza RPM ou aumente diâmetro de entrada.'],
+  [/de haller/i, 'Desaceleração excessiva do fluido na pá — risco de separação do escoamento.'],
+  [/throat/i, 'Garganta do canal muito estreita para a vazão de projeto.'],
+  [/excess margin/i, 'Margem de head excessiva — a bomba está superdimensionada para esta aplicação.'],
 ]
 
 function humanize(warning: string): string | null {
@@ -69,45 +69,45 @@ function getSuggestion(text: string, sizing?: SizingResult): string {
   if (/euler.*head.*excess|euler.*excesso|euler.*margem/i.test(lower)) {
     if (sizing?.beta2) {
       const sugBeta2 = (sizing.beta2 * 0.9).toFixed(1)
-      return `Considere reduzir B2 ou o numero de pas. Reduza \u03B22 para ${sugBeta2}\u00B0`
+      return `Considere reduzir B2 ou o número de pás. Reduza \u03B22 para ${sugBeta2}\u00B0`
     }
-    return 'Considere reduzir B2 ou o numero de pas'
+    return 'Considere reduzir B2 ou o número de pás'
   }
   if (/choke|bloqueio|engasgamento/i.test(lower))
-    return 'Aumente a area de passagem (b2 ou D1)'
+    return 'Aumente a área de passagem (b2 ou D1)'
   if (/npsh/i.test(lower)) {
     if (sizing) {
       // Extract RPM from velocity triangles or use a heuristic
       const currentRpm = (sizing.velocity_triangles as any)?.rpm ?? 0
       if (currentRpm > 0) {
         const sugRpm = Math.round(currentRpm * 0.85)
-        return `Reduza a rotacao ou aumente D1. Tente n = ${sugRpm} rpm`
+        return `Reduza a rotação ou aumente D1. Tente n = ${sugRpm} rpm`
       }
     }
-    return 'Reduza a rotacao ou aumente D1'
+    return 'Reduza a rotação ou aumente D1'
   }
   if (/de haller|haller|difus/i.test(lower))
-    return 'Reduza a difusao -- considere mais pas ou menor B2'
+    return 'Reduza a difusão -- considere mais pás ou menor B2'
   if (/slip|escorregamento|deslizamento/i.test(lower))
-    return 'Revise o numero de pas (Z) ou o angulo B2'
+    return 'Revise o número de pás (Z) ou o ângulo B2'
   if (/cavit/i.test(lower)) {
     if (sizing) {
       const currentRpm = (sizing.velocity_triangles as any)?.rpm ?? 0
       if (currentRpm > 0) {
         const sugRpm = Math.round(currentRpm * 0.85)
-        return `Reduza a rotacao ou aumente a pressao de succao. Tente n = ${sugRpm} rpm`
+        return `Reduza a rotação ou aumente a pressão de sucção. Tente n = ${sugRpm} rpm`
       }
     }
-    return 'Reduza a rotacao ou aumente a pressao de succao'
+    return 'Reduza a rotação ou aumente a pressão de sucção'
   }
   if (/efficien|efici/i.test(lower)) {
     if (sizing?.blade_count) {
       const sugZ = sizing.blade_count + 1
-      return `Aumente Z para ${sugZ} pas`
+      return `Aumente Z para ${sugZ} pás`
     }
-    return 'Revise o numero de pas ou angulos'
+    return 'Revise o número de pás ou ângulos'
   }
-  return 'Revise os parametros de entrada'
+  return 'Revise os parâmetros de entrada'
 }
 
 function getRelatedTab(text: string): string | undefined {
@@ -278,7 +278,7 @@ export default function SmartWarnings({ warnings, sizing, onNavigate }: Props) {
                         fontFamily: 'var(--font-family)',
                       }}
                     >
-                      Ver analise →
+                      Ver análise →
                     </button>
                   )}
                 </div>

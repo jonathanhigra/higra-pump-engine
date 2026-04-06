@@ -3,14 +3,14 @@ import React, { useEffect } from 'react'
 const HELP: Record<string, { title: string; text: string }> = {
   results: { title: 'Dimensionamento', text: 'Insira Q, H e n para dimensionar o rotor. Os resultados mostram geometria, desempenho e perdas.' },
   '3d': { title: 'Rotor 3D', text: 'Arraste para girar, scroll para zoom. Use os controles para explodir, clipar, colorir e exportar.' },
-  curves: { title: 'Curvas H-Q', text: 'Mostra desempenho em diferentes vazoes: altura, eficiencia, potencia e NPSH.' },
-  velocity: { title: 'Velocidades', text: 'Triangulos de velocidade inlet/outlet com componentes absolutas, relativas e perifericas.' },
-  losses: { title: 'Perdas', text: 'Distribuicao de perdas hidraulicas: perfil, parede, vazamento, disco e voluta.' },
-  optimize: { title: 'Otimizacao', text: 'NSGA-II multi-objetivo para eta, NPSHr e potencia. Configure populacao e geracoes.' },
-  stress: { title: 'Tensoes', text: 'Analise estrutural simplificada do rotor com tensao centrifuga e flexao.' },
-  pressure: { title: 'Pressao', text: 'Distribuicao de pressao ao longo da pa (lado de pressao e succao).' },
-  assistant: { title: 'Assistente', text: 'Chat com IA para tirar duvidas sobre o projeto e receber sugestoes.' },
-  templates: { title: 'Templates', text: 'Selecione um template pre-configurado para iniciar rapidamente.' },
+  curves: { title: 'Curvas H-Q', text: 'Mostra desempenho em diferentes vazões: altura, eficiência, potência e NPSH.' },
+  velocity: { title: 'Velocidades', text: 'Triângulos de velocidade inlet/outlet com componentes absolutas, relativas e periféricas.' },
+  losses: { title: 'Perdas', text: 'Distribuição de perdas hidráulicas: perfil, parede, vazamento, disco e voluta.' },
+  optimize: { title: 'Otimização', text: 'NSGA-II multi-objetivo para eta, NPSHr e potência. Configure população e gerações.' },
+  stress: { title: 'Tensões', text: 'Análise estrutural simplificada do rotor com tensão centrífuga e flexão.' },
+  pressure: { title: 'Pressão', text: 'Distribuição de pressão ao longo da pá (lado de pressão e sucção).' },
+  assistant: { title: 'Assistente', text: 'Chat com IA para tirar dúvidas sobre o projeto e receber sugestões.' },
+  templates: { title: 'Templates', text: 'Selecione um template pré-configurado para iniciar rapidamente.' },
 }
 
 interface Props {

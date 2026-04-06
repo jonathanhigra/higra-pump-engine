@@ -176,7 +176,7 @@ function buildReportHTML(sizing: SizingResult, opPoint: Props['opPoint'], curves
   </div>
 
   <div class="op-point">
-    <b>Ponto de operacao:</b>
+    <b>Ponto de operação:</b>
     Q = ${opPoint.flowRate} m&sup3;/h &nbsp;&middot;&nbsp;
     H = ${opPoint.head} m &nbsp;&middot;&nbsp;
     n = ${opPoint.rpm} rpm
@@ -184,20 +184,20 @@ function buildReportHTML(sizing: SizingResult, opPoint: Props['opPoint'], curves
 
   <h2>Resultados do Dimensionamento</h2>
   <div class="results-grid">
-    <div class="row"><span class="label">Velocidade especifica Nq</span><span class="value">${sizing.specific_speed_nq.toFixed(1)}</span></div>
+    <div class="row"><span class="label">Velocidade específica Nq</span><span class="value">${sizing.specific_speed_nq.toFixed(1)}</span></div>
     <div class="row"><span class="label">Tipo de rotor</span><span class="value">${sizing.impeller_type || '---'}</span></div>
-    <div class="row"><span class="label">Diametro externo D2</span><span class="value">${(sizing.impeller_d2 * 1000).toFixed(1)} mm</span></div>
-    <div class="row"><span class="label">Diametro de entrada D1</span><span class="value">${(sizing.impeller_d1 * 1000).toFixed(1)} mm</span></div>
-    <div class="row"><span class="label">Largura de saida b2</span><span class="value">${(sizing.impeller_b2 * 1000).toFixed(1)} mm</span></div>
-    <div class="row"><span class="label">Numero de pas</span><span class="value">${sizing.blade_count}</span></div>
-    <div class="row"><span class="label">Angulo de entrada B1</span><span class="value">${sizing.beta1?.toFixed(1) ?? '---'}&deg;</span></div>
-    <div class="row"><span class="label">Angulo de saida B2</span><span class="value">${sizing.beta2?.toFixed(1) ?? '---'}&deg;</span></div>
+    <div class="row"><span class="label">Diâmetro externo D2</span><span class="value">${(sizing.impeller_d2 * 1000).toFixed(1)} mm</span></div>
+    <div class="row"><span class="label">Diâmetro de entrada D1</span><span class="value">${(sizing.impeller_d1 * 1000).toFixed(1)} mm</span></div>
+    <div class="row"><span class="label">Largura de saída b2</span><span class="value">${(sizing.impeller_b2 * 1000).toFixed(1)} mm</span></div>
+    <div class="row"><span class="label">Número de pás</span><span class="value">${sizing.blade_count}</span></div>
+    <div class="row"><span class="label">Ângulo de entrada B1</span><span class="value">${sizing.beta1?.toFixed(1) ?? '---'}&deg;</span></div>
+    <div class="row"><span class="label">Ângulo de saída B2</span><span class="value">${sizing.beta2?.toFixed(1) ?? '---'}&deg;</span></div>
   </div>
 
   <h2>Desempenho</h2>
   <div class="results-grid">
     <div class="row"><span class="label">Rendimento total &eta;</span><span class="value">${eta}%</span></div>
-    <div class="row"><span class="label">Potencia estimada</span><span class="value">${power} kW</span></div>
+    <div class="row"><span class="label">Potência estimada</span><span class="value">${power} kW</span></div>
     <div class="row"><span class="label">NPSHr</span><span class="value">${sizing.estimated_npsh_r?.toFixed(2) ?? '---'} m</span></div>
     <div class="row"><span class="label">Fator de escorregamento &sigma;</span><span class="value">${sizing.sigma?.toFixed(4) ?? '---'}</span></div>
   </div>

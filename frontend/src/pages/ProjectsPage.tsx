@@ -32,6 +32,8 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [machineType, setMachineType] = useState('centrifugal_pump')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
   const PROJECT_COLORS = ['#00a0df', '#22c55e', '#a855f7', '#ef4444', '#f59e0b', '#06b6d4']
   const [projectColor, setProjectColor] = useState(PROJECT_COLORS[0])
 
@@ -42,6 +44,18 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
     try { const r = await fetch('/api/v1/projects', { headers }); if (r.ok) setProjects(await r.json()) } catch {}
   }
   useEffect(() => { loadProjects() }, [])
+
+  const renameProject = async (id: string, newName: string) => {
+    if (!newName.trim()) return
+    try {
+      await fetch(`/api/v1/projects/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ name: newName.trim() }),
+      })
+      loadProjects()
+    } catch {}
+  }
 
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault(); if (!name.trim()) return; setLoading(true)
@@ -165,7 +179,7 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
               border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer', fontSize: 14,
               fontFamily: 'var(--font-family)', fontWeight: 500,
             }}>
-              Projeto Rapido (sem salvar)
+              Projeto Rápido (sem salvar)
             </button>
           </div>
 
@@ -216,10 +230,27 @@ export default function ProjectsPage({ onSelectProject, token }: Props) {
 
                 {/* Middle: Name + description + meta */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)', fontWeight: 600 }}>{p.name}</h3>
+                  {editingId === p.id ? (
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      onBlur={() => { renameProject(p.id, editName); setEditingId(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { renameProject(p.id, editName); setEditingId(null) } if (e.key === 'Escape') setEditingId(null) }}
+                      className="input"
+                      style={{ fontSize: 15, fontWeight: 600, padding: '2px 6px', width: '100%' }}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : (
+                    <h3 onDoubleClick={(e) => { e.stopPropagation(); setEditingId(p.id); setEditName(p.name) }}
+                      style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)', fontWeight: 600, cursor: 'text' }}
+                      title="Duplo-clique para renomear">
+                      {p.name}
+                    </h3>
+                  )}
                   {p.description && <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{p.description}</p>}
                   <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
-                    <span>{p.n_sizing_results || 0} versões</span>
+                    <span>{p.n_sizing_results || 0} designs</span>
                     <span>•</span>
                     <span>{p.machine_type?.replace('_', ' ') || 'bomba centrífuga'}</span>
                     <span>•</span>

@@ -37,9 +37,9 @@ export default function ReverseCalc({ open, onClose, onResult }: Props) {
         background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)',
         borderRadius: 10, padding: 20, width: 340,
       }}>
-        <h4 style={{ color: 'var(--accent)', margin: '0 0 12px', fontSize: 14 }}>Calculo Reverso</h4>
+        <h4 style={{ color: 'var(--accent)', margin: '0 0 12px', fontSize: 14 }}>Cálculo Reverso</h4>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-          Dado D2 desejado, calcula a vazao necessaria.
+          Dado D2 desejado, calcula a vazão necessária.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -51,16 +51,16 @@ export default function ReverseCalc({ open, onClose, onResult }: Props) {
             <input className="input" type="number" value={h} onChange={e => setH(e.target.value)} style={{ marginTop: 2 }} />
           </label>
           <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            Rotacao n [rpm]
+            Rotação n [rpm]
             <input className="input" type="number" value={n} onChange={e => setN(e.target.value)} style={{ marginTop: 2 }} />
           </label>
         </div>
         <button className="btn-primary" onClick={calculate} style={{ width: '100%', marginTop: 12, padding: 8, fontSize: 13 }}>
-          Calcular Vazao
+          Calcular Vazão
         </button>
         {result && (
           <div style={{ marginTop: 12, padding: 10, background: 'var(--bg-surface)', borderRadius: 6, fontSize: 13 }}>
-            <div>Vazao estimada: <b style={{ color: 'var(--accent)' }}>{result.q.toFixed(1)} m3/h</b></div>
+            <div>Vazão estimada: <b style={{ color: 'var(--accent)' }}>{result.q.toFixed(1)} m³/h</b></div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Nq ~ {result.nq.toFixed(1)}</div>
             <button
               onClick={() => { onResult(result.q, parseFloat(h), parseFloat(n)); onClose() }}

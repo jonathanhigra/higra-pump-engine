@@ -41,11 +41,11 @@ function generateExecutiveSummary(sizing: any, opPoint: any, projectName?: strin
     <h1>${projectName || 'Projeto HPE'}</h1>
     <p style="color:#888;font-size:12px">Resumo Executivo — ${new Date().toLocaleDateString('pt-BR')}</p>
     <div class="metrics">
-      <div class="metric"><div class="val">${(sizing.estimated_efficiency * 100).toFixed(1)}%</div><div class="lbl">Eficiencia</div></div>
+      <div class="metric"><div class="val">${(sizing.estimated_efficiency * 100).toFixed(1)}%</div><div class="lbl">Eficiência</div></div>
       <div class="metric"><div class="val">${sizing.estimated_npsh_r.toFixed(1)}m</div><div class="lbl">NPSHr</div></div>
-      <div class="metric"><div class="val">${(sizing.estimated_power / 1000).toFixed(1)}kW</div><div class="lbl">Potencia</div></div>
+      <div class="metric"><div class="val">${(sizing.estimated_power / 1000).toFixed(1)}kW</div><div class="lbl">Potência</div></div>
     </div>
-    <p class="summary">Rotor ${sizing.meridional_profile?.impeller_type || 'centrifugo'} de <b>${(sizing.impeller_d2 * 1000).toFixed(0)}mm</b> com ${sizing.blade_count} pas, operando a <b>${opPoint.rpm}rpm</b> com vazao de <b>${opPoint.flowRate}m3/h</b> e altura de <b>${opPoint.head}m</b>.</p>
+    <p class="summary">Rotor ${sizing.meridional_profile?.impeller_type || 'centrífugo'} de <b>${(sizing.impeller_d2 * 1000).toFixed(0)}mm</b> com ${sizing.blade_count} pás, operando a <b>${opPoint.rpm}rpm</b> com vazão de <b>${opPoint.flowRate}m³/h</b> e altura de <b>${opPoint.head}m</b>.</p>
     <hr><p class="footer">Gerado por HPE v0.1.0 — HIGRA Industrial Ltda.</p>
   </body></html>`
   const w = window.open('', '_blank')
@@ -61,7 +61,7 @@ export default function ExportCenter({ open, onClose, onExport, sizing, opPoint,
       <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)',
         borderRadius: 12, padding: 24, maxWidth: 620, width: '90%', maxHeight: '80vh', overflowY: 'auto' as const }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, color: 'var(--accent)', fontSize: 16 }}>Centro de Exportacao</h3>
+          <h3 style={{ margin: 0, color: 'var(--accent)', fontSize: 16 }}>Centro de Exportação</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, fontFamily: 'var(--font-family)' }}>x</button>
         </div>
 
@@ -70,15 +70,15 @@ export default function ExportCenter({ open, onClose, onExport, sizing, opPoint,
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             <ExportCard label="STEP" desc="SolidWorks, Inventor, Fusion" onClick={() => onExport('step')} />
             <ExportCard label="IGES" desc="B-Spline — CAD universal" onClick={() => onExport('iges')} />
-            <ExportCard label="STL" desc="Impressao 3D, FEA" onClick={() => onExport('stl')} />
-            <ExportCard label="glTF" desc="Web 3D — visualizacao" onClick={() => onExport('gltf')} />
+            <ExportCard label="STL" desc="Impressão 3D, FEA" onClick={() => onExport('stl')} />
+            <ExportCard label="glTF" desc="Web 3D — visualização" onClick={() => onExport('gltf')} />
             <ExportCard label="BladeGen" desc=".bgd — ANSYS BladeGen" onClick={() => onExport('bladegen')} />
             <ExportCard label="GEO" desc="TurboGrid — malha CFD" onClick={() => onExport('geo')} />
           </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, marginBottom: 8, fontWeight: 600 }}>CFD / Simulacao</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, marginBottom: 8, fontWeight: 600 }}>CFD / Simulação</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             <ExportCard label="Pacote CFX" desc="ZIP — CCL + mesh + BCs" onClick={() => onExport('cfx-package')} />
             <ExportCard label="Fluent .jou" desc="Journal TUI automatico" onClick={() => onExport('fluent')} />

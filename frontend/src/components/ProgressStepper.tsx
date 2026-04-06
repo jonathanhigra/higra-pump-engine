@@ -18,8 +18,8 @@ const STEPS: Step[] = [
   { id: 'dados', label: 'Dados', tab: 'results' },
   { id: 'sizing', label: 'Sizing', tab: 'results' },
   { id: 'geometria', label: 'Geometria', tab: '3d' },
-  { id: 'analise', label: 'Analise', tab: 'curves' },
-  { id: 'otimizacao', label: 'Otimizacao', tab: 'optimize' },
+  { id: 'analise', label: 'Análise', tab: 'curves' },
+  { id: 'otimizacao', label: 'Otimização', tab: 'optimize' },
   { id: 'exportar', label: 'Exportar', tab: 'results' },
 ]
 

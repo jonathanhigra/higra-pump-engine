@@ -15,32 +15,32 @@ interface Step {
 const STEPS: Step[] = [
   {
     title: 'Menu lateral',
-    description: 'Use o menu lateral para navegar entre as secoes do projeto. Cada secao agrupa funcionalidades relacionadas como Design, Geometria, Analise e Otimizacao.',
+    description: 'Use o menu lateral para navegar entre as seções do projeto. Cada seção agrupa funcionalidades relacionadas como Design, Geometria, Análise e Otimização.',
     iconPath: 'M4 6h16M4 12h16M4 18h16',
   },
   {
-    title: 'Formulario de dimensionamento',
-    description: 'Insira vazao (Q), altura manometrica (H) e rotacao (RPM) para dimensionar o rotor. Voce tambem pode selecionar o tipo de maquina e fluido.',
+    title: 'Formulário de dimensionamento',
+    description: 'Insira vazão (Q), altura manométrica (H) e rotação (RPM) para dimensionar o rotor. Você também pode selecionar o tipo de máquina e fluido.',
     iconPath: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z',
   },
   {
-    title: 'Executar calculo',
-    description: 'Clique no botao "Executar" ou pressione F5 para calcular. O sistema realiza dimensionamento 1D com correlacoes de Stepanoff, Gulich e Pfleiderer.',
+    title: 'Executar cálculo',
+    description: 'Clique no botão "Executar" ou pressione F5 para calcular. O sistema realiza dimensionamento 1D com correlações de Stepanoff, Gülich e Pfleiderer.',
     iconPath: 'M13 10V3L4 14h7v7l9-11h-7z',
   },
   {
-    title: 'Resultados e metricas',
-    description: 'Os resultados aparecem aqui com metricas-chave (Nq, eta, D2, NPSHr) e warnings de projeto. Clique nas secoes Geometria, Desempenho e Perdas para detalhes.',
+    title: 'Resultados e métricas',
+    description: 'Os resultados aparecem aqui com métricas-chave (Nq, eta, D2, NPSHr) e warnings de projeto. Clique nas seções Geometria, Desempenho e Perdas para detalhes.',
     iconPath: 'M3 12h4l3-9 4 18 3-9h4',
   },
   {
-    title: 'Abas de analise',
-    description: 'Use as abas para explorar curvas de desempenho, visualizacao 3D, triangulos de velocidade, analise de perdas e otimizacao.',
+    title: 'Abas de análise',
+    description: 'Use as abas para explorar curvas de desempenho, visualização 3D, triângulos de velocidade, análise de perdas e otimização.',
     iconPath: 'M4 6h16M4 10h16M4 14h16M4 18h16',
   },
   {
     title: 'Barra de status',
-    description: 'A barra inferior mostra as metricas-chave do projeto atual em tempo real: Nq, rendimento, D2, NPSHr, numero de pas e potencia.',
+    description: 'A barra inferior mostra as métricas-chave do projeto atual em tempo real: Nq, rendimento, D2, NPSHr, número de pás e potência.',
     iconPath: 'M22 12h-4l-3 9-4-18-3 9H4',
   },
 ]

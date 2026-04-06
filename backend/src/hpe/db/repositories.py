@@ -58,6 +58,33 @@ def list_projects(user_id: str | None = None, limit: int = 50) -> list[dict]:
             return rows
 
 
+def update_project(project_id: str, name: str | None = None, description: str | None = None) -> dict:
+    """Update a project's name and/or description."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            parts, vals = [], []
+            if name is not None:
+                parts.append("name=%s")
+                vals.append(name)
+            if description is not None:
+                parts.append("description=%s")
+                vals.append(description)
+            if not parts:
+                return get_project(project_id) or {}
+            parts.append("updated_at=NOW()")
+            vals.append(project_id)
+            cur.execute(
+                f"UPDATE projects SET {', '.join(parts)} WHERE id=%s RETURNING *",
+                tuple(vals),
+            )
+            row = cur.fetchone()
+            if not row:
+                return {}
+            cols = [d[0] for d in cur.description]
+        conn.commit()
+    return dict(zip(cols, row))
+
+
 def get_project(project_id: str) -> dict | None:
     with get_connection() as conn:
         with conn.cursor() as cur:

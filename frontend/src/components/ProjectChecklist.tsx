@@ -12,7 +12,7 @@ export default function ProjectChecklist({ hasSizing, hasViewedGeometry, hasView
   const items = [
     { done: hasSizing, label: 'Dimensionamento calculado' },
     { done: hasViewedGeometry, label: 'Geometria 3D verificada' },
-    { done: hasViewedAnalysis, label: 'Analise de perdas revisada' },
+    { done: hasViewedAnalysis, label: 'Análise de perdas revisada' },
     { done: hasCheckedNpsh, label: 'NPSHr verificado' },
     { done: hasExported, label: 'Projeto exportado' },
   ]

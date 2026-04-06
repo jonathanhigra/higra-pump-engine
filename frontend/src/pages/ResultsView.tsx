@@ -47,7 +47,7 @@ function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
 function narrateResults(s: any) {
   if (!('speechSynthesis' in window)) return
   const msg = new SpeechSynthesisUtterance(
-    `O dimensionamento resultou em um rotor de ${(s.impeller_d2 * 1000).toFixed(0)} milimetros com ${s.blade_count} pas. Eficiencia total de ${(s.estimated_efficiency * 100).toFixed(1)} por cento. N P S H requerido de ${s.estimated_npsh_r.toFixed(1)} metros. Potencia estimada de ${(s.estimated_power / 1000).toFixed(1)} quilowatts.`
+    `O dimensionamento resultou em um rotor de ${(s.impeller_d2 * 1000).toFixed(0)} milímetros com ${s.blade_count} pás. Eficiência total de ${(s.estimated_efficiency * 100).toFixed(1)} por cento. N P S H requerido de ${s.estimated_npsh_r.toFixed(1)} metros. Potência estimada de ${(s.estimated_power / 1000).toFixed(1)} quilowatts.`
   )
   msg.lang = 'pt-BR'; msg.rate = 0.9
   speechSynthesis.speak(msg)
@@ -124,9 +124,9 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
         </button>
         Rotor <b>{s.meridional_profile?.impeller_type || 'radial'}</b> de{' '}
         <b style={{ color: 'var(--accent)' }}>{(s.impeller_d2*1000).toFixed(0)}mm</b> com{' '}
-        {s.blade_count} pas, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
+        {s.blade_count} pás, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
         NPSHr=<b>{s.estimated_npsh_r.toFixed(1)}m</b>
-        {s.estimated_efficiency > 0.85 ? ' -- Excelente projeto!' : s.estimated_efficiency > 0.78 ? ' -- Bom projeto!' : s.estimated_efficiency > 0.70 ? ' -- Aceitavel, ajustes podem melhorar.' : ' -- Revisar parametros.'}
+        {s.estimated_efficiency > 0.85 ? ' -- Excelente projeto!' : s.estimated_efficiency > 0.78 ? ' -- Bom projeto!' : s.estimated_efficiency > 0.70 ? ' -- Aceitável, ajustes podem melhorar.' : ' -- Revisar parâmetros.'}
         {(() => {
           const benchmarkEta = (nq: number): number => {
             if (nq < 15) return 0.72
@@ -141,7 +141,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
           if (diff === 0) return null
           return (
             <div style={{ fontSize: 11, color: diff > 0 ? 'var(--accent-success, #4caf50)' : '#facc15', marginTop: 4 }}>
-              {diff > 0 ? '\u2191' : '\u2193'} {Math.abs(diff).toFixed(1)}% {diff > 0 ? 'acima' : 'abaixo'} da media para Nq={s.specific_speed_nq.toFixed(0)} (base: 847 bombas)
+              {diff > 0 ? '\u2191' : '\u2193'} {Math.abs(diff).toFixed(1)}% {diff > 0 ? 'acima' : 'abaixo'} da média para Nq={s.specific_speed_nq.toFixed(0)} (base: 847 bombas)
             </div>
           )
         })()}
@@ -152,7 +152,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
         {[
           { label: 'D2', value: `${(s.impeller_d2 * 1000).toFixed(0)}`, unit: 'mm', color: 'var(--accent)', term: 'D2' },
           { label: 'Nq', value: s.specific_speed_nq.toFixed(0), unit: '\u2014', color: '#a78bfa', term: 'Nq' },
-          { label: 'Potencia', value: `${(s.estimated_power / 1000).toFixed(1)}`, unit: 'kW', color: '#34d399', term: 'Potencia' },
+          { label: 'Potência', value: `${(s.estimated_power / 1000).toFixed(1)}`, unit: 'kW', color: '#34d399', term: 'Potencia' },
         ].map(m => (
           <div key={m.label} className="card" style={{ textAlign: 'center', padding: '12px 8px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
@@ -163,7 +163,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
               {m.value}
               {m.label === 'D2' && ps && <DeltaIndicator current={s.impeller_d2 * 1000} previous={ps.impeller_d2 * 1000} format="mm" />}
               {m.label === 'Nq' && ps && <DeltaIndicator current={s.specific_speed_nq} previous={ps.specific_speed_nq} format="abs" />}
-              {m.label === 'Potencia' && ps && <DeltaIndicator current={s.estimated_power / 1000} previous={ps.estimated_power / 1000} format="pct" higherIsBetter={false} />}
+              {m.label === 'Potência' && ps && <DeltaIndicator current={s.estimated_power / 1000} previous={ps.estimated_power / 1000} format="pct" higherIsBetter={false} />}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.unit}</div>
           </div>
@@ -259,7 +259,7 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
               </td>
             </tr>
             <tr>
-              <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>Potencia</td>
+              <td style={{ padding: '5px 12px 5px 0', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>Potência</td>
               <td style={{ padding: '5px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
                 {(s.estimated_power / 1000).toFixed(2)} kW
                 {ps && <DeltaIndicator current={s.estimated_power / 1000} previous={ps.estimated_power / 1000} format="pct" higherIsBetter={false} />}
@@ -275,8 +275,8 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
             </tr>
             {row(<EngineeringTooltip term="Nq">Nq</EngineeringTooltip>, `${s.specific_speed_nq?.toFixed(1)}`)}
             {row('Tipo de rotor', s.impeller_type || '—')}
-            {s.diffusion_ratio ? row('Razao de difusao (De Haller)', s.diffusion_ratio.toFixed(3)) : null}
-            {s.convergence_iterations ? row('Conv. iteracoes', `${s.convergence_iterations}`) : null}
+            {s.diffusion_ratio ? row('Razão de difusão (De Haller)', s.diffusion_ratio.toFixed(3)) : null}
+            {s.convergence_iterations ? row('Conv. iterações', `${s.convergence_iterations}`) : null}
           </tbody></table>
         </div>
       )}
@@ -302,13 +302,13 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
       {/* What-if quick buttons */}
       <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 8 }}>
         {[
-          { label: '+10% RPM', tip: 'Simular aumento de rotacao' },
-          { label: '+1 pa', tip: 'Adicionar uma pa ao rotor' },
-          { label: 'D2 -10%', tip: 'Reduzir diametro de saida' },
+          { label: '+10% RPM', tip: 'Simular aumento de rotação' },
+          { label: '+1 pá', tip: 'Adicionar uma pá ao rotor' },
+          { label: 'D2 -10%', tip: 'Reduzir diâmetro de saída' },
         ].map(btn => (
           <button key={btn.label} type="button" title={btn.tip}
             onClick={() => {
-              const text = `What-if: ${btn.label} -- execute novamente com parametro ajustado`
+              const text = `What-if: ${btn.label} -- execute novamente com parâmetro ajustado`
               navigator.clipboard.writeText(text)
             }}
             style={{

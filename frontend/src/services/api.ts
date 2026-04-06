@@ -159,10 +159,10 @@ export async function deleteVersion(id: string): Promise<void> {
 
 export function exportSizingCSV(sizing: any, opPoint: any): void {
   const rows = [
-    ['Parametro', 'Valor', 'Unidade'],
-    ['Vazao Q', (opPoint.flowRate).toFixed(2), 'm3/h'],
+    ['Parâmetro', 'Valor', 'Unidade'],
+    ['Vazão Q', (opPoint.flowRate).toFixed(2), 'm³/h'],
     ['Altura H', opPoint.head.toFixed(1), 'm'],
-    ['Rotacao n', opPoint.rpm.toFixed(0), 'rpm'],
+    ['Rotação n', opPoint.rpm.toFixed(0), 'rpm'],
     ['Nq', sizing.specific_speed_nq.toFixed(1), ''],
     ['D2', (sizing.impeller_d2*1000).toFixed(0), 'mm'],
     ['D1', (sizing.impeller_d1*1000).toFixed(0), 'mm'],
@@ -171,7 +171,7 @@ export function exportSizingCSV(sizing: any, opPoint: any): void {
     ['beta1', sizing.beta1.toFixed(1), 'deg'],
     ['beta2', sizing.beta2.toFixed(1), 'deg'],
     ['eta total', (sizing.estimated_efficiency*100).toFixed(1), '%'],
-    ['Potencia', (sizing.estimated_power/1000).toFixed(1), 'kW'],
+    ['Potência', (sizing.estimated_power/1000).toFixed(1), 'kW'],
     ['NPSHr', sizing.estimated_npsh_r.toFixed(1), 'm'],
   ]
   const csv = rows.map(r => r.join(',')).join('\n')

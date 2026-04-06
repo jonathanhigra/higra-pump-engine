@@ -142,7 +142,7 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
       {
         num: 3,
         title: 'Explore os resultados',
-        desc: 'Geometria 3D, curvas, perdas e otimizacao',
+        desc: 'Geometria 3D, curvas, perdas e otimização',
         icon: 'M1 12s4-8 11-8 11 8-4 8-11 8-11-8z',
         enabled: false,
         onClick: () => {},

@@ -11,10 +11,10 @@ export function emailResults(sizing: any, opPoint: any, projectName?: string) {
     `Resultados:\n` +
     `  Nq = ${sizing.specific_speed_nq.toFixed(1)}\n` +
     `  D2 = ${(sizing.impeller_d2 * 1000).toFixed(0)} mm\n` +
-    `  Z  = ${sizing.blade_count} pas\n` +
-    `  n  = ${(sizing.estimated_efficiency * 100).toFixed(1)}%\n` +
+    `  Z  = ${sizing.blade_count} pás\n` +
+    `  η  = ${(sizing.estimated_efficiency * 100).toFixed(1)}%\n` +
     `  NPSHr = ${sizing.estimated_npsh_r.toFixed(1)} m\n` +
-    `  Potencia = ${(sizing.estimated_power / 1000).toFixed(1)} kW\n\n` +
+    `  Potência = ${(sizing.estimated_power / 1000).toFixed(1)} kW\n\n` +
     `Gerado por HPE -- HIGRA Pump Engine`
   )
   window.open(`mailto:?subject=${subject}&body=${body}`)

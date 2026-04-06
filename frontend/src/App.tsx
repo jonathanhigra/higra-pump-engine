@@ -208,6 +208,8 @@ export default function App() {
   const [showWhatsNew, setShowWhatsNew] = useState(() => localStorage.getItem('hpe_whats_new_seen') !== '0.2.0')
   const [glossaryOpen, setGlossaryOpen] = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  const [editingProjectName, setEditingProjectName] = useState(false)
+  const [editProjectNameVal, setEditProjectNameVal] = useState('')
   const [overviewTab, setOverviewTab] = useState(false)  // CompleteResultView toggle (#10)
   const [showAutoRestore, setShowAutoRestore] = useState(false)
   const { toasts, toast, dismiss } = useToast()
@@ -291,7 +293,7 @@ export default function App() {
         const state = JSON.parse(raw)
         if (state.opPoint) setOpPoint(state.opPoint)
         if (state.tab) setTab(state.tab)
-        toast('Sessao anterior restaurada', 'success')
+        toast('Sessão anterior restaurada', 'success')
       }
     } catch { /* ignore */ }
     setShowAutoRestore(false)
@@ -301,7 +303,7 @@ export default function App() {
   const handleDuplicateVersion = useCallback((v: VersionEntry) => {
     const qH = v.flow_rate >= 1 ? v.flow_rate : v.flow_rate * 3600
     setOpPoint({ flowRate: qH, head: v.head, rpm: v.rpm })
-    toast('Ponto de operacao copiado — clique Executar para criar nova versao', 'info')
+    toast('Ponto de operação copiado — clique Executar para criar nova versão', 'info')
   }, [toast])
 
   // Warning count for sidebar badge (feature #8)
@@ -314,6 +316,18 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('hpe_token')
     setUser(null); setToken(''); setPage('login'); setSizing(null)
+  }
+
+  const renameCurrentProject = async (newName: string) => {
+    if (!newName.trim() || !currentProject?.id) return
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      await fetch(`/api/v1/projects/${currentProject.id}`, {
+        method: 'PUT', headers, body: JSON.stringify({ name: newName.trim() }),
+      })
+      setCurrentProject({ ...currentProject, name: newName.trim() })
+    } catch {}
   }
 
   const handleNavigate = (p: 'projects' | 'design', t?: Tab) => {
@@ -410,13 +424,13 @@ export default function App() {
       // Proactive suggestions (#4) — delayed to not overlap loading toast
       setTimeout(() => {
         if (result.estimated_efficiency < 0.75) {
-          toast('eta abaixo de 75%. Tente aumentar o numero de pas ou ajustar beta2.', 'warning')
+          toast('eta abaixo de 75%. Tente aumentar o número de pás ou ajustar beta2.', 'warning')
         }
         if (result.estimated_npsh_r > 8) {
           toast(`NPSHr=${result.estimated_npsh_r.toFixed(1)}m e alto. Reduza RPM para ~${Math.round(n * 0.85)}.`, 'warning')
         }
         if (result.specific_speed_nq < 10) {
-          toast('Nq muito baixo -- considere multi-estagio ou aumente RPM.', 'info')
+          toast('Nq muito baixo -- considere multi-estágio ou aumente RPM.', 'info')
         }
         if (result.specific_speed_nq > 200) {
           toast('Nq alto -- considere bomba axial ou mixed-flow.', 'info')
@@ -427,9 +441,9 @@ export default function App() {
       if (sizing && history.length >= 1 && history.length <= 3) {
         setTimeout(() => {
           if (result.estimated_efficiency > (sizing?.estimated_efficiency || 0)) {
-            toast('eta aumentou! A mudanca melhorou o projeto.', 'success')
+            toast('eta aumentou! A mudança melhorou o projeto.', 'success')
           } else if (sizing && result.estimated_efficiency < sizing.estimated_efficiency) {
-            toast('eta diminuiu. Tente ajustar outros parametros.', 'info')
+            toast('eta diminuiu. Tente ajustar outros parâmetros.', 'info')
           }
         }, 3500)
       }
@@ -437,10 +451,10 @@ export default function App() {
       // Encouragement (#9)
       setTimeout(() => {
         const eta = result.estimated_efficiency
-        const msgs_excellent = ['Excelente projeto!', 'Top 10% para este Nq!', 'Projeto de referencia!']
-        const msgs_good = ['Bom projeto!', 'Parametros bem equilibrados.', 'Design solido.']
-        const msgs_ok = ['Aceitavel. Pequenos ajustes podem melhorar.', 'Bom ponto de partida para otimizacao.']
-        const msgs_bad = ['Nao desanime! Ajuste os parametros.', 'Tente variar RPM ou numero de pas.']
+        const msgs_excellent = ['Excelente projeto!', 'Top 10% para este Nq!', 'Projeto de referência!']
+        const msgs_good = ['Bom projeto!', 'Parâmetros bem equilibrados.', 'Design sólido.']
+        const msgs_ok = ['Aceitável. Pequenos ajustes podem melhorar.', 'Bom ponto de partida para otimização.']
+        const msgs_bad = ['Não desanime! Ajuste os parâmetros.', 'Tente variar RPM ou número de pás.']
         const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
         if (eta > 0.85) toast(pick(msgs_excellent), 'success')
         else if (eta > 0.78) toast(pick(msgs_good), 'success')
@@ -489,7 +503,7 @@ export default function App() {
       const result = await compareVersions(a.id, b.id)
       setCompareData(result)
     } catch {
-      toast('Erro ao comparar versoes', 'error')
+      toast('Erro ao comparar versões', 'error')
     }
   }
 
@@ -499,7 +513,7 @@ export default function App() {
       setVersions(prev => prev.filter(v => v.id !== id))
       if (currentVersionId === id) setCurrentVersionId(null)
     } catch {
-      toast('Erro ao excluir versao', 'error')
+      toast('Erro ao excluir versão', 'error')
     }
   }
 
@@ -536,7 +550,7 @@ export default function App() {
           display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
           boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
         }}>
-          <span style={{ color: 'var(--text-secondary)' }}>Sessao anterior encontrada. Restaurar?</span>
+          <span style={{ color: 'var(--text-secondary)' }}>Sessão anterior encontrada. Restaurar?</span>
           <button className="btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={handleAutoRestore}>Restaurar</button>
           <button onClick={() => setShowAutoRestore(false)} style={{
             background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13,
@@ -768,7 +782,23 @@ export default function App() {
             &larr; Projetos
           </button>
           <span style={{ color: 'var(--border-primary)', fontSize: 14, userSelect: 'none' }}>/</span>
-          <h1 style={{ fontSize: 18, margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
+          {editingProjectName ? (
+            <input
+              autoFocus
+              value={editProjectNameVal}
+              onChange={e => setEditProjectNameVal(e.target.value)}
+              onBlur={() => { renameCurrentProject(editProjectNameVal); setEditingProjectName(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') { renameCurrentProject(editProjectNameVal); setEditingProjectName(false) } if (e.key === 'Escape') setEditingProjectName(false) }}
+              className="input"
+              style={{ fontSize: 18, fontWeight: 600, padding: '2px 8px', minWidth: 200 }}
+            />
+          ) : (
+            <h1
+              style={{ fontSize: 18, margin: 0, cursor: currentProject ? 'text' : 'default' }}
+              onDoubleClick={() => { if (currentProject) { setEditingProjectName(true); setEditProjectNameVal(currentProject.name) } }}
+              title={currentProject ? 'Duplo-clique para renomear' : undefined}
+            >{currentProject?.name || t.quickDesign}</h1>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {sizing && <DesignQualityBadge sizing={sizing} />}
@@ -958,7 +988,7 @@ function ShortcutsHelpModal({ onClose }: { onClose: () => void }) {
     { keys: 'Ctrl+K', desc: 'Abrir command palette' },
     { keys: 'Ctrl+S', desc: 'Salvar design' },
     { keys: 'F5 / Ctrl+Enter', desc: 'Executar dimensionamento' },
-    { keys: '1-7', desc: 'Navegar entre secoes' },
+    { keys: '1-7', desc: 'Navegar entre seções' },
     { keys: 'Ctrl+E', desc: 'Abrir Export Center' },
     { keys: 'F1', desc: 'Ajuda contextual' },
     { keys: 'Esc', desc: 'Fechar modal/palette' },

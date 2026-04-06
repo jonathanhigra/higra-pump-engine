@@ -20,8 +20,8 @@ export default function QuickSummary({ sizing, curves, opPoint, onNavigate }: Pr
             { label: 'n total', value: (sizing.estimated_efficiency * 100).toFixed(1), unit: '%' },
             { label: 'D2', value: (sizing.impeller_d2 * 1000).toFixed(0), unit: 'mm' },
             { label: 'NPSHr', value: sizing.estimated_npsh_r.toFixed(1), unit: 'm' },
-            { label: 'Potencia', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW' },
-            { label: 'Z pas', value: String(sizing.blade_count), unit: '' },
+            { label: 'Potência', value: (sizing.estimated_power / 1000).toFixed(1), unit: 'kW' },
+            { label: 'Z pás', value: String(sizing.blade_count), unit: '' },
           ].map(m => (
             <div key={m.label} style={{ padding: 8, background: 'var(--bg-surface)', borderRadius: 6, textAlign: 'center' }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.label}</div>
@@ -38,7 +38,7 @@ export default function QuickSummary({ sizing, curves, opPoint, onNavigate }: Pr
           {[
             { label: 'Geometria 3D', tab: '3d', icon: 'M21 16V8l-7-4-7 4v8l7 4 7-4z' },
             { label: 'Curvas H-Q', tab: 'curves', icon: 'M3 12h4l3-9 4 18 3-9h4' },
-            { label: 'Analise Perdas', tab: 'losses', icon: 'M12 20V10M18 20V4M6 20v-4' },
+            { label: 'Análise Perdas', tab: 'losses', icon: 'M12 20V10M18 20V4M6 20v-4' },
             { label: 'Otimizar', tab: 'optimize', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
           ].map(c => (
             <button key={c.tab} onClick={() => onNavigate(c.tab)} style={{

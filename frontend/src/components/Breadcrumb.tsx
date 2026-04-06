@@ -22,10 +22,10 @@ const SECTION_LABELS: Record<Section, string> = {
 
 const SECTION_HINTS: Record<string, string> = {
   projects: 'Lista de projetos',
-  templates: 'Templates pre-configurados',
+  templates: 'Templates pré-configurados',
   design: 'Dimensionamento e curvas',
   geometry: 'Rotor 3D e editor meridional',
-  analysis: 'Perdas, pressao, velocidades',
+  analysis: 'Perdas, pressão, velocidades',
   optimization: 'NSGA-II, Pareto, DoE',
   assistant: 'Assistente de projeto',
 }

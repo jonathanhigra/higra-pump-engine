@@ -154,8 +154,8 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing,
         { id: 'res-nq', label: `Nq = ${sizing.specific_speed_nq.toFixed(1)}`, category: 'Resultado', icon: resultIcon, action: goResults },
         { id: 'res-eta', label: `\u03B7 = ${(sizing.estimated_efficiency * 100).toFixed(1)}%`, category: 'Resultado', icon: resultIcon, action: goResults },
         { id: 'res-npsh', label: `NPSHr = ${sizing.estimated_npsh_r.toFixed(1)}m`, category: 'Resultado', icon: resultIcon, action: goResults },
-        { id: 'res-power', label: `Potencia = ${(sizing.estimated_power / 1000).toFixed(1)}kW`, category: 'Resultado', icon: resultIcon, action: goResults },
-        { id: 'res-z', label: `Z = ${sizing.blade_count} pas`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-power', label: `Potência = ${(sizing.estimated_power / 1000).toFixed(1)}kW`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-z', label: `Z = ${sizing.blade_count} pás`, category: 'Resultado', icon: resultIcon, action: goResults },
       )
     }
 

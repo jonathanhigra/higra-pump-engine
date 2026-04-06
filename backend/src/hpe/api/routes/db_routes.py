@@ -67,6 +67,15 @@ def create_project_endpoint(req: ProjectCreate) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/projects/{project_id}")
+def update_project_endpoint(project_id: str, req: ProjectCreate) -> dict:
+    try:
+        from hpe.db.repositories import update_project
+        return update_project(project_id, req.name, req.description)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/projects/{project_id}")
 def get_project_endpoint(project_id: str) -> dict:
     try:

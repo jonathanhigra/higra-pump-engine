@@ -100,14 +100,14 @@ const NAV_ITEMS: SidebarItem[] = [
   { key: 'geometry', label: 'Geometria', defaultTab: 'meridional-drag',
     description: 'Rotor 3D, perfil meridional, LE/TE e lean/sweep',
     icon: <I d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /> },
-  { key: 'analysis', label: 'Analise', defaultTab: 'velocity',
-    description: 'Velocidades, perdas, pressao, ruido e comparacao',
+  { key: 'analysis', label: 'Análise', defaultTab: 'velocity',
+    description: 'Velocidades, perdas, pressão, ruído e comparação',
     icon: <I d="M3 12h4l3-9 4 18 3-9h4" /> },
-  { key: 'optimization', label: 'Otimizacao', defaultTab: 'optimize',
-    description: 'NSGA-II, Bayesian, DoE, Pareto e batch parametrico',
+  { key: 'optimization', label: 'Otimização', defaultTab: 'optimize',
+    description: 'NSGA-II, Bayesian, DoE, Pareto e batch paramétrico',
     icon: <I d="M13 10V3L4 14h7v7l9-11h-7z" /> },
   { key: 'assistant', label: 'Assistente', defaultTab: 'assistant',
-    description: 'Chat com IA para duvidas de projeto e sugestoes',
+    description: 'Chat com IA para dúvidas de projeto e sugestões',
     icon: <I d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /> },
 ]
 
@@ -173,7 +173,7 @@ export default function Sidebar({
             marginLeft: 'auto', background: 'var(--accent)', color: '#fff',
             borderRadius: '50%', width: 18, height: 18, fontSize: 10, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }} title={`${unvisited} secoes nao exploradas`}>{unvisited}</span>
+          }} title={`${unvisited} seções não exploradas`}>{unvisited}</span>
         )}
       </div>
 

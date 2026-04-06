@@ -27,9 +27,9 @@ interface Preset {
 const PRESETS: Preset[] = [
   {
     id: 'max_efficiency',
-    label: 'Maxima Eficiencia',
+    label: 'Máxima Eficiência',
     icon: '\u26A1',
-    description: 'Maximizar rendimento hidraulico',
+    description: 'Maximizar rendimento hidráulico',
     params: {
       method: 'nsga2',
       pop_size: 20,
@@ -39,9 +39,9 @@ const PRESETS: Preset[] = [
   },
   {
     id: 'min_npsh',
-    label: 'Minimo NPSHr',
+    label: 'Mínimo NPSHr',
     icon: '\uD83D\uDCA7',
-    description: 'Minimizar NPSHr para evitar cavitacao',
+    description: 'Minimizar NPSHr para evitar cavitação',
     params: {
       method: 'nsga2',
       pop_size: 20,

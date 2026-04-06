@@ -184,7 +184,7 @@ export default function App() {
   const [stress, setStress] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
-  const [advancedMode, setAdvancedMode] = useState(false)
+  // const [advancedMode, setAdvancedMode] = useState(false) // removed from header — available in sidebar
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [cmdOpen, setCmdOpen] = useState(false)
@@ -744,150 +744,51 @@ export default function App() {
       onExport={sizing ? () => setExportCenterOpen(true) : undefined}
       onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}>
 
-      {/* Progress Stepper */}
-      <ProgressStepper
-        sizing={sizing}
-        activeTab={tab}
-        completedSteps={completedSteps}
-        onStepClick={(step) => {
-          const stepTabMap: Record<string, Tab> = {
-            dados: 'results', sizing: 'results', geometria: '3d',
-            analise: 'curves', otimizacao: 'optimize', exportar: 'results',
-          }
-          const t = stepTabMap[step]
-          if (t) handleNavigate('design', t)
-        }}
-      />
+      {/* Progress Stepper — removed: sub-tabs already serve the same purpose */}
 
       <div className="content-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {tabHistory.length >= 2 && (
-            <button onClick={goBack} title="Voltar a aba anterior" style={{
-              background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
-              fontSize: 16, padding: '0 4px', marginRight: 4,
-            }}>
-              &#8592;
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             onClick={() => handleNavigate('projects')}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              fontSize: 11, color: 'var(--text-muted)', background: 'none',
-              border: 'none', cursor: 'pointer', padding: '2px 0',
+              background: 'none', border: 'none', color: 'var(--text-muted)',
+              cursor: 'pointer', fontSize: 13, padding: 0,
               fontFamily: 'var(--font-family)', whiteSpace: 'nowrap',
-              flexShrink: 0,
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)' }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            Projetos
+            &larr; Projetos
           </button>
           <span style={{ color: 'var(--border-primary)', fontSize: 14, userSelect: 'none' }}>/</span>
-          <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
-          <FeatureTip id="version-panel" tip="Historico de versoes — compare e duplique">
-            <VersionPanel
-              versions={versions}
-              currentVersionId={currentVersionId}
-              onSelect={handleVersionSelect}
-              onCompare={handleVersionCompare}
-              onDelete={handleVersionDelete}
-              onDuplicate={handleDuplicateVersion}
-            />
-          </FeatureTip>
-          {versions.length >= 2 && (
-            <button onClick={async () => {
-              try {
-                const data = await compareVersions(versions[0].id, versions[1].id)
-                setCompareData(data)
-              } catch {}
-            }} style={{
-              fontSize: 10, padding: '3px 8px', borderRadius: 4,
-              border: '1px solid var(--border-primary)', background: 'transparent',
-              color: 'var(--text-muted)', cursor: 'pointer',
-            }}>vs Anterior</button>
-          )}
-          <EvolutionSparkline versions={versions} />
-          <HistoryPanel history={history} onRestore={handleHistoryRestore} />
-          {sizing && <DesignQualityBadge sizing={sizing} />}
+          <h1 style={{ fontSize: 18, margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {sizing && (
-            <div className="meta">
-              <span>Nq: <b>{sizing.specific_speed_nq.toFixed(1)}</b></span>
-              <span>D2: <b>{(sizing.impeller_d2 * 1000).toFixed(0)} mm</b></span>
-              <span>eta: <b>{(sizing.estimated_efficiency * 100).toFixed(1)}%</b></span>
-            </div>
-          )}
-          {sizing && currentProject && (
-            <button
-              type="button"
-              onClick={handleSaveDesign}
-              disabled={saving || !!savedId}
-              style={{
-                fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: saving || savedId ? 'default' : 'pointer',
-                border: `1px solid ${savedId ? 'var(--accent-success)' : 'var(--border-primary)'}`,
-                background: savedId ? 'rgba(76,175,80,0.12)' : 'transparent',
-                color: savedId ? 'var(--accent-success)' : 'var(--text-muted)',
-                fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
-              }}
-            >
-              {saving ? t.saving : savedId ? `✓ ${t.designSaved}` : t.saveDesign}
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {sizing && <DesignQualityBadge sizing={sizing} />}
+          <VersionPanel
+            versions={versions}
+            currentVersionId={currentVersionId}
+            onSelect={handleVersionSelect}
+            onCompare={handleVersionCompare}
+            onDelete={handleVersionDelete}
+            onDuplicate={handleDuplicateVersion}
+          />
           <button
             type="button"
-            onClick={() => setAdvancedMode(v => !v)}
+            onClick={() => setExportCenterOpen(true)}
             style={{
-              fontSize: 11, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
-              border: `1px solid ${advancedMode ? 'var(--accent)' : 'var(--border-primary)'}`,
-              background: advancedMode ? 'rgba(0,160,223,0.15)' : 'transparent',
-              color: advancedMode ? 'var(--accent)' : 'var(--text-muted)',
-              fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
+              padding: '4px 10px', fontSize: 11, borderRadius: 4,
+              border: '1px solid var(--border-primary)', background: 'transparent',
+              color: 'var(--text-muted)', cursor: 'pointer',
             }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
           >
-            {advancedMode ? '● Modo Avançado' : '○ Modo Avançado'}
+            Exportar
           </button>
-          {sizing && (
-            <FeatureTip id="export-center" tip="Exporte CAD, CFD e relatorios aqui">
-              <button
-                type="button"
-                onClick={() => setExportCenterOpen(true)}
-                style={{
-                  fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                  border: '1px solid var(--border-primary)',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
-                Exportar
-              </button>
-            </FeatureTip>
-          )}
         </div>
       </div>
-      {advancedMode && (
-        <div style={{
-          marginBottom: 12, padding: '8px 14px',
-          background: 'rgba(0,160,223,0.06)',
-          border: '1px solid rgba(0,160,223,0.2)',
-          borderRadius: 6, fontSize: 12,
-          color: 'var(--text-secondary)',
-        }}>
-          <b style={{ color: 'var(--accent)' }}>Modo Avançado:</b> acesse mais análises na barra lateral esquerda — Triângulos, Perdas, Tensões, Otimização, Carregamento, Pressão, Multi-velocidade e Trecho Meridional.
-        </div>
-      )}
 
       {/* Two-column design layout: left = form + export, right = results + analysis tabs */}
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
@@ -1007,14 +908,18 @@ export default function App() {
             /* Loading skeleton — shown while sizing is computing */
             <ResultsSkeleton />
           ) : (
-            /* Dashboard / empty state — shown before first sizing run or on results tab */
-            <DesignDashboard
-              sizing={null}
-              previousSizing={previousSizing}
-              opPoint={opPoint}
-              onNavigate={(t) => handleNavigate('design', t)}
-              onRunSizing={handleRunSizing}
-            />
+            /* Empty state — simple prompt to run sizing */
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 12 }}>
+                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <div style={{ fontSize: 16, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                Pronto para calcular
+              </div>
+              <div style={{ fontSize: 13, maxWidth: 300, margin: '0 auto', lineHeight: 1.5 }}>
+                Preencha Q, H e n à esquerda e clique em <span style={{ color: 'var(--accent)', fontWeight: 500 }}>Executar Dimensionamento</span>
+              </div>
+            </div>
           )}
           <NextStepBanner currentTab={tab} hasSizing={!!sizing} onNavigate={(t) => handleNavigate('design', t)} />
         </div>

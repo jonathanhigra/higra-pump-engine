@@ -53,19 +53,15 @@ export default function SectionGuide({ tab }: { tab: string }) {
 
   return (
     <div style={{
-      background: 'rgba(0,160,223,0.06)', border: '1px solid rgba(0,160,223,0.15)',
-      borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13,
-      display: 'flex', gap: 12, alignItems: 'flex-start',
+      fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
+      display: 'flex', alignItems: 'center', gap: 8,
     }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>{guide.title}</div>
-        <div style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>{guide.text}</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>Dica: {guide.tip}</div>
-      </div>
+      <span style={{ color: 'var(--accent)' }}>&#128161;</span>
+      <span>{guide.tip}</span>
       <button onClick={dismiss} style={{
         background: 'none', border: 'none', color: 'var(--text-muted)',
-        cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1,
-      }}>x</button>
+        cursor: 'pointer', fontSize: 12, marginLeft: 'auto', padding: 0,
+      }}>&times;</button>
     </div>
   )
 }

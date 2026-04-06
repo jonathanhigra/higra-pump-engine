@@ -47,6 +47,7 @@ class GeometryRequest(BaseModel):
     sweep_angle: float = Field(0.0, description="Blade sweep angle [deg] (#14). Axial stacking offset hub→shroud")
     add_splitters: bool = Field(False, description="Add splitter blades at half pitch")
     splitter_start: float = Field(0.40, ge=0.25, le=0.65, description="Meridional start fraction for splitters")
+    machine_type: str = Field("centrifugal_pump", description="Machine type: 'centrifugal_pump' | 'francis_turbine'")
 
 
 class BladePoint3D(BaseModel):
@@ -83,8 +84,9 @@ class ImpellerGeometry(BaseModel):
 def _meridional_curves(
     r1: float, r1_hub: float, r2: float,
     b1: float, b2: float, n_chord: int,
+    machine_type: str = "centrifugal_pump",
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Meridional curves for centrifugal pump impeller.
+    """Meridional curves for impeller/runner.
 
     Coordinate system: r = radial, z = axial (z=0 is the back-disc plane).
     The impeller extends from z=0 (back disc) upward to z=z_eye (inlet).
@@ -99,16 +101,25 @@ def _meridional_curves(
       - At inlet: offset radially outward (r direction)
       - At outlet: offset axially (z direction)
 
-    This produces the classic centrifugal pump impeller shape:
-    flat disc with concave hub rising to axial eye.
+    For Francis turbines:
+      - Longer axial extent (z_inlet = r1 * 1.5)
+      - Shorter radial zone (t < 0.45), longer bend (0.45 to 0.75)
+      - Deeper bowl-shaped hub
     """
     # Blade channel: from r2 (outlet) to r1 (inlet eye radius)
     # Blades do NOT extend below r1 — the shaft/eye tube is visual only
     z_base = b2 * 0.10          # hub surface height above back-disc
-    z_inlet = r1 * 0.85         # inlet height at r1 (axial extent of blade channel)
 
-    # Bend: quarter-arc with radius = z_inlet (controls axial depth)
-    arc_r = z_inlet  # arc radius determines how deep the eye goes
+    if machine_type == "francis_turbine":
+        z_inlet = r1 * 1.5     # deeper axial extent for Francis
+        arc_r = z_inlet         # arc radius = z_inlet
+        radial_end = 0.45       # shorter radial zone
+        bend_end = 0.75         # longer bend zone
+    else:
+        z_inlet = r1 * 0.85    # inlet height at r1 (centrifugal pump)
+        arc_r = z_inlet         # arc radius determines how deep the eye goes
+        radial_end = 0.65       # standard radial zone
+        bend_end = 1.0          # bend fills remainder
 
     hub_rz: list[tuple[float, float]] = []
     shroud_rz: list[tuple[float, float]] = []
@@ -118,17 +129,22 @@ def _meridional_curves(
         # t=0: outlet (r=r2, z≈0), t=1: inlet (r=r1, z=z_inlet)
 
         # --- HUB ---
-        if t < 0.65:
+        if t < radial_end:
             # Radial zone: flat disc from r2 toward r1+arc_r
-            s = t / 0.65
+            s = t / radial_end
             r_h = r2 - (r2 - r1 - arc_r) * s
             z_h = z_base
-        else:
+        elif t < bend_end:
             # Bend: quarter-arc sweeping from radial to axial
-            s = (t - 0.65) / 0.35
+            s = (t - radial_end) / (bend_end - radial_end)
             arc = (math.pi / 2) * (s ** 2.0)
             r_h = r1 + arc_r * (1.0 - math.sin(arc))
             z_h = z_base + arc_r * (1.0 - math.cos(arc))
+        else:
+            # Axial extension (Francis only — after bend)
+            s = (t - bend_end) / (1.0 - bend_end) if bend_end < 1.0 else 1.0
+            r_h = r1 + arc_r * (1.0 - 1.0)  # stays at r1
+            z_h = z_base + arc_r + s * (z_inlet - arc_r) * 0.3
 
         # Passage width: b2 at outlet → b1 at inlet
         b_t = b2 + t * (b1 - b2)
@@ -212,6 +228,7 @@ def _integrate_camber_logarithmic(
     shroud_rz: list[tuple[float, float]],
     beta1_rad: float, beta2_rad: float,
     s: float,  # span fraction 0=hub 1=shroud
+    machine_type: str = "centrifugal_pump",
 ) -> list[tuple[float, float, float]]:
     """Build camber (r, z, theta) by logarithmic spiral integration.
 
@@ -225,12 +242,14 @@ def _integrate_camber_logarithmic(
     hub_rev = list(reversed(hub_rz))
     shr_rev = list(reversed(shroud_rz))
 
-    # Target wrap: ~140° at shroud, naturally more at hub due to smaller radius
-    # Scale beta to achieve target wrap — use effective beta that gives ~150° at mid-span
+    # Target wrap: scale beta to achieve target wrap
     r_outlet = hub_rev[-1][0] + s * (shr_rev[-1][0] - hub_rev[-1][0])
     r_inlet = hub_rev[0][0] + s * (shr_rev[0][0] - hub_rev[0][0])
     # Target wrap at this span (hub gets more, shroud gets less)
-    target_wrap = math.radians(80 + 20 * (1 - s))  # hub~100°, shroud~80°
+    if machine_type == "francis_turbine":
+        target_wrap = math.radians(50 + 15 * (1 - s))  # hub~65°, shroud~50°
+    else:
+        target_wrap = math.radians(80 + 20 * (1 - s))  # hub~100°, shroud~80°
 
     # Compute what beta_eff gives target wrap: wrap = ln(r2/r1)/tan(beta_eff)
     r_ratio = r_outlet / max(r_inlet, 0.001)
@@ -265,6 +284,7 @@ def _integrate_camber_bezier(
     shroud_rz: list[tuple[float, float]],
     beta1_rad: float, beta2_rad: float,
     s: float,
+    machine_type: str = "centrifugal_pump",
 ) -> list[tuple[float, float, float]]:
     """Bézier camber line (#10): cubic Bézier wrap angle distribution.
 
@@ -275,7 +295,7 @@ def _integrate_camber_bezier(
     wrap at inlet — typical for high-efficiency pump blades.
     """
     # First, compute the total wrap using logarithmic to anchor the Bezier endpoint
-    log_camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, s)
+    log_camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, s, machine_type=machine_type)
     theta_total = log_camber[-1][2]
     n = len(hub_rz)
 
@@ -314,6 +334,7 @@ def _build_blade_surface(
     t_shroud: float | None = None,
     lean_rad: float = 0.0,    # lean stacking [rad]
     sweep_m: float = 0.0,     # sweep stacking [m]
+    machine_type: str = "centrifugal_pump",
 ) -> BladeSurface:
     t_hub_v = t_hub if t_hub is not None else blade_thickness
     t_shroud_v = t_shroud if t_shroud is not None else blade_thickness  # uniform (ADT style)
@@ -329,9 +350,9 @@ def _build_blade_surface(
 
         # Choose camber integration method (#10)
         if blade_profile == "bezier":
-            camber = _integrate_camber_bezier(hub_rz, shroud_rz, beta1_rad, beta2_rad, s)
+            camber = _integrate_camber_bezier(hub_rz, shroud_rz, beta1_rad, beta2_rad, s, machine_type=machine_type)
         else:
-            camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, s)
+            camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, s, machine_type=machine_type)
 
         # Stacking offsets (#14)
         lean_offset = lean_rad * s
@@ -396,6 +417,7 @@ def _compute_wrap_angle(
     hub_rz: list[tuple[float, float]],
     shroud_rz: list[tuple[float, float]],
     beta1_rad: float, beta2_rad: float,
+    machine_type: str = "centrifugal_pump",
 ) -> float:
     """Compute wrap angle [deg] at mid-span for camber diagnostics (#9).
 
@@ -403,19 +425,20 @@ def _compute_wrap_angle(
     may sit at either end of the camber list (outlet or inlet).  We take
     the absolute maximum across all stations so the result is never 0.
     """
-    camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, 0.5)
+    camber = _integrate_camber_logarithmic(hub_rz, shroud_rz, beta1_rad, beta2_rad, 0.5, machine_type=machine_type)
     return math.degrees(max(abs(pt[2]) for pt in camber))
 
 
 def _adjust_beta2_for_wrap(
     hub_rz, shroud_rz, beta1_rad: float, beta2_rad: float,
     target_wrap_rad: float, max_iter: int = 12,
+    machine_type: str = "centrifugal_pump",
 ) -> float:
     """Bisection search on beta2 to achieve target wrap angle (#9)."""
     lo, hi = math.radians(15.0), math.radians(45.0)
     for _ in range(max_iter):
         mid = (lo + hi) / 2
-        w = math.radians(_compute_wrap_angle(hub_rz, shroud_rz, beta1_rad, mid))
+        w = math.radians(_compute_wrap_angle(hub_rz, shroud_rz, beta1_rad, mid, machine_type=machine_type))
         if abs(w - target_wrap_rad) < math.radians(0.5):
             return mid
         # Higher beta2 → smaller wrap angle (more radial blade)
@@ -474,13 +497,15 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
         n_chord = req.n_blade_points
         n_span = req.n_span_points
 
-    hub_rz, shroud_rz = _meridional_curves(r1, r1_hub, r2, b1, b2, n_chord)
+    machine_type = req.machine_type
+
+    hub_rz, shroud_rz = _meridional_curves(r1, r1_hub, r2, b1, b2, n_chord, machine_type=machine_type)
     hub_rz_visual = _hub_with_shaft(hub_rz, r1_hub)
 
     # #9 — wrap angle targeting
     if req.target_wrap_angle is not None:
         target_rad = math.radians(req.target_wrap_angle)
-        beta2_rad = _adjust_beta2_for_wrap(hub_rz, shroud_rz, beta1_rad, beta2_rad, target_rad)
+        beta2_rad = _adjust_beta2_for_wrap(hub_rz, shroud_rz, beta1_rad, beta2_rad, target_rad, machine_type=machine_type)
 
     # Fix 4: LE 25% / TE 10% (ADT-like sharp trailing edge)
     le_r = req.le_radius if req.le_radius is not None else blade_thickness * 0.25
@@ -509,10 +534,11 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
             t_shroud=t_shroud,
             lean_rad=lean_rad,
             sweep_m=sweep_m,
+            machine_type=machine_type,
         )
         blade_surfaces.append(surf)
 
-    actual_wrap = _compute_wrap_angle(hub_rz, shroud_rz, beta1_rad, beta2_rad)
+    actual_wrap = _compute_wrap_angle(hub_rz, shroud_rz, beta1_rad, beta2_rad, machine_type=machine_type)
 
     splitter_surfaces: list[BladeSurface] = []
     splitter_start_frac = req.splitter_start
@@ -550,6 +576,7 @@ def get_impeller_geometry(req: GeometryRequest) -> ImpellerGeometry:
                 t_shroud=req.t_shroud,
                 lean_rad=lean_rad,
                 sweep_m=sweep_m,
+                machine_type=machine_type,
             )
             splitter_surfaces.append(surf)
 

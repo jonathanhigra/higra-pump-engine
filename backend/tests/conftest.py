@@ -1,5 +1,14 @@
 """Shared test fixtures for HPE test suite."""
 
+import os
+
+os.environ.setdefault("DB_HOST", "localhost")
+os.environ.setdefault("DB_PORT", "5432")
+os.environ.setdefault("DB_USER", "postgres")
+os.environ.setdefault("DB_PASSWORD", "higra123")
+os.environ.setdefault("DB_NAME", "db_pump_engine")
+os.environ.setdefault("SECRET_KEY", "test-secret")
+
 import pytest
 
 from hpe.core.enums import FluidType, MachineType

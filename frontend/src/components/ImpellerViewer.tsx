@@ -1892,6 +1892,7 @@ function Scene({
   data, paused, rpm, showSplitters, clipZ, meridionalCut, freeClipAngle, showColormap, showLoadingMap, showSpanColors, showWireframe, showCFDMesh, showBladeNumbers, showMeridionalLines, loadingData, showParticles, showStreamlines, showVolute, displayMode,
   selectedBlade, onSelectBlade, showDimensions, cameraPos, showEdges, explodeAmount, componentExplode,
   showVelocityArrows, showSections, turntable, sizing, meshDensity,
+  measureMode, measurePoints, onMeasureClick,
 }: {
   data: ImpellerData
   paused?: boolean
@@ -2029,7 +2030,7 @@ function Scene({
                 {/* Hub-blade fillet: rendered only for first 2 blades for performance */}
                 {i < 2 && <BladeFilletMesh surface={surf} />}
                 {showCFDMesh && (
-                  <CFDMeshLines surface={surf} scale={1} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
+                  <CFDMeshLines surface={surf} scale={1} meshDensity={meshDensity} />
                 )}
                 {showCFDMesh && (i === 0 || i === 1) && (
                   <BladeBoundaryLayer surface={surf} scale={1} />
@@ -2071,7 +2072,7 @@ function Scene({
           )}
           {/* CFD mesh grid lines on hub and shroud */}
           {showCFDMesh && (
-            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
+            <HubShroudMeshLines hubProfile={data.hub_profile} shroudProfile={data.shroud_profile} scale={1} meshDensity={meshDensity} />
           )}
           {/* CFD domain inlet/outlet faces */}
           {showCFDMesh && (
@@ -2424,7 +2425,7 @@ export default function ImpellerViewer({
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
     <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}>
-      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} freeClipAngle={freeClipAngle} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showStreamlines={showStreamlines} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} componentExplode={componentExplode} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt) => setMeasurePoints(prev => prev.length >= 2 ? [pt] : [...prev, pt])} />
+      <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} freeClipAngle={freeClipAngle} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showStreamlines={showStreamlines} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} componentExplode={componentExplode} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt: {x:number,y:number,z:number}) => setMeasurePoints((prev: {x:number,y:number,z:number}[]) => prev.length >= 2 ? [pt] : [...prev, pt])} />
     </Canvas>
   ) : (
     <CenteredMsg text={t.enterOperatingPoint} />
@@ -2694,7 +2695,68 @@ export default function ImpellerViewer({
             Sobreposicao 3D disponivel em versao futura
           </div>
         )}
+        {/* Passage area chart overlay (fullscreen) */}
+        {showPassageArea && data && !showCFDMesh && (
+          <div style={{ position: 'absolute', bottom: 60, left: 16 }}>
+            <PassageAreaChart data={data} />
+          </div>
+        )}
+        {/* Measure mode indicator (fullscreen) */}
+        {measureMode && (
+          <div style={{
+            position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(255,255,0,0.9)', color: '#000', padding: '3px 12px',
+            borderRadius: 4, fontSize: 11, fontWeight: 600, pointerEvents: 'none', zIndex: 20,
+          }}>
+            Modo Medir: clique em 2 pontos na geometria
+          </div>
+        )}
       </div>
+
+      {/* 3D Print Dialog Modal (fullscreen) */}
+      {showPrintDialog && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setShowPrintDialog(false)}>
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+            borderRadius: 12, padding: 24, minWidth: 320, maxWidth: 400,
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 15, color: 'var(--accent)' }}>
+              Exportar STL para Impressao 3D
+            </h3>
+            <label style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+              <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Escala (%)</span>
+              <input type="number" className="input" value={printScale} min={1} max={1000} step={1}
+                onChange={e => setPrintScale(parseInt(e.target.value) || 100)}
+                style={{ width: '100%', padding: '6px 8px' }} />
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+              Para impressao 3D, importe o STL no fatiador (Cura/PrusaSlicer) e configure espessura de parede.
+              {printScale !== 100 && (
+                <span style={{ display: 'block', marginTop: 4, color: '#f59e0b' }}>
+                  Escala {printScale}%: D2 real {((data?.d2 ?? 0) * 1000).toFixed(0)}mm → impresso {((data?.d2 ?? 0) * 1000 * printScale / 100).toFixed(0)}mm
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowPrintDialog(false)}
+                style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={() => {
+                handleExport('stl')
+                setShowPrintDialog(false)
+              }}
+                className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: 12 }}>
+                Exportar STL ({printScale}%)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {data && selectedBlade !== null && (
         <BladeInfoPanel

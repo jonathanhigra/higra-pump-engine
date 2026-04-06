@@ -935,13 +935,7 @@ function HubMesh({ profile, displayMode }: { profile: BladePoint[]; displayMode:
           <meshStandardMaterial color="#808898" metalness={0.15} roughness={0.60} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {/* Keyway (chaveta): rectangular notch in the bore */}
-      {showDisc && (
-        <mesh position={[keyDims.boreR + keyDims.keyDepth / 2, 0, keyDims.z_disc + keyDims.keyHeight / 2]}>
-          <boxGeometry args={[keyDims.keyDepth, keyDims.keyWidth, keyDims.keyHeight]} />
-          <meshStandardMaterial color="#505868" metalness={0.15} roughness={0.65} />
-        </mesh>
-      )}
+      {/* Keyway removed — was protruding incorrectly. Real keyway is an internal groove. */}
     </>
   )
 }

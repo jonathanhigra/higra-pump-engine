@@ -40,6 +40,10 @@ def run_sizing_endpoint(req: SizingRequest) -> SizingResponse:
     )
     result = run_sizing(op)
 
+    # Apply blade count override if specified
+    if req.override_z is not None:
+        result.blade_count = req.override_z
+
     uncertainty = result.uncertainty.as_dict() if result.uncertainty else {}
 
     return SizingResponse(

@@ -144,6 +144,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [tipClearance, setTipClearance] = useState('0.3')   // mm
   const [roughness, setRoughness] = useState('25')           // μm
   const [overrideD2, setOverrideD2] = useState('')
+  const [overrideZ, setOverrideZ] = useState('')
   const [overrideB2, setOverrideB2] = useState('')
   const [customRho, setCustomRho] = useState('998')
   const [customMu, setCustomMu] = useState('1.0e-3')
@@ -266,6 +267,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         fluid_density: rho,
         ...(overrideD2 ? { override_d2: parseFloat(overrideD2) / 1000 } : {}),
         ...(overrideB2 ? { override_b2: parseFloat(overrideB2) / 1000 } : {}),
+        ...(overrideZ ? { override_z: parseInt(overrideZ, 10) } : {}),
       }
 
       // Sequential calls to avoid Starlette BaseHTTPMiddleware concurrency deadlock
@@ -607,6 +609,24 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             <label>
               <span style={labelStyle}>Sobreposição b2 [mm]</span>
               <input style={inputStyle} type="number" step="0.5" value={overrideB2} onChange={e => setOverrideB2(e.target.value)} placeholder="Automático" />
+            </label>
+            <label>
+              <span style={labelStyle}>Número de pás Z</span>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input style={{ ...inputStyle, flex: 1 }} type="number" min="3" max="30" step="1" value={overrideZ} onChange={e => setOverrideZ(e.target.value)} placeholder="Auto" />
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {[5, 6, 7, 8].map(z => (
+                    <button key={z} type="button" onClick={() => setOverrideZ(String(z))}
+                      style={{
+                        padding: '4px 8px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                        border: `1px solid ${overrideZ === String(z) ? 'var(--accent)' : 'var(--border-primary)'}`,
+                        background: overrideZ === String(z) ? 'rgba(0,160,223,0.15)' : 'transparent',
+                        color: overrideZ === String(z) ? 'var(--accent)' : 'var(--text-muted)',
+                        fontFamily: 'var(--font-family)',
+                      }}>{z}</button>
+                  ))}
+                </div>
+              </div>
             </label>
           </div>
         )}

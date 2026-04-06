@@ -20,6 +20,7 @@ class SizingRequest(BaseModel):
     override_d2: Optional[float] = Field(None, gt=0, description="Override outlet diameter D2 [m]")
     override_b2: Optional[float] = Field(None, gt=0, description="Override outlet width b2 [m]")
     override_d1: Optional[float] = Field(None, gt=0, description="Override inlet diameter D1 [m]")
+    override_z: Optional[int] = Field(None, ge=3, le=30, description="Override blade count Z (3-30)")
 
 
 class SizingResponse(BaseModel):

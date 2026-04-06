@@ -152,3 +152,31 @@ export async function deleteVersion(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/versions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Delete version failed: ${res.status}`)
 }
+
+// ---------------------------------------------------------------------------
+// CSV Export (client-side)
+// ---------------------------------------------------------------------------
+
+export function exportSizingCSV(sizing: any, opPoint: any): void {
+  const rows = [
+    ['Parametro', 'Valor', 'Unidade'],
+    ['Vazao Q', (opPoint.flowRate).toFixed(2), 'm3/h'],
+    ['Altura H', opPoint.head.toFixed(1), 'm'],
+    ['Rotacao n', opPoint.rpm.toFixed(0), 'rpm'],
+    ['Nq', sizing.specific_speed_nq.toFixed(1), ''],
+    ['D2', (sizing.impeller_d2*1000).toFixed(0), 'mm'],
+    ['D1', (sizing.impeller_d1*1000).toFixed(0), 'mm'],
+    ['b2', (sizing.impeller_b2*1000).toFixed(1), 'mm'],
+    ['Z pas', sizing.blade_count, ''],
+    ['beta1', sizing.beta1.toFixed(1), 'deg'],
+    ['beta2', sizing.beta2.toFixed(1), 'deg'],
+    ['eta total', (sizing.estimated_efficiency*100).toFixed(1), '%'],
+    ['Potencia', (sizing.estimated_power/1000).toFixed(1), 'kW'],
+    ['NPSHr', sizing.estimated_npsh_r.toFixed(1), 'm'],
+  ]
+  const csv = rows.map(r => r.join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'hpe-sizing.csv'; a.click()
+  URL.revokeObjectURL(url)
+}

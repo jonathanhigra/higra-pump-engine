@@ -7,6 +7,7 @@ interface Options {
   onCmdPalette?: () => void
   onNavigate?: (page: 'projects' | 'design', tab?: Tab) => void
   onEscape?: () => void
+  onF1Help?: () => void
 }
 
 const SECTION_KEYS: Record<string, { page: 'projects' | 'design'; tab?: Tab }> = {
@@ -19,7 +20,7 @@ const SECTION_KEYS: Record<string, { page: 'projects' | 'design'; tab?: Tab }> =
   '7': { page: 'design', tab: 'assistant' },
 }
 
-export function useKeyboardShortcuts({ onRunSizing, onSave, onCmdPalette, onNavigate, onEscape }: Options) {
+export function useKeyboardShortcuts({ onRunSizing, onSave, onCmdPalette, onNavigate, onEscape, onF1Help }: Options) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -46,6 +47,13 @@ export function useKeyboardShortcuts({ onRunSizing, onSave, onCmdPalette, onNavi
         return
       }
 
+      // F1 — contextual help
+      if (e.key === 'F1') {
+        e.preventDefault()
+        onF1Help?.()
+        return
+      }
+
       // F5 — run sizing (prevent page reload)
       if (e.key === 'F5') {
         e.preventDefault()
@@ -69,5 +77,5 @@ export function useKeyboardShortcuts({ onRunSizing, onSave, onCmdPalette, onNavi
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onRunSizing, onSave, onCmdPalette, onNavigate, onEscape])
+  }, [onRunSizing, onSave, onCmdPalette, onNavigate, onEscape, onF1Help])
 }

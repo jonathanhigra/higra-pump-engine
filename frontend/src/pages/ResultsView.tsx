@@ -75,6 +75,19 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
 
   return (
     <div>
+      {/* Summary sentence */}
+      <div style={{
+        background: 'rgba(0,160,223,0.06)', border: '1px solid rgba(0,160,223,0.15)',
+        borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 14,
+        color: 'var(--text-primary)',
+      }}>
+        Rotor <b>{s.meridional_profile?.impeller_type || 'radial'}</b> de{' '}
+        <b style={{ color: 'var(--accent)' }}>{(s.impeller_d2*1000).toFixed(0)}mm</b> com{' '}
+        {s.blade_count} pas, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
+        NPSHr=<b>{s.estimated_npsh_r.toFixed(1)}m</b>
+        {s.estimated_efficiency > 0.80 ? ' — Bom' : s.estimated_efficiency > 0.70 ? ' — Aceitavel' : ' — Revisar'}
+      </div>
+
       {/* Hero strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
         {[

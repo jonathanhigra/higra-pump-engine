@@ -18,11 +18,21 @@ const SECTION_LABELS: Record<Section, string> = {
   assistant: 'Assistente',
 }
 
+const SECTION_HINTS: Record<string, string> = {
+  projects: 'Lista de projetos',
+  templates: 'Templates pre-configurados',
+  design: 'Dimensionamento e curvas',
+  geometry: 'Rotor 3D e editor meridional',
+  analysis: 'Perdas, pressao, velocidades',
+  optimization: 'NSGA-II, Pareto, DoE',
+  assistant: 'Assistente de projeto',
+}
+
 export default function Breadcrumb({ projectName, section, tab, onNavigate }: Props) {
   const subTabs = SUB_TABS[section] || []
   const currentSubTab = subTabs.find(t => t.key === tab)
 
-  const items: { label: string; onClick?: () => void }[] = [
+  const items: { label: string; hint?: string; onClick?: () => void }[] = [
     { label: 'HPE', onClick: () => onNavigate('projects') },
   ]
 
@@ -34,6 +44,7 @@ export default function Breadcrumb({ projectName, section, tab, onNavigate }: Pr
     const sectionDefaultTab = subTabs.length > 0 ? subTabs[0].key : tab
     items.push({
       label: SECTION_LABELS[section],
+      hint: SECTION_HINTS[section],
       onClick: currentSubTab ? () => onNavigate('design', sectionDefaultTab) : undefined,
     })
   }
@@ -63,7 +74,7 @@ export default function Breadcrumb({ projectName, section, tab, onNavigate }: Pr
               <span style={{ color: 'var(--text-muted)', userSelect: 'none' }}>&#8250;</span>
             )}
             {isLast ? (
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }} title={item.hint}>
                 {item.label}
               </span>
             ) : (
@@ -72,6 +83,7 @@ export default function Breadcrumb({ projectName, section, tab, onNavigate }: Pr
                 tabIndex={0}
                 onClick={item.onClick}
                 onKeyDown={e => { if (e.key === 'Enter' && item.onClick) item.onClick() }}
+                title={item.hint}
                 style={{
                   color: 'var(--text-muted)',
                   cursor: item.onClick ? 'pointer' : 'default',

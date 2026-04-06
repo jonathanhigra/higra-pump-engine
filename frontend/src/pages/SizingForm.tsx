@@ -114,6 +114,15 @@ interface Props {
   extRpm?: number        // rpm
 }
 
+const inputBorder = (field: string, val: string): string => {
+  const v = parseFloat(val)
+  if (isNaN(v) || v <= 0) return 'var(--accent-danger, #ef4444)'
+  if (field === 'Q' && (v < 1 || v > 10000)) return '#facc15'
+  if (field === 'H' && (v < 0.5 || v > 500)) return '#facc15'
+  if (field === 'n' && (v < 200 || v > 8000)) return '#facc15'
+  return 'var(--accent-success, #4caf50)'
+}
+
 export default function SizingForm({ onResult, loading, setLoading, extFlowRate, extHead, extRpm }: Props) {
   const [unit, setUnit] = useState<'m3h' | 'm3s'>(() =>
     (localStorage.getItem('hpe_unit') as 'm3h' | 'm3s') || 'm3h'
@@ -134,6 +143,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [designHint, setDesignHint] = useState<DesignHint | null>(null)
   const [calculated, setCalculated] = useState(false)
   const [stickyBtn, setStickyBtn] = useState(false)
+  const [versionNote, setVersionNote] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -361,7 +371,8 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           <input className="input" type="number" step="any"
             value={unit === 'm3h' ? flowRate : (q_m3h / 3600).toFixed(6)}
             onChange={e => setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600))}
-            placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'} />
+            placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'}
+            style={{ borderColor: inputBorder('Q', flowRate) }} />
           <input type="range" min={0} max={1000} step={1}
             value={Math.round(Math.log10(Math.max(q_m3h, 1)) / Math.log10(5000) * 1000)}
             onChange={e => {
@@ -378,7 +389,8 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Altura Total H [m]</label>
-          <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30" />
+          <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30"
+            style={{ borderColor: inputBorder('H', head) }} />
           <input type="range" min={1} max={500} step={1}
             value={Math.min(500, Math.max(1, parseFloat(head) || 1))}
             onChange={e => setHead(e.target.value)}
@@ -391,7 +403,8 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Rota\u00E7\u00E3o n [rpm]</label>
-          <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750" />
+          <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750"
+            style={{ borderColor: inputBorder('n', rpm) }} />
           <input type="range" min={300} max={6000} step={10}
             value={Math.min(6000, Math.max(300, parseFloat(rpm) || 300))}
             onChange={e => setRpm(e.target.value)}
@@ -509,6 +522,14 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
               Executar Dimensionamento
             </span>}
       </button>
+
+      <input
+        type="text"
+        placeholder="Observacao desta versao..."
+        value={versionNote}
+        onChange={e => setVersionNote(e.target.value)}
+        style={{ ...inputStyle, fontSize: 11, marginTop: 6 }}
+      />
 
       {error && (
         <div style={{ marginTop: 10, padding: 8, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, color: '#ef4444', fontSize: 12 }}>

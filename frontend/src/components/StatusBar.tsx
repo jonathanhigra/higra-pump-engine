@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import type { SizingResult } from '../App'
 import EngineeringTooltip from './EngineeringTooltip'
 import DeltaIndicator from './DeltaIndicator'
@@ -21,6 +21,19 @@ interface Pill {
 }
 
 export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp, sidebarCollapsed }: Props) {
+  const [fontScale, setFontScale] = useState(() => parseFloat(localStorage.getItem('hpe_font_scale') || '1'))
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontScale * 14}px`
+    localStorage.setItem('hpe_font_scale', String(fontScale))
+  }, [fontScale])
+
+  const tinyBtn: React.CSSProperties = {
+    fontSize: 10, padding: '1px 5px', borderRadius: 3,
+    border: '1px solid var(--border-primary)', background: 'var(--bg-surface)',
+    color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 600,
+    fontFamily: 'var(--font-family)', lineHeight: '16px',
+  }
+
   const prev = previousSizing || null
   const pills: Pill[] = sizing
     ? [
@@ -121,6 +134,10 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
           <span style={{ color: savedId ? 'var(--accent-success)' : 'var(--text-muted)' }}>
             {savedId ? 'Salvo' : 'N\u00E3o salvo'}
           </span>
+        </span>
+        <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+          <button onClick={() => setFontScale(s => Math.max(0.8, +(s - 0.1).toFixed(1)))} style={tinyBtn} title="Diminuir fonte">A−</button>
+          <button onClick={() => setFontScale(s => Math.min(1.4, +(s + 0.1).toFixed(1)))} style={tinyBtn} title="Aumentar fonte">A+</button>
         </span>
         {onShortcutsHelp && (
           <button

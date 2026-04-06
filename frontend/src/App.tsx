@@ -43,6 +43,8 @@ import VersionCompareModal from './components/VersionCompareModal'
 import GuidedTour from './components/GuidedTour'
 import FloatingMetrics from './components/FloatingMetrics'
 import DesignQualityBadge from './components/DesignQualityBadge'
+import EvolutionSparkline from './components/EvolutionSparkline'
+import ContextualHelp from './components/ContextualHelp'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
@@ -183,6 +185,7 @@ export default function App() {
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
   const [compareData, setCompareData] = useState<VersionCompareResult | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
   const { toasts, toast, dismiss } = useToast()
 
   // Helper to mark a progress step as completed
@@ -324,7 +327,8 @@ export default function App() {
     onSave: handleSaveDesign,
     onCmdPalette: () => setCmdOpen(true),
     onNavigate: handleNavigate,
-    onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false) },
+    onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false); setHelpOpen(false) },
+    onF1Help: () => setHelpOpen(v => !v),
   })
 
   // History restore handler
@@ -376,6 +380,7 @@ export default function App() {
       <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
       {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
       <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
+      <ContextualHelp open={helpOpen} onClose={() => setHelpOpen(false)} currentTab={tab} />
     </>
   )
 
@@ -525,6 +530,19 @@ export default function App() {
             onCompare={handleVersionCompare}
             onDelete={handleVersionDelete}
           />
+          {versions.length >= 2 && (
+            <button onClick={async () => {
+              try {
+                const data = await compareVersions(versions[0].id, versions[1].id)
+                setCompareData(data)
+              } catch {}
+            }} style={{
+              fontSize: 10, padding: '3px 8px', borderRadius: 4,
+              border: '1px solid var(--border-primary)', background: 'transparent',
+              color: 'var(--text-muted)', cursor: 'pointer',
+            }}>vs Anterior</button>
+          )}
+          <EvolutionSparkline versions={versions} />
           <HistoryPanel history={history} onRestore={handleHistoryRestore} />
           {sizing && <DesignQualityBadge sizing={sizing} />}
         </div>
@@ -680,6 +698,7 @@ function ShortcutsHelpModal({ onClose }: { onClose: () => void }) {
     { keys: 'Ctrl+S', desc: 'Salvar design' },
     { keys: 'F5 / Ctrl+Enter', desc: 'Executar dimensionamento' },
     { keys: '1-7', desc: 'Navegar entre secoes' },
+    { keys: 'F1', desc: 'Ajuda contextual' },
     { keys: 'Esc', desc: 'Fechar modal/palette' },
   ]
 

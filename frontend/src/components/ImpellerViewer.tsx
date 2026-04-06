@@ -2404,9 +2404,22 @@ export default function ImpellerViewer({
   const handleScreenshot = () => {
     const canvas = document.querySelector('canvas') as HTMLCanvasElement
     if (!canvas) return
+    const temp = document.createElement('canvas')
+    temp.width = canvas.width; temp.height = canvas.height
+    const ctx = temp.getContext('2d')!
+    ctx.drawImage(canvas, 0, 0)
+    // Watermark
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.font = 'bold 13px Inter, sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText('HPE \u2014 HIGRA Pump Engine', temp.width - 16, temp.height - 30)
+    ctx.font = '10px Inter, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'
+    const info = data ? `D2=${(data.d2*1000).toFixed(0)}mm \u00B7 Z=${data.blade_count} pas` : ''
+    ctx.fillText(info, temp.width - 16, temp.height - 14)
     const link = document.createElement('a')
     link.download = `hpe-rotor-${Date.now()}.png`
-    link.href = canvas.toDataURL('image/png')
+    link.href = temp.toDataURL('image/png')
     link.click()
   }
 

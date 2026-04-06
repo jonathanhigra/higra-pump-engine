@@ -832,11 +832,29 @@ export default function App() {
         {/* LEFT PANEL — always visible */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <SizingForm
-            onResult={(result, curvePoints, lossData, stressData, op) => {
+            onResult={async (result, curvePoints, lossData, stressData, op) => {
+              setPreviousSizing(sizing)
               setSizing(result); setCurves(curvePoints)
               setLosses(lossData); setStress(stressData)
               if (op) setOpPoint(op)
               setSavedId(null)
+
+              // Auto-save version on every calculation
+              try {
+                const qm3s = op ? op.flowRate / 3600 : opPoint.flowRate / 3600
+                const h = op ? op.head : opPoint.head
+                const n = op ? op.rpm : opPoint.rpm
+                const ver = await saveVersion(
+                  { flow_rate: qm3s, head: h, rpm: n },
+                  result,
+                  currentProject?.id || undefined,
+                )
+                setVersions(prev => [ver, ...prev])
+                setCurrentVersionId(ver.id)
+              } catch {}
+
+              toast('Dimensionamento concluído', 'success')
+              incrementSizingCount()
             }}
             loading={loading}
             setLoading={setLoading}

@@ -3,6 +3,7 @@ import MeridionalView from '../components/MeridionalView'
 import EngineeringTooltip from '../components/EngineeringTooltip'
 import DeltaIndicator from '../components/DeltaIndicator'
 import SmartWarnings from '../components/SmartWarnings'
+import FeedbackStars from '../components/FeedbackStars'
 
 interface Props {
   sizing: any
@@ -40,6 +41,15 @@ function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
   return (
     <span style={{ display: 'inline-block', width: 14, fontSize: 10, color, marginRight: 4, flexShrink: 0, textAlign: 'center', lineHeight: 1 }}>{icon}</span>
   )
+}
+
+function narrateResults(s: any) {
+  if (!('speechSynthesis' in window)) return
+  const msg = new SpeechSynthesisUtterance(
+    `O dimensionamento resultou em um rotor de ${(s.impeller_d2 * 1000).toFixed(0)} milimetros com ${s.blade_count} pas. Eficiencia total de ${(s.estimated_efficiency * 100).toFixed(1)} por cento. N P S H requerido de ${s.estimated_npsh_r.toFixed(1)} metros. Potencia estimada de ${(s.estimated_power / 1000).toFixed(1)} quilowatts.`
+  )
+  msg.lang = 'pt-BR'; msg.rate = 0.9
+  speechSynthesis.speak(msg)
 }
 
 export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
@@ -81,8 +91,23 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
       <div style={{
         background: 'rgba(0,160,223,0.06)', border: '1px solid rgba(0,160,223,0.15)',
         borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 14,
-        color: 'var(--text-primary)',
+        color: 'var(--text-primary)', position: 'relative',
       }}>
+        <button
+          onClick={() => narrateResults(s)}
+          title="Narrar resultados"
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'none', border: '1px solid var(--border-primary)',
+            borderRadius: 4, cursor: 'pointer', padding: '3px 5px',
+            color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center',
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+          </svg>
+        </button>
         Rotor <b>{s.meridional_profile?.impeller_type || 'radial'}</b> de{' '}
         <b style={{ color: 'var(--accent)' }}>{(s.impeller_d2*1000).toFixed(0)}mm</b> com{' '}
         {s.blade_count} pas, η=<b>{(s.estimated_efficiency*100).toFixed(1)}%</b>,{' '}
@@ -257,6 +282,8 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
           />
         </div>
       )}
+
+      <FeedbackStars tab="results" />
     </div>
   )
 }

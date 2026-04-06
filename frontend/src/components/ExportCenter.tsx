@@ -4,6 +4,9 @@ interface Props {
   open: boolean
   onClose: () => void
   onExport: (format: string) => void
+  sizing?: any
+  opPoint?: { flowRate: number; head: number; rpm: number }
+  projectName?: string
 }
 
 function ExportCard({ label, desc, onClick }: { label: string; desc: string; onClick: () => void }) {
@@ -22,7 +25,34 @@ function ExportCard({ label, desc, onClick }: { label: string; desc: string; onC
   )
 }
 
-export default function ExportCenter({ open, onClose, onExport }: Props) {
+function generateExecutiveSummary(sizing: any, opPoint: any, projectName?: string) {
+  if (!sizing) return
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;color:#333}
+    h1{color:#0088cc;border-bottom:2px solid #0088cc;padding-bottom:8px;font-size:22px}
+    .metrics{display:flex;justify-content:space-around;margin:24px 0}
+    .metric{text-align:center}
+    .metric .val{font-size:28px;font-weight:bold;color:#0088cc}
+    .metric .lbl{font-size:11px;color:#888;margin-top:4px}
+    .summary{font-size:14px;line-height:1.6;color:#555}
+    hr{border:none;border-top:1px solid #ddd;margin:24px 0}
+    .footer{font-size:9px;color:#aaa}
+  </style></head><body>
+    <h1>${projectName || 'Projeto HPE'}</h1>
+    <p style="color:#888;font-size:12px">Resumo Executivo — ${new Date().toLocaleDateString('pt-BR')}</p>
+    <div class="metrics">
+      <div class="metric"><div class="val">${(sizing.estimated_efficiency * 100).toFixed(1)}%</div><div class="lbl">Eficiencia</div></div>
+      <div class="metric"><div class="val">${sizing.estimated_npsh_r.toFixed(1)}m</div><div class="lbl">NPSHr</div></div>
+      <div class="metric"><div class="val">${(sizing.estimated_power / 1000).toFixed(1)}kW</div><div class="lbl">Potencia</div></div>
+    </div>
+    <p class="summary">Rotor ${sizing.meridional_profile?.impeller_type || 'centrifugo'} de <b>${(sizing.impeller_d2 * 1000).toFixed(0)}mm</b> com ${sizing.blade_count} pas, operando a <b>${opPoint.rpm}rpm</b> com vazao de <b>${opPoint.flowRate}m3/h</b> e altura de <b>${opPoint.head}m</b>.</p>
+    <hr><p class="footer">Gerado por HPE v0.1.0 — HIGRA Industrial Ltda.</p>
+  </body></html>`
+  const w = window.open('', '_blank')
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500) }
+}
+
+export default function ExportCenter({ open, onClose, onExport, sizing, opPoint, projectName }: Props) {
   if (!open) return null
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.5)',
@@ -62,6 +92,9 @@ export default function ExportCenter({ open, onClose, onExport }: Props) {
             <ExportCard label="PDF" desc="Relatorio tecnico" onClick={() => onExport('pdf')} />
             <ExportCard label="CSV" desc="Planilha de dados" onClick={() => onExport('csv')} />
             <ExportCard label="PNG" desc="Screenshot 3D" onClick={() => onExport('png')} />
+            {sizing && opPoint && (
+              <ExportCard label="Resumo Executivo" desc="HTML — imprimir/PDF" onClick={() => generateExecutiveSummary(sizing, opPoint, projectName)} />
+            )}
           </div>
         </div>
       </div>

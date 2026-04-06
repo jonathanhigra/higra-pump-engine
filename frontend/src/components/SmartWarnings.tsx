@@ -40,6 +40,22 @@ const SEVERITY_CONFIG: Record<Severity, { bg: string; border: string; color: str
   },
 }
 
+const HUMAN_MAP: [RegExp, string][] = [
+  [/euler head.*above/i, 'A pa esta gerando mais pressao do que necessario. Margem de seguranca, mas aumenta o consumo.'],
+  [/choke/i, 'Velocidade na garganta muito alta — risco de bloqueio. Aumente a area de passagem.'],
+  [/npsh/i, 'Pressao na succao e baixa — risco de cavitacao. Reduza RPM ou aumente diametro de entrada.'],
+  [/de haller/i, 'Desaceleracao excessiva do fluido na pa — risco de separacao do escoamento.'],
+  [/throat/i, 'Garganta do canal muito estreita para a vazao de projeto.'],
+  [/excess margin/i, 'Margem de head excessiva — a bomba esta superdimensionada para esta aplicacao.'],
+]
+
+function humanize(warning: string): string | null {
+  for (const [pattern, human] of HUMAN_MAP) {
+    if (pattern.test(warning)) return human
+  }
+  return null
+}
+
 function classifySeverity(text: string): Severity {
   const lower = text.toLowerCase()
   if (/exceed|fail|unsafe|above limit|excede/.test(lower)) return 'critical'
@@ -244,6 +260,11 @@ export default function SmartWarnings({ warnings, sizing, onNavigate }: Props) {
                   <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, marginBottom: 4 }}>
                     {card.text}
                   </div>
+                  {humanize(card.text) && (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4, lineHeight: 1.4 }}>
+                      {humanize(card.text)}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
                     {card.suggestion}
                   </div>

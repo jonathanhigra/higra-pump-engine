@@ -14,11 +14,14 @@ interface Props {
   noPad?: boolean
   warningCount?: number
   recentTabs?: Tab[]
+  onRecalculate?: () => void
+  onExport?: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
 }
 
 export type { Tab }
 
-export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad, warningCount, recentTabs }: Props) {
+export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad, warningCount, recentTabs, onRecalculate, onExport, onContextMenu }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('hpe_sidebar_collapsed') === 'true'
   })
@@ -41,7 +44,7 @@ export default function Layout({ page, activeTab, userName, projectName, onNavig
         onLogout={onLogout}
         warningCount={warningCount}
       />
-      <div className={`main-content${isCollapsed ? ' collapsed' : ''}${noPad ? ' no-pad' : ''}`}>
+      <div className={`main-content${isCollapsed ? ' collapsed' : ''}${noPad ? ' no-pad' : ''}`} onContextMenu={onContextMenu}>
         {/* Breadcrumb navigation */}
         {page === 'design' && activeTab && !noPad && (
           <Breadcrumb
@@ -49,6 +52,8 @@ export default function Layout({ page, activeTab, userName, projectName, onNavig
             section={sectionForTab(activeTab) as Section}
             tab={activeTab}
             onNavigate={onNavigate}
+            onRecalculate={onRecalculate}
+            onExport={onExport}
           />
         )}
         {page === 'projects' && (

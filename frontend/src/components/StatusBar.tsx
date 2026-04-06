@@ -4,6 +4,8 @@ import EngineeringTooltip from './EngineeringTooltip'
 import DeltaIndicator from './DeltaIndicator'
 import AnimatedNumber from './AnimatedNumber'
 import { warningCounts } from './SmartWarnings'
+import { useUnits, type UnitSystem } from '../hooks/useUnits'
+import ProgressBadge from './ProgressBadge'
 
 interface Props {
   sizing: SizingResult | null
@@ -25,6 +27,7 @@ interface Pill {
 }
 
 export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp, onTimeline, sidebarCollapsed }: Props) {
+  const { system: unitSystem, setSystem: setUnitSystem } = useUnits()
   const [fontScale, setFontScale] = useState(() => parseFloat(localStorage.getItem('hpe_font_scale') || '1'))
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontScale * 14}px`
@@ -104,8 +107,9 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
         )}
       </div>
 
-      {/* Right: warnings badge + save indicator + operating point */}
+      {/* Right: progress badge + warnings badge + save indicator + operating point */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <ProgressBadge />
         {sizing && sizing.warnings && sizing.warnings.length > 0 && (() => {
           const counts = warningCounts(sizing.warnings)
           return (
@@ -148,8 +152,22 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
             {savedId ? 'Salvo' : 'N\u00E3o salvo'}
           </span>
         </span>
+        <select
+          value={unitSystem}
+          onChange={e => setUnitSystem(e.target.value as UnitSystem)}
+          title="Sistema de unidades"
+          style={{
+            fontSize: 10, padding: '1px 4px', borderRadius: 3,
+            border: '1px solid var(--border-primary)', background: 'var(--bg-surface)',
+            color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-family)',
+          }}
+        >
+          <option value="SI">SI</option>
+          <option value="practical">Pratico</option>
+          <option value="imperial">Imperial</option>
+        </select>
         <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-          <button onClick={() => setFontScale(s => Math.max(0.8, +(s - 0.1).toFixed(1)))} style={tinyBtn} title="Diminuir fonte">A−</button>
+          <button onClick={() => setFontScale(s => Math.max(0.8, +(s - 0.1).toFixed(1)))} style={tinyBtn} title="Diminuir fonte">A-</button>
           <button onClick={() => setFontScale(s => Math.min(1.4, +(s + 0.1).toFixed(1)))} style={tinyBtn} title="Aumentar fonte">A+</button>
         </span>
         {onTimeline && (

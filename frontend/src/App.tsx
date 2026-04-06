@@ -53,6 +53,9 @@ import type { TimelineEntry } from './components/ActionTimeline'
 import SectionGuide from './components/SectionGuide'
 import Glossary from './components/Glossary'
 import CompleteResultView from './components/CompleteResultView'
+import GlobalContextMenu from './components/GlobalContextMenu'
+import { incrementSizingCount } from './components/ProgressBadge'
+import FeedbackStars from './components/FeedbackStars'
 import useDynamicFavicon from './hooks/useDynamicFavicon'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -201,6 +204,7 @@ export default function App() {
   const [timelineOpen, setTimelineOpen] = useState(false)
   const [showWhatsNew, setShowWhatsNew] = useState(() => localStorage.getItem('hpe_whats_new_seen') !== '0.2.0')
   const [glossaryOpen, setGlossaryOpen] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
   const [overviewTab, setOverviewTab] = useState(false)  // CompleteResultView toggle (#10)
   const [showAutoRestore, setShowAutoRestore] = useState(false)
   const { toasts, toast, dismiss } = useToast()
@@ -397,6 +401,7 @@ export default function App() {
       } catch { /* version save is best-effort */ }
 
       toast('Dimensionamento concluido', 'success')
+      incrementSizingCount()
       logAction('Dimensionamento executado', `Q=${q} m3/h H=${h}m n=${n}rpm`)
 
       // Proactive suggestions (#4) — delayed to not overlap loading toast
@@ -498,6 +503,15 @@ export default function App() {
   /* Shared overlay elements rendered in all authenticated pages */
   const overlays = (
     <>
+      {ctxMenu && (
+        <GlobalContextMenu
+          x={ctxMenu.x} y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          onRecalculate={() => handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm)}
+          onExport={() => setExportCenterOpen(true)}
+          onHelp={() => setHelpOpen(v => !v)}
+        />
+      )}
       <CommandPalette
         open={cmdOpen}
         onClose={() => setCmdOpen(false)}
@@ -536,6 +550,9 @@ export default function App() {
       <ExportCenter
         open={exportCenterOpen}
         onClose={() => setExportCenterOpen(false)}
+        sizing={sizing}
+        opPoint={sizing ? opPoint : undefined}
+        projectName={currentProject?.name}
         onExport={(format) => {
           setExportCenterOpen(false)
           const q = opPoint.flowRate / 3600
@@ -704,6 +721,7 @@ export default function App() {
             <>
               <OptimizationPresets defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
               <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
+              <FeedbackStars tab="optimize" />
             </>
           )}
           {!sizing && tab !== 'templates' && (
@@ -721,7 +739,10 @@ export default function App() {
   // === DESIGN — standard 2-column layout (sizing form + results) ===
   return (
     <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-      projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
+      projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}
+      onRecalculate={sizing ? () => handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm) : undefined}
+      onExport={sizing ? () => setExportCenterOpen(true) : undefined}
+      onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}>
 
       {/* Progress Stepper */}
       <ProgressStepper
@@ -961,6 +982,7 @@ export default function App() {
                   <div style={{ marginTop: 24 }}>
                     <EfficiencyMap flowRate={opPoint.flowRate} head={opPoint.head} rpm={opPoint.rpm} />
                   </div>
+                  <FeedbackStars tab="curves" />
                 </>
               )}
               {tab === 'velocity' && <VelocityTriangle triangles={sizing.velocity_triangles} />}

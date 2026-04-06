@@ -6,6 +6,8 @@ interface Props {
   section: Section
   tab: Tab
   onNavigate: (page: 'projects' | 'design', tab?: Tab) => void
+  onRecalculate?: () => void
+  onExport?: () => void
 }
 
 const SECTION_LABELS: Record<Section, string> = {
@@ -28,7 +30,7 @@ const SECTION_HINTS: Record<string, string> = {
   assistant: 'Assistente de projeto',
 }
 
-export default function Breadcrumb({ projectName, section, tab, onNavigate }: Props) {
+export default function Breadcrumb({ projectName, section, tab, onNavigate, onRecalculate, onExport }: Props) {
   const subTabs = SUB_TABS[section] || []
   const currentSubTab = subTabs.find(t => t.key === tab)
 
@@ -102,6 +104,32 @@ export default function Breadcrumb({ projectName, section, tab, onNavigate }: Pr
           </React.Fragment>
         )
       })}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+        {onRecalculate && (
+          <button onClick={onRecalculate} title="Recalcular (F5)" style={{
+            background: 'none', border: '1px solid var(--border-primary)', borderRadius: 4,
+            color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 6px', fontSize: 10,
+            display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-family)',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" />
+            </svg>
+            F5
+          </button>
+        )}
+        {onExport && (
+          <button onClick={onExport} title="Exportar (Ctrl+E)" style={{
+            background: 'none', border: '1px solid var(--border-primary)', borderRadius: 4,
+            color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 6px', fontSize: 10,
+            display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-family)',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            Exp
+          </button>
+        )}
+      </div>
     </div>
   )
 }

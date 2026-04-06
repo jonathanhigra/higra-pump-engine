@@ -2439,7 +2439,8 @@ export default function ImpellerViewer({
   ) : error ? (
     <ErrorOverlay msg={`${t.failed3d}: ${error}`} />
   ) : data ? (
-    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}>
+    <Canvas shadows gl={{ antialias: true, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: true }} style={{ width: '100%', height: '100%', background: 'radial-gradient(ellipse at 40% 40%, #2e3548 0%, #181d28 70%)' }}
+      onDoubleClick={() => setCameraPos([3.0, 2.5, 2.5])}>
       <Scene data={data} paused={paused} rpm={rpm} showSplitters={showSplitters} clipZ={clipZ} meridionalCut={meridionalCut} freeClipAngle={freeClipAngle} showColormap={showColormap} showLoadingMap={showLoadingMap} showSpanColors={showSpanColors} showWireframe={showWireframe} showCFDMesh={showCFDMesh} showBladeNumbers={showBladeNumbers} showMeridionalLines={showMeridionalLines} loadingData={loadingData} showParticles={showParticles} showStreamlines={showStreamlines} showVolute={showVolute} displayMode={displayMode} selectedBlade={selectedBlade} onSelectBlade={setSelectedBlade} showDimensions={showDimensions} cameraPos={cameraPos} showEdges={showEdges} explodeAmount={explodeAmount / 100} componentExplode={componentExplode} showVelocityArrows={showVelocityArrows} showSections={showSections} turntable={turntable} sizing={sizing} meshDensity={meshDensity} measureMode={measureMode} measurePoints={measurePoints} onMeasureClick={(pt: {x:number,y:number,z:number}) => setMeasurePoints((prev: {x:number,y:number,z:number}[]) => prev.length >= 2 ? [pt] : [...prev, pt])} />
     </Canvas>
   ) : (

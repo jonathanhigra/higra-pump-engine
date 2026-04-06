@@ -3,7 +3,7 @@ import t, { setLang, getCurrentLang, type LangKey } from '../i18n'
 
 /* ── Tab type — every sub-page the app can show ────────────────────────────── */
 export type Tab =
-  | 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
+  | 'overview' | 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
   | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure'
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
@@ -14,7 +14,7 @@ export type Section = 'projects' | 'templates' | 'design' | 'geometry' | 'analys
 
 export function sectionForTab(tab: Tab): Section {
   switch (tab) {
-    case 'results': case 'curves': case 'multispeed': return 'design'
+    case 'overview': case 'results': case 'curves': case 'multispeed': return 'design'
     case '3d': case 'meridional-drag': case 'meridional-editor': case 'lete': case 'lean-sweep': return 'geometry'
     case 'velocity': case 'losses': case 'pressure': case 'loading':
     case 'spanwise': case 'noise': case 'stress': case 'compare': return 'analysis'
@@ -30,6 +30,7 @@ export const SUB_TABS: Record<Section, { key: Tab; label: string }[]> = {
   templates: [],
   assistant: [],
   design: [
+    { key: 'overview', label: 'Resumo' },
     { key: 'results', label: 'Dimensionamento' },
     { key: 'curves', label: 'Curvas H-Q' },
     { key: 'multispeed', label: 'Multi-Velocidade' },

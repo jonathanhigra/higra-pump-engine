@@ -56,6 +56,9 @@ import CompleteResultView from './components/CompleteResultView'
 import GlobalContextMenu from './components/GlobalContextMenu'
 import { incrementSizingCount } from './components/ProgressBadge'
 import FeedbackStars from './components/FeedbackStars'
+import QuickSummary from './components/QuickSummary'
+import ProjectChecklist from './components/ProjectChecklist'
+import { emailResults } from './utils/emailResults'
 import useDynamicFavicon from './hooks/useDynamicFavicon'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -165,7 +168,7 @@ export interface CurvePoint {
 
 type Page = 'login' | 'projects' | 'design'
 export type Tab =
-  | 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
+  | 'overview' | 'results' | 'curves' | '3d' | 'velocity' | 'losses' | 'stress'
   | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure'
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
@@ -626,6 +629,9 @@ export default function App() {
               handleNavigate('design', '3d')
               toast('Use o botao PNG no viewer 3D', 'info')
               break
+            case 'email':
+              if (sizing) emailResults(sizing, opPoint, currentProject?.name)
+              break
             default:
               toast(`Formato ${format} em desenvolvimento`, 'info')
           }
@@ -815,6 +821,11 @@ export default function App() {
         <div ref={resultsRef}>
           {/* Section guide (#2) */}
           <SectionGuide tab={tab} />
+
+          {/* Quick Summary tab (#9) */}
+          {tab === 'overview' && sizing && (
+            <QuickSummary sizing={sizing} curves={curves} opPoint={opPoint} onNavigate={(t) => handleNavigate('design', t as Tab)} />
+          )}
 
           {sizing ? (
             <>

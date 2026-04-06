@@ -156,6 +156,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [lastCalcParams, setLastCalcParams] = useState({ q: '', h: '', n: '' })
   const [appPresetsOpen, setAppPresetsOpen] = useState(false)
   const [reverseOpen, setReverseOpen] = useState(false)
+  const [prevFluid, setPrevFluid] = useState(fluidId)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -172,6 +173,29 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
     if (h > 300 && n < 1000) return `H=${h}m com ${n}rpm requer multi-estagio.`
     return null
   }, [flowRate, head, rpm])
+
+  /* ── Autocomplete operating point suggestion ─────────────────────────── */
+  const opSuggestion = useMemo(() => {
+    const q = parseFloat(flowRate)
+    if (!q || q <= 0) return null
+    if (q < 30) return { h: '40-80', n: '3550', note: 'Bomba alta pressao' }
+    if (q < 150) return { h: '20-45', n: '1750', note: 'Bomba industrial padrao' }
+    if (q < 500) return { h: '10-30', n: '1750', note: 'Bomba de processo' }
+    if (q < 2000) return { h: '5-20', n: '1150', note: 'Bomba de grande vazao' }
+    return { h: '3-15', n: '980', note: 'Estacao de bombeamento' }
+  }, [flowRate])
+
+  /* ── Fluid comparison message ──────────────────────────────────────── */
+  const fluidComparison = useMemo(() => {
+    if (fluidId === prevFluid || !prevFluid) return null
+    const curr = FLUIDS.find(f => f.id === fluidId)
+    const prev = FLUIDS.find(f => f.id === prevFluid)
+    if (!curr || !prev) return null
+    const viscRatio = curr.mu / prev.mu
+    if (viscRatio > 2) return `Viscosidade ${viscRatio.toFixed(0)}x maior → eta menor, Power maior`
+    if (viscRatio < 0.5) return `Viscosidade ${(1/viscRatio).toFixed(0)}x menor → eta melhor`
+    return null
+  }, [fluidId, prevFluid])
 
   /* ── Real-time mini preview (#7) ────────────────────────────────────── */
   const quickEstimate = useMemo(() => {
@@ -348,7 +372,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 500 }}>FLUIDO</div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {FLUIDS.map(f => (
-            <button key={f.id} type="button" onClick={() => setFluidId(f.id)}
+            <button key={f.id} type="button" onClick={() => { setPrevFluid(fluidId); setFluidId(f.id) }}
               style={{
                 padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: 'pointer',
                 border: `1px solid ${fluidId === f.id ? 'var(--accent)' : 'var(--border-primary)'}`,
@@ -364,6 +388,11 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         {fluidId !== 'custom' && (
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
             ρ = {fluid.rho} kg/m³ · μ = {(fluid.mu * 1000).toFixed(2)} mPa·s · Pv = {fluid.pv} Pa
+          </div>
+        )}
+        {fluidComparison && (
+          <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 3 }}>
+            {fluidComparison}
           </div>
         )}
         {fluidId === 'custom' && (
@@ -399,6 +428,26 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
               <span style={{ fontSize: 11, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
             </div>
             <ImpellerSilhouette nq={nq} />
+          </div>
+        )}
+
+        {/* Nq visual spectrum */}
+        {nq > 0 && (
+          <div style={{ marginTop: 6, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginBottom: 2 }}>
+              <span>Radial</span><span>Mixed</span><span>Axial</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: 'linear-gradient(to right, #3b82f6, #22c55e, #f59e0b, #ef4444)', position: 'relative' }}>
+              <div style={{
+                position: 'absolute', top: -3, width: 12, height: 12, borderRadius: '50%',
+                background: '#fff', border: '2px solid var(--accent)',
+                left: `${Math.min(95, Math.max(2, (Math.log10(nq) - Math.log10(10)) / (Math.log10(300) - Math.log10(10)) * 100))}%`,
+                transform: 'translateX(-50%)',
+              }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: 'var(--text-muted)', marginTop: 1 }}>
+              <span>10</span><span>30</span><span>80</span><span>160</span><span>300</span>
+            </div>
           </div>
         )}
 
@@ -462,6 +511,12 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-muted)', fontStyle: 'italic' }}>
             Dica: use Multi-Velocidade para ver o desempenho em faixa de vazao.
           </div>
+          {opSuggestion && !head && !rpm && (
+            <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2, cursor: 'pointer' }}
+              onClick={() => { setHead(opSuggestion.h.split('-')[0]); setRpm(opSuggestion.n) }}>
+              Sugestao: H~{opSuggestion.h}m, n~{opSuggestion.n}rpm ({opSuggestion.note}) -- clique para aplicar
+            </div>
+          )}
           <RecalcChip field="q" />
         </div>
 

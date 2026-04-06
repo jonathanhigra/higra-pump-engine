@@ -4,6 +4,7 @@ import EngineeringTooltip from '../components/EngineeringTooltip'
 import DeltaIndicator from '../components/DeltaIndicator'
 import SmartWarnings from '../components/SmartWarnings'
 import FeedbackStars from '../components/FeedbackStars'
+import RadarChart from '../components/RadarChart'
 
 interface Props {
   sizing: any
@@ -50,6 +51,19 @@ function narrateResults(s: any) {
   )
   msg.lang = 'pt-BR'; msg.rate = 0.9
   speechSynthesis.speak(msg)
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+      title="Copiar" style={{
+        background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+        color: copied ? 'var(--accent-success, #4caf50)' : 'var(--text-muted)', fontSize: 10,
+      }}>
+      {copied ? '\u2713' : '\u2398'}
+    </button>
+  )
 }
 
 export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
@@ -137,11 +151,14 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
         {[
           { label: 'D2', value: `${(s.impeller_d2 * 1000).toFixed(0)}`, unit: 'mm', color: 'var(--accent)', term: 'D2' },
-          { label: 'Nq', value: s.specific_speed_nq.toFixed(0), unit: '—', color: '#a78bfa', term: 'Nq' },
+          { label: 'Nq', value: s.specific_speed_nq.toFixed(0), unit: '\u2014', color: '#a78bfa', term: 'Nq' },
           { label: 'Potencia', value: `${(s.estimated_power / 1000).toFixed(1)}`, unit: 'kW', color: '#34d399', term: 'Potencia' },
         ].map(m => (
           <div key={m.label} className="card" style={{ textAlign: 'center', padding: '12px 8px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}><EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip></div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+              <EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip>
+              <CopyButton text={`${m.value} ${m.unit}`} />
+            </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: m.color, lineHeight: 1 }}>
               {m.value}
               {m.label === 'D2' && ps && <DeltaIndicator current={s.impeller_d2 * 1000} previous={ps.impeller_d2 * 1000} format="mm" />}
@@ -186,6 +203,17 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Radar chart */}
+      <div className="card" style={{ display: 'flex', justifyContent: 'center', padding: 12, marginBottom: 12 }}>
+        <RadarChart data={[
+          { label: '\u03B7', value: s.estimated_efficiency, min: 0.5, max: 0.95, higherBetter: true },
+          { label: 'NPSHr', value: s.estimated_npsh_r, min: 0, max: 15, higherBetter: false },
+          { label: 'Power', value: s.estimated_power / 1000, min: 0, max: 50, higherBetter: false },
+          { label: 'D2', value: s.impeller_d2 * 1000, min: 100, max: 500, higherBetter: false },
+          { label: 'De Haller', value: dr || 0.75, min: 0.5, max: 1.0, higherBetter: true },
+        ]} />
       </div>
 
       {/* Section tabs */}
@@ -270,6 +298,26 @@ export default function ResultsView({ sizing: s, previousSizing: ps }: Props) {
       {s.warnings?.length > 0 && (
         <SmartWarnings warnings={s.warnings} sizing={s} />
       )}
+
+      {/* What-if quick buttons */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 8 }}>
+        {[
+          { label: '+10% RPM', tip: 'Simular aumento de rotacao' },
+          { label: '+1 pa', tip: 'Adicionar uma pa ao rotor' },
+          { label: 'D2 -10%', tip: 'Reduzir diametro de saida' },
+        ].map(btn => (
+          <button key={btn.label} type="button" title={btn.tip}
+            onClick={() => {
+              const text = `What-if: ${btn.label} -- execute novamente com parametro ajustado`
+              navigator.clipboard.writeText(text)
+            }}
+            style={{
+              padding: '3px 10px', fontSize: 10, borderRadius: 4,
+              border: '1px solid var(--border-primary)', background: 'transparent',
+              color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-family)',
+            }}>{btn.label}</button>
+        ))}
+      </div>
 
       {/* Meridional view */}
       {showMeridional && mp?.d1 && (

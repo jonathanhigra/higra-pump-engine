@@ -7,9 +7,10 @@ interface Props {
   onSelect: (v: VersionEntry) => void
   onCompare: (a: VersionEntry, b: VersionEntry) => void
   onDelete: (id: string) => void
+  onDuplicate?: (v: VersionEntry) => void
 }
 
-export default function VersionPanel({ versions, currentVersionId, onSelect, onCompare, onDelete }: Props) {
+export default function VersionPanel({ versions, currentVersionId, onSelect, onCompare, onDelete, onDuplicate }: Props) {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
@@ -38,8 +39,8 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else {
-        if (next.size >= 2) {
-          // Remove oldest selection to keep max 2
+        if (next.size >= 4) {
+          // Remove oldest selection to keep max 4
           const first = next.values().next().value
           if (first !== undefined) next.delete(first)
         }
@@ -228,6 +229,27 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
                       )}
                     </div>
 
+                    {/* Duplicate button */}
+                    {onDuplicate && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); onDuplicate(v); setOpen(false) }}
+                        title="Duplicar versao"
+                        style={{
+                          width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--text-muted)',
+                          opacity: 0.4,
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent)' }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                        </svg>
+                      </div>
+                    )}
+
                     {/* Delete button (shows on hover via CSS-in-JS) */}
                     <div
                       className="version-delete-btn"
@@ -263,7 +285,7 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
               <button
                 type="button"
                 onClick={handleCompare}
-                disabled={selected.size !== 2}
+                disabled={selected.size < 2}
                 style={{
                   width: '100%',
                   padding: '8px 0',
@@ -271,14 +293,14 @@ export default function VersionPanel({ versions, currentVersionId, onSelect, onC
                   fontWeight: 600,
                   fontFamily: 'var(--font-family)',
                   borderRadius: 6,
-                  cursor: selected.size === 2 ? 'pointer' : 'default',
-                  border: `1px solid ${selected.size === 2 ? 'var(--accent)' : 'var(--border-primary)'}`,
-                  background: selected.size === 2 ? 'rgba(0,160,223,0.15)' : 'transparent',
-                  color: selected.size === 2 ? 'var(--accent)' : 'var(--text-muted)',
+                  cursor: selected.size >= 2 ? 'pointer' : 'default',
+                  border: `1px solid ${selected.size >= 2 ? 'var(--accent)' : 'var(--border-primary)'}`,
+                  background: selected.size >= 2 ? 'rgba(0,160,223,0.15)' : 'transparent',
+                  color: selected.size >= 2 ? 'var(--accent)' : 'var(--text-muted)',
                   transition: 'all 0.15s',
                 }}
               >
-                Comparar selecionados ({selected.size}/2)
+                Comparar selecionados ({selected.size}/4)
               </button>
             </div>
           )}

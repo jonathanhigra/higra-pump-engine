@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import type { SizingResult } from '../App'
 import EngineeringTooltip from './EngineeringTooltip'
 import DeltaIndicator from './DeltaIndicator'
+import AnimatedNumber from './AnimatedNumber'
 import { warningCounts } from './SmartWarnings'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
   opPoint?: { flowRate: number; head: number; rpm: number }
   savedId?: string | null
   onShortcutsHelp?: () => void
+  onTimeline?: () => void
   sidebarCollapsed?: boolean
 }
 
@@ -18,9 +20,11 @@ interface Pill {
   value: string
   term?: string
   delta?: { current: number; previous: number | null; format: 'pct' | 'abs' | 'mm'; higherIsBetter?: boolean }
+  animValue?: number
+  animFormat?: (v: number) => string
 }
 
-export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp, sidebarCollapsed }: Props) {
+export default function StatusBar({ sizing, previousSizing, opPoint, savedId, onShortcutsHelp, onTimeline, sidebarCollapsed }: Props) {
   const [fontScale, setFontScale] = useState(() => parseFloat(localStorage.getItem('hpe_font_scale') || '1'))
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontScale * 14}px`
@@ -38,15 +42,20 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
   const pills: Pill[] = sizing
     ? [
         { label: 'Nq', value: sizing.specific_speed_nq.toFixed(1), term: 'Nq',
+          animValue: sizing.specific_speed_nq, animFormat: (v: number) => v.toFixed(1),
           delta: prev ? { current: sizing.specific_speed_nq, previous: prev.specific_speed_nq, format: 'abs' } : undefined },
         { label: '\u03B7', value: `${(sizing.estimated_efficiency * 100).toFixed(1)}%`, term: '\u03B7',
+          animValue: sizing.estimated_efficiency * 100, animFormat: (v: number) => `${v.toFixed(1)}%`,
           delta: prev ? { current: sizing.estimated_efficiency, previous: prev.estimated_efficiency, format: 'pct', higherIsBetter: true } : undefined },
         { label: 'D2', value: `${(sizing.impeller_d2 * 1000).toFixed(0)}mm`, term: 'D2',
+          animValue: sizing.impeller_d2 * 1000, animFormat: (v: number) => `${v.toFixed(0)}mm`,
           delta: prev ? { current: sizing.impeller_d2 * 1000, previous: prev.impeller_d2 * 1000, format: 'mm' } : undefined },
         { label: 'NPSHr', value: `${sizing.estimated_npsh_r.toFixed(1)}m`, term: 'NPSHr',
+          animValue: sizing.estimated_npsh_r, animFormat: (v: number) => `${v.toFixed(1)}m`,
           delta: prev ? { current: sizing.estimated_npsh_r, previous: prev.estimated_npsh_r, format: 'pct', higherIsBetter: false } : undefined },
         { label: `Z=${sizing.blade_count}`, value: 'p\u00E1s' },
         { label: 'P', value: `${(sizing.estimated_power / 1000).toFixed(1)}kW`, term: 'P',
+          animValue: sizing.estimated_power / 1000, animFormat: (v: number) => `${v.toFixed(1)}kW`,
           delta: prev ? { current: sizing.estimated_power / 1000, previous: prev.estimated_power / 1000, format: 'pct', higherIsBetter: false } : undefined },
       ]
     : []
@@ -80,7 +89,11 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
               alignItems: 'center',
             }}>
               <span style={{ color: 'var(--text-muted)' }}>{p.term ? <EngineeringTooltip term={p.term}>{p.label}</EngineeringTooltip> : p.label}</span>
-              <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{p.value}</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                {p.animValue != null && p.animFormat
+                  ? <AnimatedNumber value={p.animValue} format={p.animFormat} />
+                  : p.value}
+              </span>
               {p.delta && <DeltaIndicator current={p.delta.current} previous={p.delta.previous} format={p.delta.format} higherIsBetter={p.delta.higherIsBetter} />}
             </span>
           ))
@@ -139,6 +152,26 @@ export default function StatusBar({ sizing, previousSizing, opPoint, savedId, on
           <button onClick={() => setFontScale(s => Math.max(0.8, +(s - 0.1).toFixed(1)))} style={tinyBtn} title="Diminuir fonte">A−</button>
           <button onClick={() => setFontScale(s => Math.min(1.4, +(s + 0.1).toFixed(1)))} style={tinyBtn} title="Aumentar fonte">A+</button>
         </span>
+        {onTimeline && (
+          <button
+            onClick={onTimeline}
+            title="Historico de acoes"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 4,
+              width: 20, height: 20,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-family)',
+              padding: 0,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+          </button>
+        )}
         {onShortcutsHelp && (
           <button
             onClick={onShortcutsHelp}

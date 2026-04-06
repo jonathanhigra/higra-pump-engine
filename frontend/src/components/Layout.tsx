@@ -12,11 +12,13 @@ interface Props {
   onLogout: () => void
   children: React.ReactNode
   noPad?: boolean
+  warningCount?: number
+  recentTabs?: Tab[]
 }
 
 export type { Tab }
 
-export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad }: Props) {
+export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad, warningCount, recentTabs }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('hpe_sidebar_collapsed') === 'true'
   })
@@ -37,6 +39,7 @@ export default function Layout({ page, activeTab, userName, projectName, onNavig
         onToggleCollapse={handleToggle}
         onNavigate={onNavigate}
         onLogout={onLogout}
+        warningCount={warningCount}
       />
       <div className={`main-content${isCollapsed ? ' collapsed' : ''}${noPad ? ' no-pad' : ''}`}>
         {/* Breadcrumb navigation */}
@@ -60,6 +63,7 @@ export default function Layout({ page, activeTab, userName, projectName, onNavig
           <SubTabBar
             activeTab={activeTab}
             onTabChange={(tab) => onNavigate('design', tab)}
+            recentTabs={recentTabs}
           />
         )}
         {children}

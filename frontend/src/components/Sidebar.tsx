@@ -68,6 +68,7 @@ interface Props {
   onToggleCollapse: () => void
   onNavigate: (page: 'projects' | 'design', tab?: Tab) => void
   onLogout: () => void
+  warningCount?: number
 }
 
 /* ── SVG icon helper ───────────────────────────────────────────────────────── */
@@ -104,18 +105,34 @@ const NAV_ITEMS: SidebarItem[] = [
 /* ── Component ─────────────────────────────────────────────────────────────── */
 
 export default function Sidebar({
-  page, activeTab, userName, isCollapsed, onToggleCollapse, onNavigate, onLogout,
+  page, activeTab, userName, isCollapsed, onToggleCollapse, onNavigate, onLogout, warningCount,
 }: Props) {
 
   const activeSection = activeTab ? sectionForTab(activeTab) : (page === 'projects' ? 'projects' : 'design')
 
+  /* ── Unexplored features counter (feature #3) ─────────────────────────── */
+  const [visited, setVisited] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('hpe_visited_tabs') || '[]')) } catch { return new Set() }
+  })
+
   const handleClick = (item: SidebarItem) => {
+    if (item.defaultTab) {
+      setVisited(prev => {
+        const next = new Set(prev)
+        next.add(item.key)
+        localStorage.setItem('hpe_visited_tabs', JSON.stringify([...next]))
+        return next
+      })
+    }
     if (item.isPage === 'projects') {
       onNavigate('projects')
     } else if (item.defaultTab) {
       onNavigate('design', item.defaultTab)
     }
   }
+
+  const totalSections = NAV_ITEMS.filter(i => i.key !== 'projects').length
+  const unvisited = totalSections - visited.size
 
   // Show design items only when not on projects page
   const visibleItems = page === 'projects'
@@ -128,6 +145,13 @@ export default function Sidebar({
       <div className="sidebar-header">
         <div className="logo-icon">H</div>
         {!isCollapsed && <span className="logo-text">HPE</span>}
+        {!isCollapsed && unvisited > 0 && page === 'design' && (
+          <span style={{
+            marginLeft: 'auto', background: 'var(--accent)', color: '#fff',
+            borderRadius: '50%', width: 18, height: 18, fontSize: 10, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }} title={`${unvisited} secoes nao exploradas`}>{unvisited}</span>
+        )}
       </div>
 
       {/* ── Quick-access buttons (design mode only) ───────────────────── */}
@@ -164,9 +188,18 @@ export default function Sidebar({
             className={`menu-item${activeSection === item.key ? ' active' : ''}`}
             onClick={() => handleClick(item)}
             title={isCollapsed ? item.label : undefined}
+            style={{ position: 'relative' }}
           >
             <span className="icon">{item.icon}</span>
             {!isCollapsed && <span>{item.label}</span>}
+            {item.key === 'design' && !!warningCount && warningCount > 0 && (
+              <span style={{
+                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                background: '#ef4444', color: '#fff', borderRadius: '50%',
+                width: 16, height: 16, fontSize: 9, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{warningCount}</span>
+            )}
           </button>
         ))}
       </nav>

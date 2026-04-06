@@ -4,6 +4,7 @@ import EngineeringTooltip from './EngineeringTooltip'
 import SmartWarnings from './SmartWarnings'
 import QuickCompare from './QuickCompare'
 import DeltaIndicator from './DeltaIndicator'
+import AnimatedNumber from './AnimatedNumber'
 
 /* ── Inline SVG icon helper ────────────────────────────────────────────── */
 const SvgIcon = ({ d, size = 18 }: { d: string; size?: number }) => (
@@ -19,6 +20,23 @@ interface Props {
   onNavigate: (tab: Tab) => void
   onRunSizing: (q: number, h: number, n: number) => void
   onWhatIf?: (overrideD2: number) => void
+}
+
+/* ── Quality progress bar (feature #7) ─────────────────────────────────── */
+function QualityBar({ value, min, max, good_min, good_max }: {
+  value: number; min: number; max: number; good_min: number; good_max: number
+}) {
+  const pct = ((value - min) / (max - min)) * 100
+  const inGood = value >= good_min && value <= good_max
+  return (
+    <div style={{ height: 3, background: 'var(--border-primary)', borderRadius: 2, marginTop: 4 }}>
+      <div style={{
+        width: `${Math.min(100, Math.max(0, pct))}%`, height: '100%', borderRadius: 2,
+        background: inGood ? 'var(--accent-success)' : pct > 80 ? '#facc15' : 'var(--accent-danger)',
+        transition: 'width 0.4s ease',
+      }} />
+    </div>
+  )
 }
 
 /* ── Metric status color helper ─────────────────────────────────────────── */
@@ -292,7 +310,7 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: statusColor(m.status) }}>
-                {m.value}
+                <AnimatedNumber value={parseFloat(m.value) || 0} format={(v) => v.toFixed(m.unit === '%' || m.unit === 'm' || m.unit === '' ? 1 : 0)} />
                 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
                   {m.unit}
                 </span>
@@ -318,6 +336,15 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
                 />
               )}
             </div>
+            {m.label === '\u03B7 total' && (
+              <QualityBar value={sizing.estimated_efficiency * 100} min={60} max={95} good_min={75} good_max={90} />
+            )}
+            {m.label === 'NPSHr' && (
+              <QualityBar value={sizing.estimated_npsh_r} min={0} max={15} good_min={0} good_max={6} />
+            )}
+            {m.label === 'De Haller' && deHaller != null && (
+              <QualityBar value={deHaller} min={0.5} max={1.0} good_min={0.72} good_max={0.85} />
+            )}
           </div>
         ))}
       </div>

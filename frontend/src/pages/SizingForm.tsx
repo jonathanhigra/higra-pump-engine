@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import t from '../i18n'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
+import ReverseCalc from '../components/ReverseCalc'
 
 interface DesignHint {
   eta_expected: number
@@ -31,6 +32,13 @@ const PRESETS = [
   { label: 'NS280', q: 385, h: 17, n: 1000 },
   { label: 'Bomba Típica', q: 180, h: 30, n: 1750 },
   { label: 'Alta Velocidade', q: 50, h: 80, n: 2900 },
+]
+
+const APP_PRESETS = [
+  { label: 'Agua Industrial', Q: 100, H: 32, n: 1750, fluid: 'water20', note: 'Bomba de processo padrao' },
+  { label: 'Irrigacao', Q: 500, H: 15, n: 1150, fluid: 'water20', note: 'Pivo central / aspersao' },
+  { label: 'Caldeira', Q: 50, H: 80, n: 3550, fluid: 'water60', note: 'Alimentacao de caldeira' },
+  { label: 'Esgoto', Q: 200, H: 8, n: 980, fluid: 'water20', note: 'Estacao elevatoria' },
 ]
 
 function calcNq(q_m3h: number, h: number, n: number): number {
@@ -144,6 +152,9 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [calculated, setCalculated] = useState(false)
   const [stickyBtn, setStickyBtn] = useState(false)
   const [versionNote, setVersionNote] = useState('')
+  const [lastCalcParams, setLastCalcParams] = useState({ q: '', h: '', n: '' })
+  const [appPresetsOpen, setAppPresetsOpen] = useState(false)
+  const [reverseOpen, setReverseOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -236,6 +247,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
       const lossData = await getLossBreakdown(q_m3s, h, n).catch(() => null)
       const stressData = await runStressAnalysis(q_m3s, h, n).catch(() => null)
       onResult(sizing, curvesData.points || [], lossData, stressData, { flowRate: q_m3h, head: h, rpm: n })
+      setLastCalcParams({ q: flowRate, h: head, n: rpm })
       setCalculated(true)
       setTimeout(() => setCalculated(false), 2000)
     } catch (err: any) {
@@ -243,6 +255,29 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
     } finally {
       setLoading(false)
     }
+  }
+
+  // Quick recalculate logic (feature #5)
+  const changedFields = {
+    q: lastCalcParams.q !== '' && flowRate !== lastCalcParams.q,
+    h: lastCalcParams.h !== '' && head !== lastCalcParams.h,
+    n: lastCalcParams.n !== '' && rpm !== lastCalcParams.n,
+  }
+  const changedCount = [changedFields.q, changedFields.h, changedFields.n].filter(Boolean).length
+
+  const RecalcChip = ({ field }: { field: 'q' | 'h' | 'n' }) => {
+    if (changedCount !== 1 || !changedFields[field]) return null
+    return (
+      <button type="submit" style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 10, padding: '2px 8px', borderRadius: 12,
+        border: '1px solid var(--accent)', background: 'rgba(0,160,223,0.12)',
+        color: 'var(--accent)', cursor: 'pointer', marginTop: 3,
+        fontFamily: 'var(--font-family)', fontWeight: 600,
+      }}>
+        Alterado — Recalcular?
+      </button>
+    )
   }
 
   const inputStyle: React.CSSProperties = {
@@ -387,6 +422,10 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             const hint = rangeHint(q_m3h, 1, 10000, 'T\u00EDpico: 1-10000 m\u00B3/h')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Dica: use Multi-Velocidade para ver o desempenho em faixa de vazao.
+          </div>
+          <RecalcChip field="q" />
         </div>
 
         <div style={fieldStyle}>
@@ -401,6 +440,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             const hint = rangeHint(parseFloat(head) || 0, 1, 500, 'T\u00EDpico: 1-500 m')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          <RecalcChip field="h" />
         </div>
 
         <div style={fieldStyle}>
@@ -415,6 +455,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             const hint = rangeHint(parseFloat(rpm) || 0, 300, 15000, 'T\u00EDpico: 300-15000 rpm')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          <RecalcChip field="n" />
         </div>
 
         {/* Inline quick-fill examples */}
@@ -454,9 +495,46 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
         </div>
       </div>
 
+      {/* Application Presets (feature #9) */}
+      <div style={{ marginBottom: 14 }}>
+        <button type="button" onClick={() => setAppPresetsOpen(o => !o)}
+          style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-family)' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            style={{ transform: appPresetsOpen ? 'rotate(90deg)' : 'none', transition: '0.15s' }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          Aplicacoes
+        </button>
+        {appPresetsOpen && (
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {APP_PRESETS.map(ap => (
+              <button key={ap.label} type="button" onClick={() => {
+                setFlowRate(unit === 'm3h' ? String(ap.Q) : (ap.Q / 3600).toFixed(5))
+                setHead(String(ap.H))
+                setRpm(String(ap.n))
+                setFluidId(ap.fluid)
+              }}
+                style={{
+                  padding: '8px 10px', borderRadius: 6, fontSize: 11, textAlign: 'left',
+                  border: '1px solid var(--border-primary)', background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.15s',
+                  fontFamily: 'var(--font-family)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>{ap.label}</div>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>Q={ap.Q} H={ap.H} n={ap.n}</div>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>{ap.note}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Presets */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>Exemplos rápidos:</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>Exemplos rapidos:</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {PRESETS.map(p => (
             <button key={p.label} type="button" onClick={() => applyPreset(p)}
@@ -524,6 +602,29 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
               Executar Dimensionamento
             </span>}
       </button>
+
+      <button type="button" onClick={() => setReverseOpen(true)}
+        style={{
+          width: '100%', marginTop: 6, padding: 6, fontSize: 11,
+          background: 'transparent', border: '1px solid var(--border-primary)',
+          color: 'var(--text-muted)', borderRadius: 4, cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+      >
+        Reverso (dado D2, encontrar Q)
+      </button>
+
+      <ReverseCalc
+        open={reverseOpen}
+        onClose={() => setReverseOpen(false)}
+        onResult={(q, h, n) => {
+          setFlowRate(unit === 'm3h' ? q.toFixed(1) : (q / 3600).toFixed(5))
+          setHead(h.toFixed(1))
+          setRpm(n.toFixed(0))
+        }}
+      />
 
       <input
         type="text"

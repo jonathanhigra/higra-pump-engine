@@ -46,6 +46,11 @@ import DesignQualityBadge from './components/DesignQualityBadge'
 import EvolutionSparkline from './components/EvolutionSparkline'
 import ContextualHelp from './components/ContextualHelp'
 import ExportCenter from './components/ExportCenter'
+import WhatsNew from './components/WhatsNew'
+import FeatureTip from './components/FeatureTip'
+import ActionTimeline from './components/ActionTimeline'
+import type { TimelineEntry } from './components/ActionTimeline'
+import useDynamicFavicon from './hooks/useDynamicFavicon'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
@@ -188,7 +193,35 @@ export default function App() {
   const [compareData, setCompareData] = useState<VersionCompareResult | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [exportCenterOpen, setExportCenterOpen] = useState(false)
+  const [tabHistory, setTabHistory] = useState<Tab[]>([])
+  const [timeline, setTimeline] = useState<TimelineEntry[]>([])
+  const [timelineOpen, setTimelineOpen] = useState(false)
+  const [showWhatsNew, setShowWhatsNew] = useState(() => localStorage.getItem('hpe_whats_new_seen') !== '0.2.0')
+  const [showAutoRestore, setShowAutoRestore] = useState(false)
   const { toasts, toast, dismiss } = useToast()
+
+  // Dynamic favicon showing Nq value
+  useDynamicFavicon(sizing?.specific_speed_nq || null)
+
+  // Tab history tracking
+  useEffect(() => {
+    if (tab) setTabHistory(prev => {
+      const next = [...prev, tab]
+      return next.slice(-20)
+    })
+  }, [tab])
+
+  const goBack = () => {
+    if (tabHistory.length < 2) return
+    const prev = tabHistory[tabHistory.length - 2]
+    setTabHistory(h => h.slice(0, -1))
+    setTab(prev)
+  }
+
+  // Action timeline logger
+  const logAction = useCallback((action: string, detail?: string) => {
+    setTimeline(prev => [...prev, { time: new Date(), action, detail }])
+  }, [])
 
   // Helper to mark a progress step as completed
   const markStep = useCallback((step: string) => {
@@ -198,6 +231,29 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('hpe_token')
     if (saved) { setToken(saved); setPage('projects') }
+  }, [])
+
+  // Auto-save to localStorage every 30s (feature #10)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (sizing) {
+        localStorage.setItem('hpe_autosave', JSON.stringify({
+          opPoint, tab, projectName: currentProject?.name, timestamp: Date.now(),
+        }))
+      }
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [sizing, opPoint, tab, currentProject])
+
+  // Check for auto-restore on mount (feature #10)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('hpe_autosave')
+      if (raw) {
+        const state = JSON.parse(raw)
+        if (Date.now() - state.timestamp < 86400000) setShowAutoRestore(true)
+      }
+    } catch { /* ignore */ }
   }, [])
 
   // Track progress steps based on state changes
@@ -214,6 +270,30 @@ export default function App() {
     if (['curves', 'velocity', 'losses', 'stress', 'pressure', 'multispeed', 'spanwise', 'noise'].includes(tab)) markStep('analise')
     if (['optimize', 'doe', 'pareto'].includes(tab)) markStep('otimizacao')
   }, [tab, markStep])
+
+  // Auto-restore handler (feature #10)
+  const handleAutoRestore = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('hpe_autosave')
+      if (raw) {
+        const state = JSON.parse(raw)
+        if (state.opPoint) setOpPoint(state.opPoint)
+        if (state.tab) setTab(state.tab)
+        toast('Sessao anterior restaurada', 'success')
+      }
+    } catch { /* ignore */ }
+    setShowAutoRestore(false)
+  }, [toast])
+
+  // Duplicate version handler (feature #4)
+  const handleDuplicateVersion = useCallback((v: VersionEntry) => {
+    const qH = v.flow_rate >= 1 ? v.flow_rate : v.flow_rate * 3600
+    setOpPoint({ flowRate: qH, head: v.head, rpm: v.rpm })
+    toast('Ponto de operacao copiado — clique Executar para criar nova versao', 'info')
+  }, [toast])
+
+  // Warning count for sidebar badge (feature #8)
+  const warningCount = sizing?.warnings?.length || 0
 
   const handleLogin = (userData: any, tok: string) => {
     setUser(userData); setToken(tok); setPage('projects')
@@ -256,7 +336,7 @@ export default function App() {
       const r = await fetch(`/api/v1/projects/${currentProject.id}/designs`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      if (r.ok) { const d = await r.json(); setSavedId(d.id); toast('Design salvo no projeto', 'success') }
+      if (r.ok) { const d = await r.json(); setSavedId(d.id); toast('Design salvo no projeto', 'success'); logAction('Design salvo', currentProject?.name) }
       else { toast('Erro ao salvar design', 'error') }
     } catch { toast('Erro ao salvar design', 'error') }
     finally { setSaving(false) }
@@ -312,6 +392,7 @@ export default function App() {
       } catch { /* version save is best-effort */ }
 
       toast('Dimensionamento concluido', 'success')
+      logAction('Dimensionamento executado', `Q=${q} m3/h H=${h}m n=${n}rpm`)
     } catch {
       toast('Erro ao calcular', 'error')
     } finally {
@@ -329,8 +410,9 @@ export default function App() {
     onSave: handleSaveDesign,
     onCmdPalette: () => setCmdOpen(true),
     onNavigate: handleNavigate,
-    onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false); setHelpOpen(false) },
+    onEscape: () => { setCmdOpen(false); setShortcutsHelpOpen(false); setHelpOpen(false); setTimelineOpen(false) },
     onF1Help: () => setHelpOpen(v => !v),
+    onExport: () => setExportCenterOpen(true),
   })
 
   // History restore handler
@@ -379,11 +461,30 @@ export default function App() {
         sizing={sizing}
       />
       <Toast messages={toasts} onDismiss={dismiss} />
+      {showWhatsNew && page !== 'login' && (
+        <WhatsNew onClose={() => { setShowWhatsNew(false); localStorage.setItem('hpe_whats_new_seen', '0.2.0') }} />
+      )}
+      {showAutoRestore && page !== 'login' && (
+        <div style={{
+          position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)',
+          borderRadius: 8, padding: '10px 16px', zIndex: 2000,
+          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        }}>
+          <span style={{ color: 'var(--text-secondary)' }}>Sessao anterior encontrada. Restaurar?</span>
+          <button className="btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={handleAutoRestore}>Restaurar</button>
+          <button onClick={() => setShowAutoRestore(false)} style={{
+            background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13,
+          }}>x</button>
+        </div>
+      )}
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
       <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
       {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
       <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
       <ContextualHelp open={helpOpen} onClose={() => setHelpOpen(false)} currentTab={tab} />
+      <ActionTimeline entries={timeline} open={timelineOpen} onClose={() => setTimelineOpen(false)} />
       <ExportCenter
         open={exportCenterOpen}
         onClose={() => setExportCenterOpen(false)}
@@ -469,6 +570,9 @@ export default function App() {
     </>
   )
 
+  // Recent tabs for SubTabBar dot indicators (last 3 unique, excluding current)
+  const recentTabs = [...new Set(tabHistory.slice(-6).reverse())].filter(t => t !== tab).slice(0, 3)
+
   // === LOGIN ===
   if (page === 'login') {
     return <LoginPage onLogin={handleLogin} />
@@ -478,9 +582,9 @@ export default function App() {
   if (page === 'projects') {
     return (
       <Layout page="projects" activeTab={null} userName={user?.name || t.user}
-        onNavigate={handleNavigate} onLogout={handleLogout}>
+        onNavigate={handleNavigate} onLogout={handleLogout} warningCount={warningCount}>
         <ProjectsPage onSelectProject={handleSelectProject} token={token} />
-        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} onTimeline={() => setTimelineOpen(v => !v)} />
         {overlays}
       </Layout>
     )
@@ -493,7 +597,7 @@ export default function App() {
   if (tab === '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
+        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout} warningCount={warningCount} recentTabs={recentTabs}>
         <ImpellerViewer
           flowRate={opPoint.flowRate}
           head={opPoint.head}
@@ -504,7 +608,7 @@ export default function App() {
           onRunSizing={handleRunSizing}
           onToast={toast}
         />
-        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} onTimeline={() => setTimelineOpen(v => !v)} />
         {overlays}
       </Layout>
     )
@@ -514,7 +618,7 @@ export default function App() {
   if (WIDE_TABS.includes(tab) && tab !== '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
-        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}>
+        projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout} warningCount={warningCount} recentTabs={recentTabs}>
         <div>
           {tab === 'templates' && (
             <TemplateSelector loading={loading} onSelect={(tmpl: any) => {
@@ -560,7 +664,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+        <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} onTimeline={() => setTimelineOpen(v => !v)} />
         {overlays}
       </Layout>
     )
@@ -588,6 +692,14 @@ export default function App() {
 
       <div className="content-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {tabHistory.length >= 2 && (
+            <button onClick={goBack} title="Voltar a aba anterior" style={{
+              background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+              fontSize: 16, padding: '0 4px', marginRight: 4,
+            }}>
+              &#8592;
+            </button>
+          )}
           <button
             type="button"
             onClick={() => handleNavigate('projects')}
@@ -608,13 +720,16 @@ export default function App() {
           </button>
           <span style={{ color: 'var(--border-primary)', fontSize: 14, userSelect: 'none' }}>/</span>
           <h1 style={{ margin: 0 }}>{currentProject?.name || t.quickDesign}</h1>
-          <VersionPanel
-            versions={versions}
-            currentVersionId={currentVersionId}
-            onSelect={handleVersionSelect}
-            onCompare={handleVersionCompare}
-            onDelete={handleVersionDelete}
-          />
+          <FeatureTip id="version-panel" tip="Historico de versoes — compare e duplique">
+            <VersionPanel
+              versions={versions}
+              currentVersionId={currentVersionId}
+              onSelect={handleVersionSelect}
+              onCompare={handleVersionCompare}
+              onDelete={handleVersionDelete}
+              onDuplicate={handleDuplicateVersion}
+            />
+          </FeatureTip>
           {versions.length >= 2 && (
             <button onClick={async () => {
               try {
@@ -669,25 +784,27 @@ export default function App() {
             {advancedMode ? '● Modo Avançado' : '○ Modo Avançado'}
           </button>
           {sizing && (
-            <button
-              type="button"
-              onClick={() => setExportCenterOpen(true)}
-              style={{
-                fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                border: '1px solid var(--border-primary)',
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-              </svg>
-              Exportar
-            </button>
+            <FeatureTip id="export-center" tip="Exporte CAD, CFD e relatorios aqui">
+              <button
+                type="button"
+                onClick={() => setExportCenterOpen(true)}
+                style={{
+                  fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                  border: '1px solid var(--border-primary)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Exportar
+              </button>
+            </FeatureTip>
           )}
         </div>
       </div>
@@ -791,7 +908,7 @@ export default function App() {
           <NextStepBanner currentTab={tab} hasSizing={!!sizing} onNavigate={(t) => handleNavigate('design', t)} />
         </div>
       </div>
-      <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} />
+      <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} onTimeline={() => setTimelineOpen(v => !v)} />
       {overlays}
     </Layout>
   )

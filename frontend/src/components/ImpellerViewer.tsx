@@ -2300,6 +2300,7 @@ export default function ImpellerViewer({
   const [showPrintDialog, setShowPrintDialog] = useState(false)
   const [printScale, setPrintScale] = useState(100)
   const [showStreamlines, setShowStreamlines] = useState(false)
+  const [presentationMode, setPresentationMode] = useState(false)
   const [freeClipAngle, setFreeClipAngle] = useState<number | null>(null)
   const [componentExplode, setComponentExplode] = useState(0)
 
@@ -2309,6 +2310,14 @@ export default function ImpellerViewer({
   const [fN, setFN] = useState(String(rpm))
 
   useEffect(() => { setFQ(String(flowRate)); setFH(String(head)); setFN(String(rpm)) }, [flowRate, head, rpm])
+
+  // Escape exits presentation mode
+  useEffect(() => {
+    if (!presentationMode) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setPresentationMode(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [presentationMode])
 
   useEffect(() => {
     if (flowRate <= 0 || head <= 0 || rpm <= 0) return
@@ -2979,6 +2988,7 @@ export default function ImpellerViewer({
           <ControlButton label={showVelocityArrows ? 'Vel. ON' : 'Vel.'} onClick={() => setShowVelocityArrows(v => !v)} />
           <ControlButton label={showSections ? 'Secoes ON' : 'Secoes'} onClick={() => setShowSections(s => !s)} />
           <ControlButton label={turntable ? 'Turntable ON' : 'Turntable'} onClick={() => setTurntable(t => !t)} />
+          <ControlButton label="Apresentar" onClick={() => setPresentationMode(true)} />
           <ControlButton label="PNG" onClick={handleScreenshot} />
           <select
             value={resolution}
@@ -3008,6 +3018,60 @@ export default function ImpellerViewer({
           </button>
         </div>
       </div>
+
+      {/* ── Presentation mode overlay ──────────────────────────────���───── */}
+      {presentationMode && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: '#0a0e14', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <Canvas shadows gl={{ antialias: true, preserveDrawingBuffer: true }}>
+              <PerspectiveCamera makeDefault position={[2.5, 1.8, 3.5]} fov={40} />
+              <ambientLight intensity={0.5} />
+              <directionalLight position={[5, 8, 5]} intensity={1} castShadow />
+              <directionalLight position={[-3, 4, -2]} intensity={0.3} />
+              <OrbitControls autoRotate autoRotateSpeed={1.2} enableDamping dampingFactor={0.05} />
+              {data && (
+                <group>
+                  {Array.from({ length: data.blade_count }).map((_, i) => {
+                    const angle = (i / data.blade_count) * Math.PI * 2
+                    return (
+                      <group key={i} rotation={[0, angle, 0]}>
+                        {data.blade_surfaces.map((surf, si) => (
+                          <React.Fragment key={si}>
+                            <mesh geometry={buildQuadGeo(surf.ps)}>
+                              <meshStandardMaterial color="#00A0DF" side={THREE.DoubleSide} metalness={0.3} roughness={0.5} />
+                            </mesh>
+                            <mesh geometry={buildQuadGeo(surf.ss)}>
+                              <meshStandardMaterial color="#00A0DF" side={THREE.DoubleSide} metalness={0.3} roughness={0.5} />
+                            </mesh>
+                          </React.Fragment>
+                        ))}
+                      </group>
+                    )
+                  })}
+                </group>
+              )}
+              <Environment preset="city" />
+            </Canvas>
+          </div>
+          <div style={{ textAlign: 'center', padding: '20px 0', background: 'rgba(0,0,0,0.5)' }}>
+            <div style={{ fontSize: 20, color: '#fff', fontWeight: 600 }}>
+              {sizing?.impeller_type || 'Projeto HPE'}
+            </div>
+            <div style={{ fontSize: 14, color: '#00A0DF', marginTop: 6 }}>
+              Nq={sizing?.specific_speed_nq?.toFixed(1) ?? '--'}
+              {' \u00B7 '}\u03B7={sizing ? (sizing.estimated_efficiency * 100).toFixed(1) : '--'}%
+              {' \u00B7 '}D2={sizing ? (sizing.impeller_d2 * 1000).toFixed(0) : '--'}mm
+              {' \u00B7 '}{sizing?.blade_count ?? '--'} pas
+            </div>
+          </div>
+          <button onClick={() => setPresentationMode(false)} style={{
+            position: 'absolute', top: 16, right: 16,
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+            fontFamily: 'var(--font-family)',
+          }}>ESC para sair</button>
+        </div>
+      )}
     </div>
   )
 }

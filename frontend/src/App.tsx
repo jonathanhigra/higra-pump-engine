@@ -45,6 +45,7 @@ import FloatingMetrics from './components/FloatingMetrics'
 import DesignQualityBadge from './components/DesignQualityBadge'
 import EvolutionSparkline from './components/EvolutionSparkline'
 import ContextualHelp from './components/ContextualHelp'
+import ExportCenter from './components/ExportCenter'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
@@ -186,6 +187,7 @@ export default function App() {
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
   const [compareData, setCompareData] = useState<VersionCompareResult | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [exportCenterOpen, setExportCenterOpen] = useState(false)
   const { toasts, toast, dismiss } = useToast()
 
   // Helper to mark a progress step as completed
@@ -374,6 +376,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onRunSizing={handleRunSizingShortcut}
         onStartTour={() => setTourActive(true)}
+        sizing={sizing}
       />
       <Toast messages={toasts} onDismiss={dismiss} />
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
@@ -381,6 +384,88 @@ export default function App() {
       {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
       <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
       <ContextualHelp open={helpOpen} onClose={() => setHelpOpen(false)} currentTab={tab} />
+      <ExportCenter
+        open={exportCenterOpen}
+        onClose={() => setExportCenterOpen(false)}
+        onExport={(format) => {
+          setExportCenterOpen(false)
+          const q = opPoint.flowRate / 3600
+          const h = opPoint.head
+          const n = opPoint.rpm
+          const downloadBlob = (blob: Blob, filename: string) => {
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url; a.download = filename; a.click()
+            URL.revokeObjectURL(url)
+          }
+          const downloadText = (text: string, filename: string) => {
+            downloadBlob(new Blob([text], { type: 'text/plain' }), filename)
+          }
+          switch (format) {
+            case 'step':
+              fetch(`/api/v1/geometry/export/step?flow_rate=${q}&head=${h}&rpm=${n}`)
+                .then(r => r.blob()).then(b => downloadBlob(b, 'impeller.step'))
+                .catch(() => toast('Erro ao exportar STEP', 'error'))
+              break
+            case 'iges':
+              fetch(`/api/v1/geometry/export/iges?flow_rate=${q}&head=${h}&rpm=${n}`)
+                .then(r => r.blob()).then(b => downloadBlob(b, 'impeller.iges'))
+                .catch(() => toast('Erro ao exportar IGES', 'error'))
+              break
+            case 'stl':
+              fetch(`/api/v1/geometry/export/stl?flow_rate=${q}&head=${h}&rpm=${n}`)
+                .then(r => r.blob()).then(b => downloadBlob(b, 'impeller.stl'))
+                .catch(() => toast('Erro ao exportar STL', 'error'))
+              break
+            case 'gltf':
+              handleNavigate('design', '3d')
+              toast('Use o botao glTF no viewer 3D', 'info')
+              break
+            case 'bladegen':
+              fetch(`/api/v1/geometry/export/bladegen?flow_rate=${q}&head=${h}&rpm=${n}`)
+                .then(r => r.json()).then(d => { if (d.inf) downloadText(d.inf, 'blade.inf') })
+                .catch(() => toast('Erro ao exportar BladeGen', 'error'))
+              break
+            case 'geo':
+              fetch(`/api/v1/geometry/export/geo?flow_rate=${q}&head=${h}&rpm=${n}`)
+                .then(r => r.json()).then(d => { if (d.ps) downloadText(d.ps, 'blade_ps.geo') })
+                .catch(() => toast('Erro ao exportar GEO', 'error'))
+              break
+            case 'cfx-package':
+              fetch('/api/v1/cfd/cfx/package', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ flow_rate: q, head: h, rpm: n }) })
+                .then(r => r.blob()).then(b => downloadBlob(b, 'cfx_package.zip'))
+                .catch(() => toast('Erro ao exportar CFX', 'error'))
+              break
+            case 'fluent':
+              fetch('/api/v1/cfd/fluent/journal', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ flow_rate: q, head: h, rpm: n }) })
+                .then(r => r.text()).then(t => downloadText(t, 'setup.jou'))
+                .catch(() => toast('Erro ao exportar Fluent', 'error'))
+              break
+            case 'openfoam':
+              fetch('/api/v1/cfd/openfoam/case', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ flow_rate: q, head: h, rpm: n }) })
+                .then(r => r.blob()).then(b => downloadBlob(b, 'openfoam_case.zip'))
+                .catch(() => toast('Erro ao exportar OpenFOAM', 'error'))
+              break
+            case 'pdf':
+              fetch('/api/v1/report/pdf', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ flow_rate: q, head: h, rpm: n }) })
+                .then(r => r.blob()).then(b => downloadBlob(b, 'hpe_relatorio.pdf'))
+                .catch(() => toast('Erro ao exportar PDF', 'error'))
+              break
+            case 'csv':
+              if (sizing) {
+                import('./services/api').then(({ exportSizingCSV }) => exportSizingCSV(sizing, opPoint))
+              }
+              break
+            case 'png':
+              handleNavigate('design', '3d')
+              toast('Use o botao PNG no viewer 3D', 'info')
+              break
+            default:
+              toast(`Formato ${format} em desenvolvimento`, 'info')
+          }
+          markStep('exportar')
+        }}
+      />
     </>
   )
 
@@ -583,6 +668,27 @@ export default function App() {
           >
             {advancedMode ? '● Modo Avançado' : '○ Modo Avançado'}
           </button>
+          {sizing && (
+            <button
+              type="button"
+              onClick={() => setExportCenterOpen(true)}
+              style={{
+                fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                border: '1px solid var(--border-primary)',
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              Exportar
+            </button>
+          )}
         </div>
       </div>
       {advancedMode && (

@@ -21,10 +21,10 @@ const MACHINE_TYPES = [
 ]
 
 const FLUIDS = [
-  { id: 'water20', label: 'Água 20°C', rho: 998, mu: 1.0e-3, pv: 2340 },
-  { id: 'water60', label: 'Água 60°C', rho: 983, mu: 4.7e-4, pv: 19940 },
-  { id: 'oil', label: 'Óleo Mineral', rho: 870, mu: 30e-3, pv: 50 },
-  { id: 'custom', label: 'Custom', rho: 998, mu: 1.0e-3, pv: 2340 },
+  { id: 'water20', label: 'Água 20°C', rho: 998, mu: 1.0e-3, pv: 2340, color: '#3b82f6' },
+  { id: 'water60', label: 'Água 60°C', rho: 983, mu: 4.7e-4, pv: 19940, color: '#ef4444' },
+  { id: 'oil', label: 'Óleo Mineral', rho: 870, mu: 30e-3, pv: 50, color: '#a16207' },
+  { id: 'custom', label: 'Custom', rho: 998, mu: 1.0e-3, pv: 2340, color: '#6b7280' },
 ]
 
 const PRESETS = [
@@ -290,7 +290,9 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
                 border: `1px solid ${fluidId === f.id ? 'var(--accent)' : 'var(--border-primary)'}`,
                 background: fluidId === f.id ? 'rgba(0,160,223,0.12)' : 'transparent',
                 color: fluidId === f.id ? 'var(--accent)' : 'var(--text-muted)',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
               }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
               {f.label}
             </button>
           ))}

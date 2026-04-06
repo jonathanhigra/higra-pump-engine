@@ -130,6 +130,32 @@ export default function Sidebar({
         {!isCollapsed && <span className="logo-text">HPE</span>}
       </div>
 
+      {/* ── Quick-access buttons (design mode only) ───────────────────── */}
+      {page === 'design' && !isCollapsed && (
+        <div style={{ display: 'flex', gap: 4, padding: '8px 8px 0' }}>
+          {([
+            { label: '3D', tab: '3d' as Tab },
+            { label: 'Curvas', tab: 'curves' as Tab },
+            { label: 'Otim.', tab: 'optimize' as Tab },
+          ]).map(q => (
+            <button
+              key={q.tab}
+              onClick={() => onNavigate('design', q.tab)}
+              style={{
+                flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                cursor: 'pointer', transition: 'all 0.15s',
+                border: `1px solid ${activeTab === q.tab ? 'var(--accent)' : 'var(--border-primary)'}`,
+                background: activeTab === q.tab ? 'rgba(0,160,223,0.15)' : 'transparent',
+                color: activeTab === q.tab ? 'var(--accent)' : 'var(--text-muted)',
+                fontFamily: 'var(--font-family)',
+              }}
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Navigation ───────────────────────────────────────────────────── */}
       <nav className="sidebar-nav">
         {visibleItems.map(item => (
@@ -210,39 +236,54 @@ function LangSelector() {
   )
 }
 
-/* ── Theme Toggle (sun/moon) ──────────────────────────────────────────────── */
+/* ── Theme Toggle (dark / light / high-contrast) ─────────────────────────── */
+const THEMES = ['dark', 'light', 'high-contrast'] as const
+type Theme = typeof THEMES[number]
+
+const THEME_LABELS: Record<Theme, string> = {
+  dark: 'Escuro',
+  light: 'Claro',
+  'high-contrast': 'Alto Contraste',
+}
+
 function ThemeToggle() {
-  const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('hpe_theme')
-    return saved !== 'light'
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('hpe_theme') as Theme | null
+    return saved && THEMES.includes(saved) ? saved : 'dark'
   })
 
   useEffect(() => {
-    const theme = isDark ? 'dark' : 'light'
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('hpe_theme', theme)
-  }, [isDark])
+  }, [theme])
 
   // Also set on mount
   useEffect(() => {
-    const saved = localStorage.getItem('hpe_theme')
-    if (saved === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light')
+    const saved = localStorage.getItem('hpe_theme') as Theme | null
+    if (saved && THEMES.includes(saved)) {
+      document.documentElement.setAttribute('data-theme', saved)
     }
   }, [])
 
+  const nextTheme = () => {
+    setTheme(prev => {
+      const idx = THEMES.indexOf(prev)
+      return THEMES[(idx + 1) % THEMES.length]
+    })
+  }
+
   return (
     <button
-      onClick={() => setIsDark(d => !d)}
-      title={isDark ? 'Modo claro' : 'Modo escuro'}
+      onClick={nextTheme}
+      title={THEME_LABELS[theme]}
       style={{
         background: 'none', border: 'none', cursor: 'pointer',
         color: 'var(--text-muted)', padding: 4, display: 'flex', alignItems: 'center',
       }}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        {isDark ? (
-          /* Sun icon */
+        {theme === 'dark' ? (
+          /* Sun icon — clicking will go to light */
           <>
             <circle cx="12" cy="12" r="5" />
             <line x1="12" y1="1" x2="12" y2="3" />
@@ -254,8 +295,11 @@ function ThemeToggle() {
             <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
           </>
+        ) : theme === 'light' ? (
+          /* Half-circle icon — clicking will go to high-contrast */
+          <circle cx="12" cy="12" r="9" fill="currentColor" fillOpacity="0.5" />
         ) : (
-          /* Moon icon */
+          /* Moon icon — clicking will go to dark */
           <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
         )}
       </svg>

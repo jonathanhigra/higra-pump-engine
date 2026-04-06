@@ -32,6 +32,18 @@ interface PaletteItem {
   action: () => void
 }
 
+/* ── Sizing result type (subset) ──────────────────────────────────────────── */
+interface SizingResult {
+  specific_speed_nq: number
+  impeller_d2: number
+  impeller_b2: number
+  blade_count: number
+  estimated_efficiency: number
+  estimated_npsh_r: number
+  estimated_power: number
+  [key: string]: any
+}
+
 /* ── Props ────────────────────────────────────────────────────────────────── */
 interface Props {
   open: boolean
@@ -39,10 +51,11 @@ interface Props {
   onNavigate: (page: 'projects' | 'design', tab?: Tab) => void
   onRunSizing?: () => void
   onStartTour?: () => void
+  sizing?: SizingResult | null
 }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
-export default function CommandPalette({ open, onClose, onNavigate, onRunSizing, onStartTour }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, onRunSizing, onStartTour, sizing }: Props) {
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -124,8 +137,22 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing,
       action: () => { onStartTour?.(); onClose() },
     })
 
+    // Sizing result values — searchable when sizing exists
+    if (sizing) {
+      const resultIcon = 'M3 12h4l3-9 4 18 3-9h4'
+      const goResults = () => { onNavigate('design', 'results'); onClose() }
+      list.push(
+        { id: 'res-d2', label: `D2 = ${(sizing.impeller_d2 * 1000).toFixed(0)}mm`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-nq', label: `Nq = ${sizing.specific_speed_nq.toFixed(1)}`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-eta', label: `\u03B7 = ${(sizing.estimated_efficiency * 100).toFixed(1)}%`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-npsh', label: `NPSHr = ${sizing.estimated_npsh_r.toFixed(1)}m`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-power', label: `Potencia = ${(sizing.estimated_power / 1000).toFixed(1)}kW`, category: 'Resultado', icon: resultIcon, action: goResults },
+        { id: 'res-z', label: `Z = ${sizing.blade_count} pas`, category: 'Resultado', icon: resultIcon, action: goResults },
+      )
+    }
+
     return list
-  }, [onNavigate, onClose, onRunSizing, onStartTour])
+  }, [onNavigate, onClose, onRunSizing, onStartTour, sizing])
 
   /* Filtered results */
   const filtered = useMemo(() => {

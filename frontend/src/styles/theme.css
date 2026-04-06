@@ -3,6 +3,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import './theme-light.css';
 
+/* High Contrast Theme — accessibility-first */
+[data-theme="high-contrast"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f0f0f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8f8f8;
+  --bg-hover: #e8e8e8;
+  --bg-input: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #222222;
+  --text-muted: #444444;
+  --accent: #0055aa;
+  --accent-hover: #004488;
+  --accent-chart: #0055aa;
+  --accent-success: #006600;
+  --accent-warning: #996600;
+  --accent-danger: #cc0000;
+  --sidebar-bg: #f0f0f0;
+  --sidebar-border: #cccccc;
+  --sidebar-hover: #e0e0e0;
+  --border-primary: #888888;
+  --border-subtle: #aaaaaa;
+  --card-bg: #ffffff;
+  --card-border: #999999;
+  --card-hover-bg: #f0f0f0;
+  --scrollbar-thumb: #888888;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.15);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.2);
+}
+
 :root {
   /* Surfaces */
   --bg-primary: #1a1a1a;

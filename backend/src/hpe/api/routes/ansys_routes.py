@@ -109,6 +109,13 @@ def generate_cfx(req: AnsysGenerateRequest) -> dict[str, Any]:
     Supports single-passage (periodic) or full-wheel (360 deg) domain
     via the ``single_passage`` flag, and wall roughness via ``roughness_um``.
     """
+    if req.flow_rate <= 0:
+        raise HTTPException(422, "flow_rate must be positive")
+    if req.head <= 0:
+        raise HTTPException(422, "head must be positive")
+    if req.rpm <= 0 or req.rpm > 50000:
+        raise HTTPException(422, "rpm must be between 1 and 50000")
+
     from hpe.core.enums import MachineType
     from hpe.core.models import OperatingPoint
     from hpe.sizing import run_sizing
@@ -155,6 +162,13 @@ def generate_fluent(req: AnsysGenerateRequest) -> dict[str, Any]:
     Runs meanline sizing internally and produces journal (.jou)
     and scheme (.scm) file content.
     """
+    if req.flow_rate <= 0:
+        raise HTTPException(422, "flow_rate must be positive")
+    if req.head <= 0:
+        raise HTTPException(422, "head must be positive")
+    if req.rpm <= 0 or req.rpm > 50000:
+        raise HTTPException(422, "rpm must be between 1 and 50000")
+
     from hpe.core.enums import MachineType
     from hpe.core.models import OperatingPoint
     from hpe.sizing import run_sizing
@@ -288,6 +302,13 @@ def download_cfx_package(req: AnsysGenerateRequest) -> Response:
     The ZIP contains CCL setup, PCF parameters, blade .geo geometry,
     TurboGrid automation scripts, and a README with workflow instructions.
     """
+    if req.flow_rate <= 0:
+        raise HTTPException(422, "flow_rate must be positive")
+    if req.head <= 0:
+        raise HTTPException(422, "head must be positive")
+    if req.rpm <= 0 or req.rpm > 50000:
+        raise HTTPException(422, "rpm must be between 1 and 50000")
+
     from hpe.core.enums import MachineType
     from hpe.core.models import OperatingPoint
     from hpe.sizing import run_sizing

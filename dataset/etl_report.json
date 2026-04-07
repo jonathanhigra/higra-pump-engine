@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-04-07T19:55:56.554067",
+  "source_table": "hgr_lab_reg_teste",
+  "source_rows": 4165,
+  "dropped_missing_required": 1036,
+  "dropped_outliers": {
+    "q_m3s": 176,
+    "eta_total": 22
+  },
+  "clean_rows": 2931,
+  "retention_pct": 70.4,
+  "feature_columns": 15,
+  "target_columns": [
+    "eta_total",
+    "eta_hid",
+    "p_kw"
+  ],
+  "distributions": {
+    "eta_total": {
+      "count": 2931.0,
+      "mean": 67.0704,
+      "std": 16.364,
+      "min": 5.19,
+      "25%": 63.49,
+      "50%": 71.83,
+      "75%": 76.86,
+      "max": 92.53
+    },
+    "eta_hid": {
+      "count": 2931.0,
+      "mean": 61.027,
+      "std": 14.891,
+      "min": 4.72,
+      "25%": 57.775,
+      "50%": 65.37,
+      "75%": 69.945,
+      "max": 84.2
+    },
+    "p_kw": {
+      "count": 2931.0,
+      "mean": 171.4552,
+      "std": 125.1351,
+      "min": 18.33,
+      "25%": 78.0486,
+      "50%": 127.77,
+      "75%": 237.005,
+      "max": 573.4815
+    },
+    "feat_ns": {
+      "count": 2931.0,
+      "mean": 42.9267,
+      "std": 39.9876,
+      "min": 4.9703,
+      "25%": 26.0463,
+      "50%": 34.9399,
+      "75%": 48.5001,
+      "max": 999.0836
+    },
+    "feat_nq": {
+      "count": 2931.0,
+      "mean": 0.8311,
+      "std": 0.7742,
+      "min": 0.0962,
+      "25%": 0.5043,
+      "50%": 0.6765,
+      "75%": 0.939,
+      "max": 19.3433
+    },
+    "q_m3s": {
+      "count": 2931.0,
+      "mean": 0.134,
+      "std": 0.1269,
+      "min": 0.0027,
+      "25%": 0.0507,
+      "50%": 0.0889,
+      "75%": 0.1699,
+      "max": 1.0714
+    },
+    "h_stage_m": {
+      "count": 2931.0,
+      "mean": 40.2879,
+      "std": 15.1677,
+      "min": 1.74,
+      "25%": 29.775,
+      "50%": 40.3326,
+      "75%": 50.58,
+      "max": 120.6332
+    }
+  },
+  "top_null_pct": {
+    "aprovcalc": 2.1,
+    "tipoderotor": 1.5,
+    "qntdeestag": 1.5,
+    "rotacaomedida": 1.5,
+    "diarotorinter": 1.5,
+    "vibaxial": 1.5,
+    "vibradial": 1.5,
+    "norma": 1.1,
+    "tempaxial": 1.0,
+    "tempradial": 1.0,
+    "id": 0.0,
+    "e3timestamp": 0.0,
+    "modelobomba": 0.0,
+    "vazm3h": 0.0,
+    "vazao": 0.0
+  },
+  "nq_distribution": {
+    "radial_hp": 2931,
+    "radial": 0,
+    "mixed": 0,
+    "semi_axial": 0,
+    "axial": 0
+  },
+  "models_count": 59,
+  "top_models": {
+    "R2-320/100B": 218,
+    "R1-360/125B": 184,
+    "M1-345/300B": 179,
+    "R3-320/150B": 133,
+    "R1-360/100B": 128,
+    "R2-360/200B": 123,
+    "R3-265/75B": 115,
+    "R3-265/50B": 100,
+    "R1-390/300B": 85,
+    "R2-320/125B": 76
+  }
+}

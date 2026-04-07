@@ -344,10 +344,13 @@ def build_report(df_raw: pd.DataFrame, df_clean: pd.DataFrame, clean_meta: dict)
     }
     top_nulls = dict(sorted(null_pct.items(), key=lambda x: -x[1])[:15])
 
-    # Nq distribution (impeller type classification)
+    # Nq distribution (impeller type classification by specific speed)
+    # feat_ns = n*sqrt(Q)/H^0.75 with SI units → European Nq scale (10–300)
+    # feat_nq = feat_ns / 51.65 → dimensionless omega_s (~0.1–6)
+    # Use feat_ns for the bins (correct dimensional scale).
     nq_bins = pd.cut(
-        df_clean["feat_nq"].clip(5, 200),
-        bins=[0, 25, 50, 80, 120, 300],
+        df_clean["feat_ns"].clip(1, 300),
+        bins=[0, 25, 60, 100, 150, 300],
         labels=["radial_hp", "radial", "mixed", "semi_axial", "axial"],
     ).value_counts().to_dict()
     nq_dist = {str(k): int(v) for k, v in nq_bins.items()}

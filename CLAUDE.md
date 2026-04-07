@@ -9,8 +9,8 @@
 
 - **Data**: Abril 2026
 - **Fase atual**: 1 — MVP (Meanline + ETL)
-- **Progresso da Fase 1**: ~40% — ETL completo, surrogate v1 treinado e aprovado
-- **Proximo marco**: API FastAPI expondo surrogate + modulo sizing 1D completo
+- **Progresso da Fase 1**: ~65% — ETL, surrogate v1, API FastAPI, M1.8 validação concluídos
+- **Proximo marco**: Fix ETL (Nq bins), expor API em produção (uvicorn), testes de integração
 
 ---
 
@@ -60,18 +60,47 @@ hpe-project/
   - Salvo em `models/surrogate_v1.pkl`, rastreado no MLflow
 - [x] 12 skill files em `.claude/skills/` (00 a 11)
 - [x] Frontend React + TypeScript (20 melhorias UX implementadas)
+- [x] API FastAPI v2.0 (`hpe/api/main.py`) — POST /sizing/run, POST /surrogate/predict, GET /surrogate/similar, GET /health
+- [x] SurrogateEvaluator (`hpe/ai/surrogate/evaluator.py`) — interface versao-agnostica
+- [x] FeatureStore (`hpe/data/feature_store.py`) — acesso centralizado aos datasets Parquet
+- [x] training_log.py — insert_entry, query_similar, insert_from_sizing, get_stats
+- [x] M1.8 Validacao Integrada (`tests/regression/test_validation_bancada.py`)
+  - 435 pontos sizing 1D vs bancada HIGRA — MAPE 11.69% < 15% (APROVADO)
+  - Bias: +7.65pp (super-estimado — esperado: design otimo vs rotor trimado)
+  - Relatorio: `dataset/validation_m1_8_report.json`
 
 ## O Que NAO Existe Ainda (a implementar)
 
-- [ ] API FastAPI: endpoint `/surrogate/predict` expondo SurrogateV1
-- [ ] Modulo de sizing 1D completo (`hpe/sizing/`) com todos os sub-modulos
+- [ ] Fix ETL: Nq distribution bins usa feat_nq adimensional em vez de feat_ns (Ns europeu)
 - [ ] Geometria parametrica (`hpe/geometry/`) — CadQuery
 - [ ] Pipeline CFD (`hpe/cfd/`)
 - [ ] Integracao `training_log` ← resultados CFD (retroalimentacao)
+- [ ] Testes de integracao da API (pytest + httpx TestClient)
 
 ---
 
 ## Proxima Tarefa Imediata
+
+### TAREFA 4 — Fix ETL Nq Distribution Bins
+
+**Arquivo**: `backend/src/hpe/data/bancada_etl.py`
+
+**Problema**: A coluna `nq_distribution` no ETL usa `feat_nq` (adimensional, ~0.1–1.0)
+nos bins 0–300 (escala de Nq europeu). Resultado: todos os 2931 registros caem no bin
+"radial_hp". O correto e usar `feat_ns` (Ns dimensional, ~10–100) para classificar
+o tipo de impelsor.
+
+**Correcao**:
+```python
+# ERRADO — atual
+df["nq_distribution"] = pd.cut(df["feat_nq"], bins=[0,20,60,120,200,300], ...)
+
+# CORRETO — usar feat_ns
+df["nq_distribution"] = pd.cut(df["feat_ns"], bins=[0,15,30,50,80,120,300],
+    labels=["radial_lp","radial","radial_hp","mixed","axial","out_of_range"])
+```
+
+---
 
 ### TAREFA 1 — ETL do Banco de Bancada ✅ CONCLUIDA
 
@@ -181,7 +210,7 @@ class SurrogateV1:
 ## Bloqueios Conhecidos
 
 - **Tabela de bancada**: A tabela nao e `sigs.teste_bancada` mas sim `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432). ETL conecta via `DATABASE_SIGS_URL` no `.env`.
-- **Nq distribution bins**: O ETL usa `feat_nq` (adimensional ~0-20) nos bins de Nq europeu (0-300). O correto e usar `feat_ns` nos bins. Corrigir na proxima sessao.
+- **Nq distribution bins**: O ETL usa `feat_nq` (adimensional ~0.1-1.0) nos bins de Nq europeu (0-300). O correto e usar `feat_ns` nos bins. Ver TAREFA 4 acima.
 - **CadQuery no Docker**: Instalacao do CadQuery pode ser complexa no container — avaliar imagem base
 - **models/ no .gitignore**: Verificar se `models/surrogate_v1.pkl` deve ser versionado ou ignorado (arquivo ~8MB)
 

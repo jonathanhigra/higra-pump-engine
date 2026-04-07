@@ -5,6 +5,40 @@ import SmartWarnings from './SmartWarnings'
 import QuickCompare from './QuickCompare'
 import DeltaIndicator from './DeltaIndicator'
 import AnimatedNumber from './AnimatedNumber'
+import ImpellerMiniPreview from './ImpellerMiniPreview'
+import RadarChart from './RadarChart'
+
+/* ── Gauge arc ──────────────────────────────────────────────────────────── */
+function GaugeArc({ pct, color }: { pct: number; color: string }) {
+  const r = 40, cx = 52, cy = 52
+  const startAngle = -210, endAngle = 30
+  const totalArc = endAngle - startAngle
+  const angle = startAngle + totalArc * Math.min(1, Math.max(0, pct / 100))
+  const toRad = (d: number) => d * Math.PI / 180
+  const arcX = (a: number) => cx + r * Math.cos(toRad(a))
+  const arcY = (a: number) => cy + r * Math.sin(toRad(a))
+  const describeArc = (start: number, end: number) => {
+    const large = end - start > 180 ? 1 : 0
+    return `M ${arcX(start)} ${arcY(start)} A ${r} ${r} 0 ${large} 1 ${arcX(end)} ${arcY(end)}`
+  }
+  return (
+    <svg width={104} height={80} viewBox="0 0 104 80">
+      <path d={describeArc(startAngle, endAngle)} fill="none" stroke="var(--border-primary)" strokeWidth={7} strokeLinecap="round" />
+      <path d={describeArc(startAngle, angle)} fill="none" stroke={color} strokeWidth={7} strokeLinecap="round" />
+      <text x={cx} y={cy + 6} textAnchor="middle" fill={color} fontSize={18} fontWeight={700}>{pct.toFixed(1)}</text>
+      <text x={cx} y={cy + 20} textAnchor="middle" fill="var(--text-muted)" fontSize={9}>η%</text>
+    </svg>
+  )
+}
+
+/* ── Status dot ─────────────────────────────────────────────────────────── */
+function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
+  const color = ok ? '#2563eb' : warn ? '#d97706' : '#dc2626'
+  const icon = ok ? '✓' : warn ? '⚠' : '✕'
+  return (
+    <span style={{ display: 'inline-block', width: 14, fontSize: 10, color, marginRight: 4, flexShrink: 0, textAlign: 'center', lineHeight: 1 }}>{icon}</span>
+  )
+}
 
 /* ── Inline SVG icon helper ────────────────────────────────────────────── */
 const SvgIcon = ({ d, size = 18 }: { d: string; size?: number }) => (
@@ -274,119 +308,150 @@ export default function DesignDashboard({ sizing, previousSizing, opPoint, onNav
     },
   ]
 
-  const quickActions: { iconPath: string; label: string; tab: Tab }[] = [
-    { iconPath: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', label: 'Ver Geometria 3D', tab: '3d' },
-    { iconPath: 'M3 12h4l3-9 4 18 3-9h4', label: 'Curvas de Desempenho', tab: 'curves' },
-    { iconPath: 'M1 12s4-8 11-8 11 8-4 8-11 8-11-8z', label: 'An\u00E1lise de Perdas', tab: 'losses' },
-    { iconPath: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Otimizar Design', tab: 'optimize' },
+  const quickActions: { iconPath: string; label: string; sub: string; tab: Tab; color: string; glow: string }[] = [
+    {
+      iconPath: 'M3 12h4l3-9 4 18 3-9h4',
+      label: 'Curvas H-Q', sub: 'Desempenho', tab: 'curves',
+      color: '#22c55e', glow: 'rgba(34,197,94,0.18)',
+    },
+    {
+      iconPath: 'M12 20V10M18 20V4M6 20v-4',
+      label: 'Análise de Perdas', sub: 'Distribuição', tab: 'losses',
+      color: '#f59e0b', glow: 'rgba(245,158,11,0.18)',
+    },
+    {
+      iconPath: 'M13 10V3L4 14h7v7l9-11h-7z',
+      label: 'Otimizar', sub: 'NSGA-II / Bayesian', tab: 'optimize',
+      color: '#a78bfa', glow: 'rgba(167,139,250,0.18)',
+    },
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* ── Metric cards ──────────────────────────────────────────────── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12,
-      }}>
-        {metrics.map((m, i) => (
-          <div key={i} style={{
-            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-            borderRadius: 8, padding: '14px 16px',
-            borderLeft: `3px solid ${statusColor(m.status)}`,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <SvgIcon d={m.iconPath} size={16} />
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
-                {m.term ? <EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip> : m.label}
-              </span>
-              {m.badge && (
-                <span style={{
-                  fontSize: 9, padding: '1px 6px', borderRadius: 8,
-                  background: 'rgba(0,160,223,0.15)', color: 'var(--accent)',
-                  fontWeight: 600, textTransform: 'uppercase',
-                }}>
-                  {m.badge}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: statusColor(m.status) }}>
-                <AnimatedNumber value={parseFloat(m.value) || 0} format={(v) => v.toFixed(m.unit === '%' || m.unit === 'm' || m.unit === '' ? 1 : 0)} />
-                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
-                  {m.unit}
-                </span>
-                {m.delta && <DeltaIndicator current={m.delta.current} previous={m.delta.previous} format={m.delta.format} higherIsBetter={m.delta.higherIsBetter} />}
-              </div>
-              {m.label === 'D2' && onWhatIf && (
-                <QuickCompare
-                  metric="D2"
-                  currentValue={sizing.impeller_d2 * 1000}
-                  unit="mm"
-                  onWhatIf={(newD2mm) => onWhatIf(newD2mm)}
-                  previewImpact={(newD2mm) => {
-                    const ratio = newD2mm / (sizing.impeller_d2 * 1000)
-                    const newNq = sizing.specific_speed_nq / Math.pow(ratio, 2)
-                    const newEta = sizing.estimated_efficiency * (0.5 + 0.5 * (1 / ratio))
-                    const newNpsh = sizing.estimated_npsh_r * Math.pow(ratio, 0.5)
-                    return [
-                      { label: 'Nq', value: newNq.toFixed(1), delta: `${((newNq / sizing.specific_speed_nq - 1) * 100).toFixed(1)}%` },
-                      { label: '\u03B7', value: `${(newEta * 100).toFixed(1)}%`, delta: `${((newEta / sizing.estimated_efficiency - 1) * 100).toFixed(1)}%` },
-                      { label: 'NPSHr', value: `${newNpsh.toFixed(1)}m`, delta: `${((newNpsh / sizing.estimated_npsh_r - 1) * 100).toFixed(1)}%` },
-                    ]
-                  }}
-                />
-              )}
-            </div>
-            {m.label === '\u03B7 total' && (
-              <QualityBar value={sizing.estimated_efficiency * 100} min={60} max={95} good_min={75} good_max={90} />
-            )}
-            {m.label === 'NPSHr' && (
-              <QualityBar value={sizing.estimated_npsh_r} min={0} max={15} good_min={0} good_max={6} />
-            )}
-            {m.label === 'De Haller' && deHaller != null && (
-              <QualityBar value={deHaller} min={0.5} max={1.0} good_min={0.72} good_max={0.85} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Quick-action cards ────────────────────────────────────────── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12,
-      }}>
-        {quickActions.map((a, i) => (
-          <div
-            key={i}
-            role="button"
-            tabIndex={0}
-            onClick={() => onNavigate(a.tab)}
-            onKeyDown={e => { if (e.key === 'Enter') onNavigate(a.tab) }}
-            style={{
-              background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-              borderRadius: 8, padding: '14px 16px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 12,
-              transition: 'border-color 0.15s, background 0.15s',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-hover-bg)'
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--card-border)'
-              ;(e.currentTarget as HTMLElement).style.background = 'var(--card-bg)'
-            }}
-          >
-            <SvgIcon d={a.iconPath} size={22} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {a.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* ── Smart Warnings ────────────────────────────────────────────── */}
       {sizing.warnings && sizing.warnings.length > 0 && (
         <SmartWarnings warnings={sizing.warnings} sizing={sizing} onNavigate={(t) => onNavigate(t as Tab)} />
       )}
+
+      {/* ── Quick-action buttons ──────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {quickActions.map((a, i) => (
+              <div
+                key={i}
+                role="button"
+                tabIndex={0}
+                onClick={() => onNavigate(a.tab)}
+                onKeyDown={e => { if (e.key === 'Enter') onNavigate(a.tab) }}
+                style={{
+                  background: `linear-gradient(135deg, ${a.glow}, transparent)`,
+                  border: `1px solid ${a.color}40`,
+                  borderRadius: 9, padding: '11px 13px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 11,
+                  transition: 'all 0.18s ease',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = a.color
+                  el.style.background = `linear-gradient(135deg, ${a.glow.replace('0.18', '0.32')}, ${a.glow.replace('0.18', '0.08')})`
+                  el.style.transform = 'translateY(-1px)'
+                  el.style.boxShadow = `0 4px 16px ${a.glow.replace('0.18', '0.35')}`
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = `${a.color}40`
+                  el.style.background = `linear-gradient(135deg, ${a.glow}, transparent)`
+                  el.style.transform = 'none'
+                  el.style.boxShadow = 'none'
+                }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 7, flexShrink: 0,
+                  background: `${a.color}20`, border: `1px solid ${a.color}40`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={a.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={a.iconPath} />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                    {a.label}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1 }}>
+                    {a.sub}
+                  </div>
+                </div>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={a.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ marginLeft: 'auto', opacity: 0.6, flexShrink: 0 }}>
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </div>
+            ))}
+      </div>
+
+      {/* ── Metric cards — 3×2 grid ───────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {metrics.map((m, i) => (
+              <div key={i} style={{
+                background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                borderRadius: 7, padding: '8px 10px',
+                borderTop: `2px solid ${statusColor(m.status)}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>
+                    {m.term ? <EngineeringTooltip term={m.term}>{m.label}</EngineeringTooltip> : m.label}
+                  </span>
+                  {m.badge && (
+                    <span style={{
+                      fontSize: 8, padding: '1px 4px', borderRadius: 6,
+                      background: 'rgba(0,160,223,0.15)', color: 'var(--accent)',
+                      fontWeight: 600, textTransform: 'uppercase',
+                    }}>
+                      {m.badge}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: statusColor(m.status), lineHeight: 1.1 }}>
+                    <AnimatedNumber value={parseFloat(m.value) || 0} format={(v) => v.toFixed(m.unit === '%' || m.unit === 'm' || m.unit === '' ? 1 : 0)} />
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 2 }}>
+                      {m.unit}
+                    </span>
+                    {m.delta && <DeltaIndicator current={m.delta.current} previous={m.delta.previous} format={m.delta.format} higherIsBetter={m.delta.higherIsBetter} />}
+                  </div>
+                  {m.label === 'D2' && onWhatIf && (
+                    <QuickCompare
+                      metric="D2"
+                      currentValue={sizing.impeller_d2 * 1000}
+                      unit="mm"
+                      onWhatIf={(newD2mm) => onWhatIf(newD2mm)}
+                      previewImpact={(newD2mm) => {
+                        const ratio = newD2mm / (sizing.impeller_d2 * 1000)
+                        const newNq = sizing.specific_speed_nq / Math.pow(ratio, 2)
+                        const newEta = sizing.estimated_efficiency * (0.5 + 0.5 * (1 / ratio))
+                        const newNpsh = sizing.estimated_npsh_r * Math.pow(ratio, 0.5)
+                        return [
+                          { label: 'Nq', value: newNq.toFixed(1), delta: `${((newNq / sizing.specific_speed_nq - 1) * 100).toFixed(1)}%` },
+                          { label: '\u03B7', value: `${(newEta * 100).toFixed(1)}%`, delta: `${((newEta / sizing.estimated_efficiency - 1) * 100).toFixed(1)}%` },
+                          { label: 'NPSHr', value: `${newNpsh.toFixed(1)}m`, delta: `${((newNpsh / sizing.estimated_npsh_r - 1) * 100).toFixed(1)}%` },
+                        ]
+                      }}
+                    />
+                  )}
+                </div>
+                {m.label === '\u03B7 total' && (
+                  <QualityBar value={sizing.estimated_efficiency * 100} min={60} max={95} good_min={75} good_max={90} />
+                )}
+                {m.label === 'NPSHr' && (
+                  <QualityBar value={sizing.estimated_npsh_r} min={0} max={15} good_min={0} good_max={6} />
+                )}
+                {m.label === 'De Haller' && deHaller != null && (
+                  <QualityBar value={deHaller} min={0.5} max={1.0} good_min={0.72} good_max={0.85} />
+                )}
+              </div>
+            ))}
+      </div>
+
     </div>
   )
 }

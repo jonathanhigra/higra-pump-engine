@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 
 // ── Template data ────────────────────────────────────────────────────────────
 
-interface Template {
+export interface Template {
   key: string
   name: string
   description: string
@@ -17,11 +17,11 @@ interface Template {
   n_stages?: number
 }
 
-const TEMPLATES: Template[] = [
+export const TEMPLATES: Template[] = [
   {
     key: 'dragon',
-    name: 'Dragon',
-    description: 'Rotor fechado de referência HIGRA — bomba centrífuga industrial clássica',
+    name: 'HIGRA B-100 (Referência)',
+    description: 'Bomba centrífuga industrial de referência HIGRA — rotor fechado, Nq=28',
     flow_rate_m3h: 100, head_m: 32, rpm: 1750,
     machine_type: 'centrifugal_pump', fluid: 'water',
     expected_nq: 28, expected_eta: 0.82, expected_z: 6,
@@ -162,16 +162,32 @@ const CATEGORY_LABELS: Record<MachineCategory, string> = {
 interface Props {
   onSelect: (params: { flow_rate: number; head: number; rpm: number; machine_type: string }) => void
   loading?: boolean
+  machineTypeFilter?: string
 }
 
-export default function TemplateSelector({ onSelect, loading }: Props) {
+export default function TemplateSelector({ onSelect, loading, machineTypeFilter }: Props) {
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
+  // Map form machine_type values to template categories
+  const categoryForMachineType = (mt: string): MachineCategory | null => {
+    if (mt === 'centrifugal_pump') return 'pump'
+    if (mt === 'francis_turbine') return 'turbine'
+    if (mt === 'axial_fan' || mt === 'sirocco_fan') return 'fan'
+    if (mt === 'centrifugal_compressor') return 'compressor'
+    return null
+  }
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return TEMPLATES
+    let base = TEMPLATES
+    // Filter by machine type if provided
+    if (machineTypeFilter) {
+      const cat = categoryForMachineType(machineTypeFilter)
+      if (cat) base = base.filter(t => getCategory(t) === cat)
+    }
+    if (!search.trim()) return base
     const q = search.toLowerCase()
-    return TEMPLATES.filter(
+    return base.filter(
       t =>
         t.name.toLowerCase().includes(q) ||
         t.description.toLowerCase().includes(q) ||
@@ -179,7 +195,7 @@ export default function TemplateSelector({ onSelect, loading }: Props) {
         t.fluid.toLowerCase().includes(q) ||
         CATEGORY_LABELS[getCategory(t)].toLowerCase().includes(q)
     )
-  }, [search])
+  }, [search, machineTypeFilter])
 
   const handleClick = (t: Template) => {
     setSelectedKey(t.key)

@@ -144,9 +144,14 @@ export default function VersionCompareModal({ data, onClose }: Props) {
             if (!d) return null
             const color = getDeltaColor(m, d.delta)
             const arrow = getArrow(d.delta)
+            const maxBarVal = Math.max(Math.abs(d.a), Math.abs(d.b), 0.001)
+            const pctA = (Math.abs(d.a) / maxBarVal) * 100
+            const pctB = (Math.abs(d.b) / maxBarVal) * 100
+            const isImproved = (m.direction === 'higher' && d.delta > 0) || (m.direction === 'lower' && d.delta < 0)
+            const isWorsened = (m.direction === 'higher' && d.delta < 0) || (m.direction === 'lower' && d.delta > 0)
             return (
               <div key={m.key} style={{
-                display: 'grid', gridTemplateColumns: '140px 1fr 1fr 180px',
+                display: 'grid', gridTemplateColumns: '140px 1fr 1fr 140px',
                 padding: '10px 0',
                 borderBottom: '1px solid var(--border-subtle)',
                 alignItems: 'center',
@@ -155,16 +160,34 @@ export default function VersionCompareModal({ data, onClose }: Props) {
                 <div style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
                   {m.label} {m.unit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>[{m.unit}]</span>}
                 </div>
-                <div style={{ textAlign: 'center', fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                  {d.a.toFixed(m.decimals)}
+                {/* Column A — with mini bar */}
+                <div style={{ padding: '0 10px' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', marginBottom: 4, textAlign: 'center' }}>
+                    {d.a.toFixed(m.decimals)}
+                  </div>
+                  <div style={{ height: 5, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pctA}%`, background: 'var(--accent)', borderRadius: 3 }} />
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                  {d.b.toFixed(m.decimals)}
+                {/* Column B — with mini bar */}
+                <div style={{ padding: '0 10px' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', marginBottom: 4, textAlign: 'center' }}>
+                    {d.b.toFixed(m.decimals)}
+                  </div>
+                  <div style={{ height: 5, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pctB}%`, background: color, borderRadius: 3 }} />
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600, color }}>
-                  {d.delta >= 0 ? '+' : ''}{d.delta.toFixed(m.decimals)}
-                  {' '}({d.pct >= 0 ? '+' : ''}{d.pct.toFixed(1)}%)
-                  {' '}{arrow}
+                {/* Delta */}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, color, fontSize: 13 }}>
+                    {d.delta >= 0 ? '+' : ''}{d.delta.toFixed(m.decimals)}
+                  </div>
+                  <div style={{ fontSize: 10, color, opacity: 0.8 }}>
+                    ({d.pct >= 0 ? '+' : ''}{d.pct.toFixed(1)}%) {arrow}
+                  </div>
+                  {isImproved && <div style={{ fontSize: 9, color: '#22c55e', fontWeight: 600, marginTop: 2 }}>melhora</div>}
+                  {isWorsened && <div style={{ fontSize: 9, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>piora</div>}
                 </div>
               </div>
             )

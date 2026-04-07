@@ -14,8 +14,8 @@ export default function CurvesChart({ points, designFlow, designHead }: Props) {
 
   if (points.length === 0) return null
 
-  const W = 680, H = 300
-  const pad = { top: 20, right: 90, bottom: 44, left: 60 }
+  const W = 600, H = 340
+  const pad = { top: 20, right: 80, bottom: 44, left: 56 }
   const cW = W - pad.left - pad.right
   const cH = H - pad.top - pad.bottom
 
@@ -83,16 +83,12 @@ export default function CurvesChart({ points, designFlow, designHead }: Props) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-        <h3 style={{ color: 'var(--accent)', fontSize: 15, margin: 0 }}>{t.performanceCurves}</h3>
-        <button
-          onClick={() => setShowNpsh(s => !s)}
-          style={{ marginLeft: 'auto', background: showNpsh ? 'rgba(255,213,79,0.15)' : 'none', border: '1px solid var(--border-primary)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-muted)', padding: '3px 10px', fontSize: 11 }}
-        >
-          NPSHr {showNpsh ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}><path d="M20 6L9 17l-5-5" /></svg> : ''}
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <h3 style={{ color: 'var(--accent)', fontSize: 14, margin: 0, fontWeight: 700 }}>Curvas de Desempenho</h3>
         {unstableRects.length > 0 && (
-          <span className="unstable-badge">Zona instável detectada</span>
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontWeight: 600 }}>
+            ⚠ Zona instável
+          </span>
         )}
       </div>
 
@@ -183,13 +179,34 @@ export default function CurvesChart({ points, designFlow, designHead }: Props) {
         )}
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 16, height: 2, background: 'var(--accent)', display: 'inline-block' }} />H-Q</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 16, height: 2, background: '#4caf50', display: 'inline-block' }} />η-Q</span>
-        {showNpsh && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 16, height: 2, background: '#FFD54F', display: 'inline-block', borderTop: '1px dashed #FFD54F' }} />NPSHr</span>}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, background: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />Ponto projeto</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, background: '#4caf50', display: 'inline-block', clipPath: 'polygon(50% 0,100% 50%,50% 100%,0 50%)' }} />BEP</span>
+      {/* Legend + NPSHr toggle unified */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+        {[
+          { color: 'var(--accent)', dash: false, label: 'H-Q', shape: 'line' },
+          { color: '#4caf50',       dash: false, label: 'η-Q', shape: 'line' },
+          { color: 'var(--accent)', dash: false, label: 'Ponto projeto', shape: 'circle' },
+          { color: '#4caf50',       dash: false, label: 'BEP', shape: 'diamond' },
+        ].map(l => (
+          <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', fontSize: 11, color: 'var(--text-muted)' }}>
+            {l.shape === 'line' && <span style={{ width: 14, height: 2, background: l.color, display: 'inline-block', borderRadius: 1 }} />}
+            {l.shape === 'circle' && <span style={{ width: 8, height: 8, background: l.color, borderRadius: '50%', display: 'inline-block', border: '1.5px solid #fff' }} />}
+            {l.shape === 'diamond' && <span style={{ width: 8, height: 8, background: l.color, display: 'inline-block', clipPath: 'polygon(50% 0,100% 50%,50% 100%,0 50%)' }} />}
+            {l.label}
+          </div>
+        ))}
+        {/* NPSHr toggle as legend pill */}
+        <button onClick={() => setShowNpsh(s => !s)} style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px',
+          borderRadius: 12, fontSize: 11, cursor: 'pointer', transition: 'all 0.15s',
+          background: showNpsh ? 'rgba(255,213,79,0.12)' : 'var(--bg-surface)',
+          border: `1px solid ${showNpsh ? '#FFD54F' : 'var(--border-primary)'}`,
+          color: showNpsh ? '#FFD54F' : 'var(--text-muted)',
+          fontFamily: 'var(--font-family)',
+        }}>
+          <span style={{ width: 14, height: 2, background: '#FFD54F', display: 'inline-block', borderRadius: 1, opacity: showNpsh ? 1 : 0.4,
+            backgroundImage: showNpsh ? 'repeating-linear-gradient(90deg,#FFD54F 0,#FFD54F 4px,transparent 4px,transparent 7px)' : 'none' }} />
+          NPSHr {showNpsh ? '✓' : ''}
+        </button>
       </div>
     </div>
   )

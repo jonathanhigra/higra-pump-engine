@@ -25,8 +25,8 @@ export default function EvolutionSparkline({ versions }: Props) {
   const lastY = h - ((etas[etas.length - 1] - min) / range) * h
 
   return (
-    <svg width={w} height={h} style={{ verticalAlign: 'middle' }}
-      title={`Efficiency trend: ${(etas[etas.length - 1] * 100).toFixed(1)}%`}>
+    <svg width={w} height={h} style={{ verticalAlign: 'middle' }}>
+      <title>{`Efficiency trend: ${(etas[etas.length - 1] * 100).toFixed(1)}%`}</title>
       <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="1.5" />
       <circle cx={w} cy={lastY} r="2" fill="var(--accent)" />
     </svg>

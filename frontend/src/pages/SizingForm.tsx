@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import t from '../i18n'
 import { runSizing, getCurves, getLossBreakdown, runStressAnalysis } from '../services/api'
 import ReverseCalc from '../components/ReverseCalc'
@@ -137,9 +137,9 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   )
   const [machineType, setMachineType] = useState('centrifugal_pump')
   const [fluidId, setFluidId] = useState('water20')
-  const [flowRate, setFlowRate] = useState('180')  // always in m³/h internally
-  const [head, setHead] = useState('30')
-  const [rpm, setRpm] = useState('1750')
+  const [flowRate, setFlowRate] = useState('')  // always in m³/h internally
+  const [head, setHead] = useState('')
+  const [rpm, setRpm] = useState('')
   const [advOpen, setAdvOpen] = useState(false)
   const [tipClearance, setTipClearance] = useState('0.3')   // mm
   const [roughness, setRoughness] = useState('25')           // μm
@@ -159,6 +159,70 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
   const [prevFluid, setPrevFluid] = useState(fluidId)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+
+  // #3 — onBlur field validation messages
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({ Q: null, H: null, n: null })
+
+  const validateField = (field: 'Q' | 'H' | 'n', val: string) => {
+    const v = parseFloat(val)
+    let msg: string | null = null
+    if (!val || val === '') { setFieldErrors(prev => ({ ...prev, [field]: null })); return }
+    if (isNaN(v) || v <= 0) { msg = `${field} deve ser um número positivo` }
+    else if (field === 'Q') {
+      if (v < 1) msg = '⚠ Vazão muito baixa — verifique se está em m³/h'
+      else if (v > 10000) msg = '⚠ Vazão alta — bomba de grande porte'
+      else if (v < 10) msg = 'Pequeno porte — considere multi-estágio se H > 50m'
+    } else if (field === 'H') {
+      if (v > 300) msg = '⚠ Altura elevada — considere bomba multi-estágio'
+      else if (v > 100) msg = 'Alta pressão — verifique RPM e cavitação'
+    } else if (field === 'n') {
+      if (v > 6000) msg = '⚠ RPM muito alto para bomba convencional'
+      else if (v < 300) msg = '⚠ RPM baixo — eficiência pode ser limitada'
+      else if (v === 2900 || v === 3550) msg = 'Típico 60Hz / 2 polos'
+    }
+    setFieldErrors(prev => ({ ...prev, [field]: msg }))
+  }
+
+  // #10 — undo stack for form fields (Ctrl+Z)
+  const [undoStack, setUndoStack] = useState<Array<{q: string; h: string; n: string}>>([])
+
+  const pushUndo = useCallback(() => {
+    setUndoStack(prev => [...prev.slice(-9), { q: flowRate, h: head, n: rpm }])
+  }, [flowRate, head, rpm])
+
+  const handleUndo = useCallback(() => {
+    setUndoStack(s => {
+      if (s.length === 0) return s
+      const prev = s[s.length - 1]
+      setFlowRate(prev.q); setHead(prev.h); setRpm(prev.n)
+      return s.slice(0, -1)
+    })
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
+        const inThisForm = (active as HTMLElement).closest('form')
+        if (inThisForm) { e.preventDefault(); handleUndo() }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleUndo])
+
+  // #5 — loading step cycling
+  const [loadingMsg, setLoadingMsg] = useState('Calculando...')
+  const LOADING_MSGS = ['Triângulos de vel...', 'Curva H-Q...', 'Análise de perdas...', 'Estrutural...', 'Finalizando...']
+  useEffect(() => {
+    if (!loading) { setLoadingMsg('Calculando...'); return }
+    let i = 0
+    const timer = setInterval(() => {
+      i = (i + 1) % LOADING_MSGS.length
+      setLoadingMsg(LOADING_MSGS[i])
+    }, 800)
+    return () => clearInterval(timer)
+  }, [loading])
 
   /* ── Preventive validation (#5) ─────────────────────────────────────── */
   const preventiveWarning = useMemo(() => {
@@ -493,12 +557,14 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
           <label style={labelStyle}>Vaz\u00E3o Q [{unit === 'm3h' ? 'm\u00B3/h' : 'm\u00B3/s'}]</label>
           <input className="input" type="number" step="any"
             value={unit === 'm3h' ? flowRate : (q_m3h / 3600).toFixed(6)}
-            onChange={e => setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600))}
+            onChange={e => { pushUndo(); setFlowRate(unit === 'm3h' ? e.target.value : String(parseFloat(e.target.value) * 3600)) }}
+            onBlur={() => validateField('Q', flowRate)}
             placeholder={unit === 'm3h' ? 'ex: 180' : 'ex: 0.05'}
             style={{ borderColor: inputBorder('Q', flowRate) }} />
           <input type="range" min={0} max={1000} step={1}
             value={Math.round(Math.log10(Math.max(q_m3h, 1)) / Math.log10(5000) * 1000)}
             onChange={e => {
+              pushUndo()
               const logVal = (parseFloat(e.target.value) / 1000) * Math.log10(5000)
               const val = Math.pow(10, logVal)
               setFlowRate(unit === 'm3h' ? val.toFixed(1) : (val / 3600).toFixed(5))
@@ -508,6 +574,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
             const hint = rangeHint(q_m3h, 1, 10000, 'T\u00EDpico: 1-10000 m\u00B3/h')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          {fieldErrors.Q && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2, fontWeight: 500 }}>{fieldErrors.Q}</div>}
           <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-muted)', fontStyle: 'italic' }}>
             Dica: use Multi-Velocidade para ver o desempenho em faixa de vazão.
           </div>
@@ -522,31 +589,33 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Altura Total H [m]</label>
-          <input className="input" type="number" step="0.1" value={head} onChange={e => setHead(e.target.value)} placeholder="ex: 30"
+          <input className="input" type="number" step="0.1" value={head} onChange={e => { pushUndo(); setHead(e.target.value) }} onBlur={() => validateField('H', head)} placeholder="ex: 30"
             style={{ borderColor: inputBorder('H', head) }} />
           <input type="range" min={1} max={500} step={1}
             value={Math.min(500, Math.max(1, parseFloat(head) || 1))}
-            onChange={e => setHead(e.target.value)}
+            onChange={e => { pushUndo(); setHead(e.target.value) }}
             className="hpe-slider" />
           {(() => {
             const hint = rangeHint(parseFloat(head) || 0, 1, 500, 'T\u00EDpico: 1-500 m')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          {fieldErrors.H && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2, fontWeight: 500 }}>{fieldErrors.H}</div>}
           <RecalcChip field="h" />
         </div>
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Rota\u00E7\u00E3o n [rpm]</label>
-          <input className="input" type="number" step="1" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="ex: 1750"
+          <input className="input" type="number" step="1" value={rpm} onChange={e => { pushUndo(); setRpm(e.target.value) }} onBlur={() => validateField('n', rpm)} placeholder="ex: 1750"
             style={{ borderColor: inputBorder('n', rpm) }} />
           <input type="range" min={300} max={6000} step={10}
             value={Math.min(6000, Math.max(300, parseFloat(rpm) || 300))}
-            onChange={e => setRpm(e.target.value)}
+            onChange={e => { pushUndo(); setRpm(e.target.value) }}
             className="hpe-slider" />
           {(() => {
             const hint = rangeHint(parseFloat(rpm) || 0, 300, 15000, 'T\u00EDpico: 300-15000 rpm')
             return <div style={{ fontSize: 10, marginTop: 3, color: hint.warn ? '#ff9800' : 'var(--text-muted)' }}>{hint.text}</div>
           })()}
+          {fieldErrors.n && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2, fontWeight: 500 }}>{fieldErrors.n}</div>}
           <RecalcChip field="n" />
         </div>
 
@@ -712,7 +781,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
                 style={{ animation: 'spin 1s linear infinite' }}>
                 <path d="M21 12a9 9 0 11-6.219-8.56" />
               </svg>
-              Calculando...
+              {loadingMsg}
             </span>
           : calculated
           ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -723,6 +792,13 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
               Executar Dimensionamento
             </span>}
       </button>
+
+      {/* #5 — progress bar when loading */}
+      {loading && (
+        <div style={{ height: 3, borderRadius: 2, background: 'var(--border-primary)', overflow: 'hidden', marginTop: 4 }}>
+          <div style={{ height: '100%', background: 'var(--accent)', borderRadius: 2, animation: 'progressBar 1.8s ease-in-out infinite' }} />
+        </div>
+      )}
 
       <button type="button" onClick={() => setReverseOpen(true)}
         style={{
@@ -764,6 +840,7 @@ export default function SizingForm({ onResult, loading, setLoading, extFlowRate,
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes btnPulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        @keyframes progressBar { 0% { width: 0%; margin-left: 0; } 50% { width: 60%; margin-left: 20%; } 100% { width: 0%; margin-left: 100%; } }
         .hpe-slider {
           width: 100%;
           height: 4px;

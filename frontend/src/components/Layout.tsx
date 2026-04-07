@@ -17,11 +17,12 @@ interface Props {
   onRecalculate?: () => void
   onExport?: () => void
   onContextMenu?: (e: React.MouseEvent) => void
+  sizing?: any
 }
 
 export type { Tab }
 
-export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad, warningCount, recentTabs, onRecalculate, onExport, onContextMenu }: Props) {
+export default function Layout({ page, activeTab, userName, projectName, onNavigate, onLogout, children, noPad, warningCount, recentTabs, onRecalculate, onExport, onContextMenu, sizing }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('hpe_sidebar_collapsed') === 'true'
   })
@@ -69,6 +70,7 @@ export default function Layout({ page, activeTab, userName, projectName, onNavig
             activeTab={activeTab}
             onTabChange={(tab) => onNavigate('design', tab)}
             recentTabs={recentTabs}
+            sizing={sizing}
           />
         )}
         {children}

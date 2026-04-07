@@ -1,9 +1,22 @@
-import React from 'react'
+import React, { useState } from 'react'
 import t from '../i18n'
 
 interface Props { losses: any }
 
+const LOSS_DETAILS: Record<string, { desc: string; tip: string }> = {
+  profile_loss_ps: { desc: 'Perda de perfil no lado de pressão (pressure side)', tip: 'Reduzir com ângulo β₂ menor ou polimento superficial (Ra < 1.6 μm)' },
+  profile_loss_ss: { desc: 'Perda de perfil no lado de sucção (suction side)', tip: 'Verificar distribuição de carga — De Haller < 0.7 indica risco de separação' },
+  tip_leakage: { desc: 'Perda por vazamento na folga de topo (tip clearance)', tip: 'Reduzir folga de topo — mínimo de 0.2 mm para operação estável' },
+  endwall_hub: { desc: 'Perda de parede — disco de hub (modelo Denton)', tip: 'Otimizar perfil meridional do hub para reduzir gradiente de pressão adverso' },
+  endwall_shroud: { desc: 'Perda de parede — shroud / carcaça', tip: 'Perfil de shroud mais suave e folga de topo controlada' },
+  mixing: { desc: 'Perda de mistura na saída do rotor (jet-wake mixing)', tip: 'Aumentar número de pás ou usar pás interpassagem (splitters) para homogeneizar o fluxo' },
+  incidence: { desc: 'Perda por incidência no bordo de ataque', tip: 'Ajustar β₁ para que coincida com o ângulo de entrada do escoamento' },
+  recirculation: { desc: 'Perda por recirculação interna', tip: 'Verificar ponto de operação vs. curva de projeto — evitar operação longe do BEP' },
+}
+
 export default function LossBreakdownChart({ losses }: Props) {
+  const [selected, setSelected] = useState<string | null>(null)
+
   if (!losses) return <p style={{ color: 'var(--text-muted)' }}>{t.lossUnavailable}</p>
 
   const items = [
@@ -20,17 +33,47 @@ export default function LossBreakdownChart({ losses }: Props) {
 
   return (
     <div>
-      <h3 style={{ color: 'var(--accent)', fontSize: 15 }}>{t.lossBreakdown}</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 500 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <h3 style={{ color: 'var(--accent)', fontSize: 15, margin: 0 }}>{t.lossBreakdown}</h3>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>— clique em uma barra para detalhes</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 560 }}>
         {items.map(item => {
           const val = losses[item.key] || 0
+          const isSelected = selected === item.key
+          const detail = LOSS_DETAILS[item.key]
           return (
-            <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-              <span style={{ width: 130, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>{item.label}</span>
-              <div style={{ flex: 1, background: 'var(--bg-surface)', borderRadius: 3, height: 18, position: 'relative' }}>
-                <div style={{ width: `${(val / maxVal) * 100}%`, background: item.color, height: '100%', borderRadius: 3, transition: 'width 0.3s' }} />
+            <div key={item.key}>
+              <div
+                onClick={() => setSelected(isSelected ? null : item.key)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: '4px 6px', borderRadius: 5, transition: 'background 0.15s', background: isSelected ? `${item.color}0a` : 'transparent' }}
+                onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = `${item.color}07` }}
+                onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              >
+                <span style={{ width: 130, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0, fontSize: 11 }}>{item.label}</span>
+                <div style={{ flex: 1, background: 'var(--bg-surface)', borderRadius: 3, height: 18, position: 'relative' }}>
+                  <div style={{ width: `${(val / maxVal) * 100}%`, background: item.color, height: '100%', borderRadius: 3, transition: 'width 0.3s' }} />
+                </div>
+                <span style={{ width: 60, fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, textAlign: 'right' }}>{val.toFixed(3)} m</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, transform: isSelected ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </div>
-              <span style={{ width: 60, fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{val.toFixed(3)} m</span>
+              {/* #12 — expandable detail panel */}
+              {isSelected && detail && (
+                <div style={{
+                  marginLeft: 138, marginBottom: 6,
+                  padding: '8px 12px', borderRadius: '0 0 6px 6px',
+                  background: `${item.color}0d`, border: `1px solid ${item.color}30`,
+                  borderTop: 'none', fontSize: 11,
+                }}>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: 5, fontWeight: 500 }}>{detail.desc}</div>
+                  <div style={{ color: '#f59e0b', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
+                    <span style={{ flexShrink: 0 }}>💡</span>
+                    <span>{detail.tip}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}

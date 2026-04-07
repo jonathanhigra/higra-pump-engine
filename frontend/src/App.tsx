@@ -22,6 +22,8 @@ import MeridionalEditor from './components/MeridionalEditor'
 import SpanwiseLoadingChart from './components/SpanwiseLoadingChart'
 import ReferencePanel from './components/ReferencePanel'
 import ExportPanel from './components/ExportPanel'
+import ImpellerMiniPreview from './components/ImpellerMiniPreview'
+import RadarChart from './components/RadarChart'
 import DoEPanel from './components/DoEPanel'
 import ParetoPanel from './components/ParetoPanel'
 import LeanSweepPanel from './components/LeanSweepPanel'
@@ -62,7 +64,7 @@ import { emailResults } from './utils/emailResults'
 import useDynamicFavicon from './hooks/useDynamicFavicon'
 import { useToast } from './hooks/useToast'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
+import { runSizing, getCurves, getLossBreakdown, runStressAnalysis, saveVersion, listVersions, getVersion, compareVersions, deleteVersion as apiDeleteVersion } from './services/api'
 import type { VersionEntry, VersionCompareResult } from './services/api'
 
 /* Simple inline panels for Noise and Batch until full components are built */
@@ -186,7 +188,7 @@ export default function App() {
   const [losses, setLosses] = useState<any>(null)
   const [stress, setStress] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const [opPoint, setOpPoint] = useState({ flowRate: 180, head: 30, rpm: 1750 })
+  const [opPoint, setOpPoint] = useState({ flowRate: 0, head: 0, rpm: 0 })
   // const [advancedMode, setAdvancedMode] = useState(false) // removed from header — available in sidebar
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
@@ -213,6 +215,18 @@ export default function App() {
   const [overviewTab, setOverviewTab] = useState(false)  // CompleteResultView toggle (#10)
   const [showAutoRestore, setShowAutoRestore] = useState(false)
   const { toasts, toast, dismiss } = useToast()
+
+  // #1 — unsaved indicator
+  const [isDirty, setIsDirty] = useState(false)
+  // #2 — granular loading step
+  const [loadingStep, setLoadingStep] = useState('')
+  // #4 — what-changed diff banner
+  const [changeDiff, setChangeDiff] = useState<string | null>(null)
+  // #16 — focus / form-panel collapsed
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // #20 — new version banner
+  const CURRENT_VERSION = '0.2.1'
+  const [newVersionBanner, setNewVersionBanner] = useState(false)
 
   // Dynamic favicon showing Nq value
   useDynamicFavicon(sizing?.specific_speed_nq || null)
@@ -246,6 +260,25 @@ export default function App() {
     const saved = localStorage.getItem('hpe_token')
     if (saved) { setToken(saved); setPage('projects') }
   }, [])
+
+  // #20 — new version banner
+  useEffect(() => {
+    const seen = localStorage.getItem('hpe_last_version')
+    if (seen && seen !== CURRENT_VERSION) setNewVersionBanner(true)
+    localStorage.setItem('hpe_last_version', CURRENT_VERSION)
+  }, [])
+
+  // #18 — Ctrl+P quick print
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p' && sizing && page === 'design') {
+        e.preventDefault()
+        window.print()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [sizing, page])
 
   // Auto-save to localStorage every 30s (feature #10)
   useEffect(() => {
@@ -340,12 +373,72 @@ export default function App() {
     }
   }
 
-  const handleSelectProject = (project: any) => {
-    setCurrentProject(project)
+  // templateOp is stored so the useEffect below can pick it up
+  const [pendingTemplateOp, setPendingTemplateOp] = useState<{ flowRate: number; head: number; rpm: number } | null>(null)
+  // Incremented on every handleSelectProject call so the effect fires even when reopening the same project
+  const [projectOpenKey, setProjectOpenKey] = useState(0)
+
+  const handleSelectProject = (project: any, templateOp?: { flowRate: number; head: number; rpm: number; machine_type?: string }) => {
+    // Reset all design state synchronously
     setSizing(null); setCurves([]); setLosses(null); setStress(null)
+    setVersions([]); setCurrentVersionId(null)
+    setOpPoint({ flowRate: 0, head: 0, rpm: 0 })
+    setPendingTemplateOp(templateOp && templateOp.flowRate > 0 ? templateOp : null)
+    setCurrentProject(project)
+    setProjectOpenKey(k => k + 1)   // always triggers the useEffect, even for same project id
     setTab('results')
     setPage('design')
   }
+
+  // Load last version whenever the active project is opened (React-idiomatic)
+  useEffect(() => {
+    if (page !== 'design' || !currentProject?.id) return
+
+    // Template op → just pre-fill and run, no version to restore
+    if (pendingTemplateOp) {
+      const { flowRate, head, rpm } = pendingTemplateOp
+      setOpPoint({ flowRate, head, rpm })
+      setPendingTemplateOp(null)
+      setTimeout(() => handleRunSizing(flowRate, head, rpm), 80)
+      return
+    }
+
+    // Existing project → load versions and restore the latest
+    let cancelled = false
+    ;(async () => {
+      try {
+        const vers = await listVersions(currentProject.id, 50)
+        if (cancelled) return
+        if (vers.length === 0) return
+
+        setVersions(vers)
+        const latest = vers[0]   // newest-first from API
+        setCurrentVersionId(latest.id)
+        const qH = latest.flow_rate >= 1 ? latest.flow_rate : latest.flow_rate * 3600
+        setOpPoint({ flowRate: qH, head: latest.head, rpm: latest.rpm })
+
+        try {
+          const detail = await getVersion(latest.id)
+          if (cancelled) return
+          const sr = detail.sizing_result
+          if (sr && Object.keys(sr).length > 5) {
+            setSizing(sr as any)
+            setTab('overview')   // open on Visão Geral after restore
+            const qm3s = qH / 3600
+            getCurves(qm3s, latest.head, latest.rpm).then(c => { if (!cancelled) setCurves(c.points || []) }).catch(() => {})
+            getLossBreakdown(qm3s, latest.head, latest.rpm).then(d => { if (!cancelled) setLosses(d) }).catch(() => {})
+          } else {
+            // sizing_result incomplete → recalculate without saving a new version
+            if (!cancelled) handleRunSizing(qH, latest.head, latest.rpm, true)
+          }
+        } catch {
+          if (!cancelled) handleRunSizing(qH, latest.head, latest.rpm, true)
+        }
+      } catch { /* project has no versions yet — form stays blank */ }
+    })()
+
+    return () => { cancelled = true }   // cleanup if project changes again quickly
+  }, [projectOpenKey])                  // projectOpenKey increments on every handleSelectProject call
 
   const handleSaveDesign = async () => {
     if (!sizing || !currentProject) return
@@ -362,24 +455,42 @@ export default function App() {
       const r = await fetch(`/api/v1/projects/${currentProject.id}/designs`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      if (r.ok) { const d = await r.json(); setSavedId(d.id); toast('Design salvo no projeto', 'success'); logAction('Design salvo', currentProject?.name) }
+      if (r.ok) { const d = await r.json(); setSavedId(d.id); setIsDirty(false); toast('Design salvo no projeto', 'success'); logAction('Design salvo', currentProject?.name) }
       else { toast('Erro ao salvar design', 'error') }
     } catch { toast('Erro ao salvar design', 'error') }
     finally { setSaving(false) }
   }
 
   // Full sizing run — sequential to avoid BaseHTTPMiddleware concurrency deadlock
-  const handleRunSizing = async (q: number, h: number, n: number) => {
+  const handleRunSizing = async (q: number, h: number, n: number, skipVersionSave = false) => {
     setLoading(true)
+    setChangeDiff(null)
     try {
       const qm3s = q / 3600
       // 1. Main sizing first
+      setLoadingStep('Triângulos de velocidade...')
       const result = await runSizing(qm3s, h, n)
       // Save previous sizing for delta indicators
+      const prevSizing = sizing
       setPreviousSizing(sizing)
       setSizing(result)
       setOpPoint({ flowRate: q, head: h, rpm: n })
       setSavedId(null)
+      setIsDirty(true)
+
+      // #4 — compute what changed vs previous run
+      if (prevSizing) {
+        const diffs: string[] = []
+        const etaDelta = (result.estimated_efficiency - prevSizing.estimated_efficiency) * 100
+        if (Math.abs(etaDelta) > 0.1) diffs.push(`${etaDelta >= 0 ? '↑' : '↓'} η ${etaDelta >= 0 ? '+' : ''}${etaDelta.toFixed(1)}%`)
+        const npshDelta = result.estimated_npsh_r - prevSizing.estimated_npsh_r
+        if (Math.abs(npshDelta) > 0.05) diffs.push(`${npshDelta >= 0 ? '↑' : '↓'} NPSHr ${npshDelta >= 0 ? '+' : ''}${npshDelta.toFixed(1)}m`)
+        const powDelta = (result.estimated_power - prevSizing.estimated_power) / 1000
+        if (Math.abs(powDelta) > 0.05) diffs.push(`${powDelta >= 0 ? '↑' : '↓'} P ${powDelta >= 0 ? '+' : ''}${powDelta.toFixed(1)}kW`)
+        const d2Delta = (result.impeller_d2 - prevSizing.impeller_d2) * 1000
+        if (Math.abs(d2Delta) > 0.5) diffs.push(`D2 ${d2Delta >= 0 ? '+' : ''}${d2Delta.toFixed(0)}mm`)
+        if (diffs.length > 0) setChangeDiff(diffs.join(' · '))
+      }
 
       // Push to calculation history (max 10, FIFO)
       setHistory(prev => {
@@ -397,25 +508,35 @@ export default function App() {
       })
 
       // 2. Secondary data — sequential to avoid middleware serialization deadlock
+      setLoadingStep('Curva H-Q...')
       const curvesData = await getCurves(qm3s, h, n).catch(() => ({ points: [] }))
       setCurves(curvesData.points || [])
 
+      setLoadingStep('Análise de perdas...')
       const lossData = await getLossBreakdown(qm3s, h, n).catch(() => null)
       setLosses(lossData)
 
+      setLoadingStep('Análise estrutural...')
       const stressData = await runStressAnalysis(qm3s, h, n).catch(() => null)
       setStress(stressData)
 
-      // Auto-save as version
-      try {
-        const ver = await saveVersion(
-          { flow_rate: qm3s, head: h, rpm: n },
-          result,
-          currentProject?.id || undefined,
-        )
-        setVersions(prev => [ver, ...prev])
-        setCurrentVersionId(ver.id)
-      } catch { /* version save is best-effort */ }
+      // Auto-save as version (skip when restoring an existing version)
+      if (!skipVersionSave) {
+        setLoadingStep('Salvando versão...')
+        try {
+          const ver = await saveVersion(
+            { flow_rate: qm3s, head: h, rpm: n },
+            result,
+            currentProject?.id || undefined,
+          )
+          setVersions(prev => [ver, ...prev])
+          setCurrentVersionId(ver.id)
+          setIsDirty(false)
+        } catch { /* version save is best-effort */ }
+      }
+
+      // Always land on Visão Geral after a sizing run
+      setTab('overview')
 
       toast('Dimensionamento concluido', 'success')
       incrementSizingCount()
@@ -465,13 +586,14 @@ export default function App() {
       toast('Erro ao calcular', 'error')
     } finally {
       setLoading(false)
+      setLoadingStep('')
     }
   }
 
   // Keyboard shortcuts
   const handleRunSizingShortcut = useCallback(() => {
-    if (sizing || opPoint) handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm)
-  }, [opPoint, sizing])
+    if (opPoint.flowRate > 0 && opPoint.head > 0 && opPoint.rpm > 0) handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm)
+  }, [opPoint])
 
   useKeyboardShortcuts({
     onRunSizing: handleRunSizingShortcut,
@@ -495,7 +617,8 @@ export default function App() {
     // flow_rate from backend is in m3/s, convert to m3/h for the form
     const qH = v.flow_rate >= 1 ? v.flow_rate : v.flow_rate * 3600
     setOpPoint({ flowRate: qH, head: v.head, rpm: v.rpm })
-    handleRunSizing(qH, v.head, v.rpm)
+    // skipVersionSave=true: restoring an existing version must NOT create a new one
+    handleRunSizing(qH, v.head, v.rpm, true)
   }
 
   const handleVersionCompare = async (a: VersionEntry, b: VersionEntry) => {
@@ -558,7 +681,7 @@ export default function App() {
         </div>
       )}
       {shortcutsHelpOpen && <ShortcutsHelpModal onClose={() => setShortcutsHelpOpen(false)} />}
-      <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={handleNavigate} />
+      <GuidedTour active={tourActive} onComplete={() => setTourActive(false)} onNavigate={(p, t) => handleNavigate(p, t as Tab)} />
       {compareData && <VersionCompareModal data={compareData} onClose={() => setCompareData(null)} />}
       <FloatingMetrics sizing={sizing} resultsRef={resultsRef} />
       <ContextualHelp open={helpOpen} onClose={() => setHelpOpen(false)} currentTab={tab} />
@@ -700,7 +823,7 @@ export default function App() {
   }
 
   // === DESIGN — wide tabs (editors, optimization, etc.) ===
-  if (WIDE_TABS.includes(tab) && tab !== '3d') {
+  if (WIDE_TABS.includes(tab) && (tab as string) !== '3d') {
     return (
       <Layout page="design" activeTab={tab} userName={user?.name || t.user}
         projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout} warningCount={warningCount} recentTabs={recentTabs}>
@@ -762,12 +885,22 @@ export default function App() {
       projectName={currentProject?.name} onNavigate={handleNavigate} onLogout={handleLogout}
       onRecalculate={sizing ? () => handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm) : undefined}
       onExport={sizing ? () => setExportCenterOpen(true) : undefined}
-      onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}>
+      onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}
+      sizing={sizing}>
 
       {/* Progress Stepper — removed: sub-tabs already serve the same purpose */}
 
       <div className="content-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* #16 — Focus mode toggle */}
+          <button
+            type="button"
+            title={sidebarCollapsed ? 'Mostrar painel (⊞)' : 'Modo foco — ocultar painel (⊟)'}
+            onClick={() => setSidebarCollapsed(v => !v)}
+            style={{ background: 'none', border: '1px solid var(--border-primary)', borderRadius: 4, padding: '3px 7px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, transition: 'all 0.15s', flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+          >{sidebarCollapsed ? '⊞' : '⊟'}</button>
           <button
             type="button"
             onClick={() => handleNavigate('projects')}
@@ -793,11 +926,35 @@ export default function App() {
               style={{ fontSize: 18, fontWeight: 600, padding: '2px 8px', minWidth: 200 }}
             />
           ) : (
-            <h1
-              style={{ fontSize: 18, margin: 0, cursor: currentProject ? 'text' : 'default' }}
-              onDoubleClick={() => { if (currentProject) { setEditingProjectName(true); setEditProjectNameVal(currentProject.name) } }}
-              title={currentProject ? 'Duplo-clique para renomear' : undefined}
-            >{currentProject?.name || t.quickDesign}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <h1
+                style={{ fontSize: 18, margin: 0, cursor: currentProject ? 'text' : 'default' }}
+                onDoubleClick={() => { if (currentProject) { setEditingProjectName(true); setEditProjectNameVal(currentProject.name) } }}
+                title={currentProject ? 'Duplo-clique para renomear' : undefined}
+              >{currentProject?.name || t.quickDesign}</h1>
+              {/* #1 — unsaved dot */}
+              {isDirty && (
+                <span title="Alterações não salvas — Ctrl+S para salvar"
+                  style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0, boxShadow: '0 0 6px #f59e0b80' }}
+                />
+              )}
+              {/* #14 — pencil icon */}
+              {currentProject && (
+                <button
+                  type="button"
+                  title="Renomear projeto"
+                  onClick={() => { setEditingProjectName(true); setEditProjectNameVal(currentProject.name) }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', color: 'var(--text-muted)', opacity: 0.45, lineHeight: 1, display: 'flex', alignItems: 'center' }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent)' }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '0.45'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -810,6 +967,16 @@ export default function App() {
             onDelete={handleVersionDelete}
             onDuplicate={handleDuplicateVersion}
           />
+          {/* Inline progress next to Exportar */}
+          {sizing && (
+            <ProjectChecklist
+              hasSizing={completedSteps.includes('sizing')}
+              hasViewedGeometry={completedSteps.includes('geometria')}
+              hasViewedAnalysis={completedSteps.includes('analise')}
+              hasCheckedNpsh={completedSteps.includes('sizing')}
+              hasExported={completedSteps.includes('exportar')}
+            />
+          )}
           <button
             type="button"
             onClick={() => setExportCenterOpen(true)}
@@ -826,11 +993,20 @@ export default function App() {
         </div>
       </div>
 
-      {/* Two-column design layout: left = form + export, right = results + analysis tabs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
+      {/* #20 — new version banner */}
+      {newVersionBanner && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'var(--accent)', color: '#fff', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 12, fontWeight: 500 }}>
+          <span>Nova versão {CURRENT_VERSION} disponível — atualize a página para aplicar as melhorias</span>
+          <button onClick={() => window.location.reload()} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-family)' }}>Recarregar</button>
+          <button onClick={() => setNewVersionBanner(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, padding: '0 4px', marginLeft: 4, lineHeight: 1 }}>×</button>
+        </div>
+      )}
 
-        {/* LEFT PANEL — always visible */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Two-column design layout: left = form + export, right = results + analysis tabs */}
+      <div style={{ display: 'grid', gridTemplateColumns: sidebarCollapsed ? '0 1fr' : '320px 1fr', gap: sidebarCollapsed ? 0 : 24, transition: 'grid-template-columns 0.25s ease' }}>
+
+        {/* LEFT PANEL — collapsible via focus mode */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: sidebarCollapsed ? 'hidden' : 'visible', opacity: sidebarCollapsed ? 0 : 1, transition: 'opacity 0.2s', minWidth: 0 }}>
           <SizingForm
             onResult={async (result, curvePoints, lossData, stressData, op) => {
               setPreviousSizing(sizing)
@@ -862,22 +1038,37 @@ export default function App() {
             extHead={opPoint.head}
             extRpm={opPoint.rpm}
           />
-          <ExportPanel sizing={sizing} op={sizing ? opPoint : null} curves={curves} projectName={currentProject?.name} onExported={() => markStep('exportar')} />
-          {sizing && (
-            <div className="card" style={{ marginTop: 12, padding: 12 }}>
-              <ProjectChecklist
-                hasSizing={completedSteps.includes('sizing')}
-                hasViewedGeometry={completedSteps.includes('geometria')}
-                hasViewedAnalysis={completedSteps.includes('analise')}
-                hasCheckedNpsh={completedSteps.includes('sizing')}
-                hasExported={completedSteps.includes('exportar')}
-              />
-            </div>
-          )}
         </div>
 
         {/* RIGHT PANEL — results area */}
-        <div ref={resultsRef}>
+        <div ref={resultsRef} style={{ position: 'relative' }}>
+
+          {/* #2 — granular loading step banner */}
+          {loading && (
+            <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(0,160,223,0.08)', border: '1px solid rgba(0,160,223,0.2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                <path d="M21 12a9 9 0 11-6.219-8.56" />
+              </svg>
+              <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>{loadingStep || 'Calculando...'}</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                {['Triângulos de velocidade...','Curva H-Q...','Análise de perdas...','Análise estrutural...','Salvando versão...'].map((step, i) => {
+                  const steps = ['Triângulos de velocidade...','Curva H-Q...','Análise de perdas...','Análise estrutural...','Salvando versão...']
+                  const currentIdx = steps.indexOf(loadingStep)
+                  return <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i <= currentIdx ? 'var(--accent)' : 'var(--border-primary)', transition: 'background 0.3s' }} />
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* #4 — "o que mudou" diff banner */}
+          {changeDiff && !loading && (
+            <div style={{ marginBottom: 10, padding: '8px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>{changeDiff}</span>
+              <button onClick={() => setChangeDiff(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+            </div>
+          )}
+
           {/* Section guide (#2) */}
           <SectionGuide tab={tab} />
 
@@ -888,69 +1079,99 @@ export default function App() {
 
           {sizing ? (
             <>
-              {/* Overview toggle (#10) */}
+              {/* Results: 2-column layout — left = metrics+detail, right = 3D+health sticky */}
               {tab === 'results' && (
-                <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
-                  <button onClick={() => setOverviewTab(false)} style={{
-                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                    border: `1px solid ${!overviewTab ? 'var(--accent)' : 'var(--border-primary)'}`,
-                    background: !overviewTab ? 'rgba(0,160,223,0.15)' : 'transparent',
-                    color: !overviewTab ? 'var(--accent)' : 'var(--text-muted)',
-                    fontWeight: 500, transition: 'all 0.15s',
-                  }}>Detalhado</button>
-                  <button onClick={() => setOverviewTab(true)} style={{
-                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                    border: `1px solid ${overviewTab ? 'var(--accent)' : 'var(--border-primary)'}`,
-                    background: overviewTab ? 'rgba(0,160,223,0.15)' : 'transparent',
-                    color: overviewTab ? 'var(--accent)' : 'var(--text-muted)',
-                    fontWeight: 500, transition: 'all 0.15s',
-                  }}>Visao Geral</button>
-                  <button onClick={() => setGlossaryOpen(true)} style={{
-                    fontSize: 11, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                    border: '1px solid var(--border-primary)', background: 'transparent',
-                    color: 'var(--text-muted)', fontWeight: 500, transition: 'all 0.15s',
-                    marginLeft: 'auto',
-                  }}>Glossario</button>
-                </div>
-              )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: 16, alignItems: 'start' }}>
 
-              {/* Complete result single-page view (#10) */}
-              {tab === 'results' && overviewTab && (
-                <CompleteResultView
-                  sizing={sizing}
-                  curves={curves}
-                  losses={losses}
-                  stress={stress}
-                  opPoint={opPoint}
-                  onNavigateTab={(t: string) => { setOverviewTab(false); handleNavigate('design', t as Tab) }}
-                />
-              )}
-
-              {/* Results: dashboard overview + detailed results + reference */}
-              {tab === 'results' && !overviewTab && (
-                <>
-                  <DesignDashboard
-                    sizing={sizing}
-                    previousSizing={previousSizing}
-                    opPoint={opPoint}
-                    onNavigate={(t) => handleNavigate('design', t)}
-                    onRunSizing={handleRunSizing}
-                    onWhatIf={(newD2mm) => {
-                      // Quick-compare: re-run sizing isn't possible without backend,
-                      // so we just trigger a toast with the projected value
-                      toast(`D2 alterado para ${newD2mm.toFixed(0)}mm — execute novamente para aplicar`, 'info')
-                    }}
-                  />
-                  <div style={{ marginTop: 16 }}>
+                  {/* ── Left column ── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <DesignDashboard
+                      sizing={sizing}
+                      previousSizing={previousSizing}
+                      opPoint={opPoint}
+                      onNavigate={(t) => handleNavigate('design', t)}
+                      onRunSizing={handleRunSizing}
+                      onWhatIf={(newD2mm) => {
+                        toast(`D2 alterado para ${newD2mm.toFixed(0)}mm — execute novamente para aplicar`, 'info')
+                      }}
+                    />
                     <ResultsView sizing={sizing} previousSizing={previousSizing} />
+                    <ReferencePanel sizing={sizing} />
                   </div>
-                  <ReferencePanel sizing={sizing} />
-                </>
+
+                  {/* ── Right column: sticky visual panel ── */}
+                  <div style={{ position: 'sticky', top: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <ImpellerMiniPreview
+                      flowRate={opPoint.flowRate}
+                      head={opPoint.head}
+                      rpm={opPoint.rpm}
+                      onExpand={() => handleNavigate('design', '3d')}
+                    />
+                    {/* Gauge + Status + Radar condensed */}
+                    {(() => {
+                      const eta = (sizing.estimated_efficiency * 100)
+                      const ec = eta >= 80 ? '#2563eb' : eta >= 70 ? '#d97706' : '#dc2626'
+                      const dr = (sizing as any).diffusion_ratio || 0
+                      const u2 = sizing.velocity_triangles?.outlet?.u || 0
+                      const r = 32, cx = 42, cy = 42
+                      const sa = -210, ea = 30, arc = ea - sa
+                      const toRad = (d: number) => d * Math.PI / 180
+                      const ax = (a: number) => cx + r * Math.cos(toRad(a))
+                      const ay = (a: number) => cy + r * Math.sin(toRad(a))
+                      const dArc = (s: number, e: number) => {
+                        const lg = e - s > 180 ? 1 : 0
+                        return `M ${ax(s)} ${ay(s)} A ${r} ${r} 0 ${lg} 1 ${ax(e)} ${ay(e)}`
+                      }
+                      const angle = sa + arc * Math.min(1, eta / 100)
+                      return (
+                        <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {/* Gauge row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <svg width={84} height={64} viewBox="0 0 84 64">
+                              <path d={dArc(sa, ea)} fill="none" stroke="var(--border-primary)" strokeWidth={6} strokeLinecap="round" />
+                              <path d={dArc(sa, angle)} fill="none" stroke={ec} strokeWidth={6} strokeLinecap="round" />
+                              <text x={cx} y={cx - 4} textAnchor="middle" fill={ec} fontSize={15} fontWeight={700}>{eta.toFixed(1)}</text>
+                              <text x={cx} y={cx + 9} textAnchor="middle" fill="var(--text-muted)" fontSize={8}>η %</text>
+                            </svg>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Status</div>
+                              {[
+                                { label: 'De Haller', val: dr > 0 ? dr.toFixed(3) : '—', ok: dr >= 0.7, warn: dr >= 0.6 },
+                                { label: 'u₂', val: `${u2.toFixed(1)} m/s`, ok: u2 < 35, warn: u2 < 45 },
+                                { label: 'NPSHr', val: `${sizing.estimated_npsh_r.toFixed(1)} m`, ok: sizing.estimated_npsh_r < 5, warn: sizing.estimated_npsh_r < 10 },
+                              ].map(s => (
+                                <div key={s.label} style={{ display: 'flex', alignItems: 'center', fontSize: 11, marginBottom: 4 }}>
+                                  <span style={{ color: s.ok ? '#22c55e' : s.warn ? '#f59e0b' : '#ef4444', marginRight: 5, fontSize: 10, width: 10, textAlign: 'center' }}>
+                                    {s.ok ? '✓' : s.warn ? '⚠' : '✕'}
+                                  </span>
+                                  <span style={{ color: 'var(--text-muted)', flex: 1 }}>{s.label}</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.val}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Radar */}
+                          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Radar</div>
+                            <RadarChart data={[
+                              { label: 'η', value: sizing.estimated_efficiency, min: 0.5, max: 0.95, higherBetter: true },
+                              { label: 'NP', value: sizing.estimated_npsh_r, min: 0, max: 15, higherBetter: false },
+                              { label: 'Pot', value: sizing.estimated_power / 1000, min: 0, max: 50, higherBetter: false },
+                              { label: 'D2', value: sizing.impeller_d2 * 1000, min: 100, max: 500, higherBetter: false },
+                              { label: 'Hal', value: dr || 0.75, min: 0.5, max: 1.0, higherBetter: true },
+                            ]} size={100} />
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                </div>
               )}
               {tab === 'curves' && (
                 <>
-                  <CurvesChart points={curves} designFlow={opPoint.flowRate / 3600} designHead={opPoint.head} />
-                  <div style={{ marginTop: 24 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+                    <CurvesChart points={curves} designFlow={opPoint.flowRate / 3600} designHead={opPoint.head} />
                     <EfficiencyMap flowRate={opPoint.flowRate} head={opPoint.head} rpm={opPoint.rpm} />
                   </div>
                   <FeedbackStars tab="curves" />
@@ -978,20 +1199,65 @@ export default function App() {
             /* Loading skeleton — shown while sizing is computing */
             <ResultsSkeleton />
           ) : (
-            /* Empty state — simple prompt to run sizing */
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 12 }}>
-                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <div style={{ fontSize: 16, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                Pronto para calcular
+            /* #8 — Empty state with template suggestion cards */
+            <div style={{ padding: '32px 0' }}>
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 10 }}>
+                  <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 4, fontWeight: 600 }}>Pronto para calcular</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Preencha o formulário à esquerda ou inicie com um exemplo:</div>
               </div>
-              <div style={{ fontSize: 13, maxWidth: 300, margin: '0 auto', lineHeight: 1.5 }}>
-                Preencha Q, H e n à esquerda e clique em <span style={{ color: 'var(--accent)', fontWeight: 500 }}>Executar Dimensionamento</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'Irrigação', desc: 'Q=120 · H=18m · n=1150', q: 120, h: 18, n: 1150, color: '#22c55e' },
+                  { label: 'Industrial', desc: 'Q=300 · H=32m · n=1750', q: 300, h: 32, n: 1750, color: '#00a0df' },
+                  { label: 'Alta Pressão', desc: 'Q=50 · H=80m · n=2900', q: 50, h: 80, n: 2900, color: '#a855f7' },
+                ].map(tmpl => (
+                  <button key={tmpl.label} type="button"
+                    onClick={() => handleRunSizing(tmpl.q, tmpl.h, tmpl.n)}
+                    style={{
+                      padding: '14px 12px', borderRadius: 9, cursor: 'pointer', textAlign: 'left',
+                      background: 'var(--card-bg)', border: `1px solid ${tmpl.color}30`,
+                      borderTop: `2px solid ${tmpl.color}`, fontFamily: 'var(--font-family)',
+                      transition: 'all 0.18s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 6px 18px ${tmpl.color}22` }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>{tmpl.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8 }}>{tmpl.desc}</div>
+                    <div style={{ fontSize: 11, color: tmpl.color, fontWeight: 600 }}>Calcular →</div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
           <NextStepBanner currentTab={tab} hasSizing={!!sizing} onNavigate={(t) => handleNavigate('design', t)} />
+
+          {/* #7 — Floating recalculate button */}
+          {sizing && (
+            <div style={{ position: 'sticky', bottom: 12, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none', marginTop: 16 }}>
+              <button
+                onClick={() => handleRunSizing(opPoint.flowRate, opPoint.head, opPoint.rpm)}
+                disabled={loading || !opPoint.flowRate}
+                title="Recalcular (F5)"
+                style={{
+                  pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '9px 18px', borderRadius: 24, fontSize: 12, fontWeight: 700,
+                  background: 'var(--accent)', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 20px rgba(0,160,223,0.45)',
+                  opacity: loading || !opPoint.flowRate ? 0.6 : 1,
+                  transition: 'all 0.18s', fontFamily: 'var(--font-family)',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-4" />
+                </svg>
+                {loading ? (loadingStep || 'Calculando…') : '↺ Recalcular'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <StatusBar sizing={sizing} previousSizing={previousSizing} opPoint={sizing ? opPoint : undefined} savedId={savedId} onShortcutsHelp={() => setShortcutsHelpOpen(true)} onTimeline={() => setTimelineOpen(v => !v)} />

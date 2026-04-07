@@ -1,19 +1,22 @@
 """Database API endpoints for projects and designs persistence.
 
-    GET  /api/v1/projects              — list projects
-    POST /api/v1/projects              — create project
-    GET  /api/v1/projects/{id}         — get project
-    GET  /api/v1/projects/{id}/designs — list designs
-    POST /api/v1/projects/{id}/designs — save design
-    GET  /api/v1/designs/{id}          — get design
-    GET  /api/v1/designs/{id}/curves   — get performance curve
-    GET  /api/v1/db/status             — DB health check
+    GET    /api/v1/projects              — list projects
+    POST   /api/v1/projects              — create project
+    GET    /api/v1/projects/{id}         — get project
+    PUT    /api/v1/projects/{id}         — update project
+    DELETE /api/v1/projects/{id}         — delete project + all designs
+    GET    /api/v1/projects/{id}/designs — list designs
+    POST   /api/v1/projects/{id}/designs — save design
+    DELETE /api/v1/designs/{id}          — delete single design
+    GET    /api/v1/designs/{id}          — get design
+    GET    /api/v1/designs/{id}/curves   — get performance curve
+    GET    /api/v1/db/status             — DB health check
 """
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
@@ -76,6 +79,20 @@ def update_project_endpoint(project_id: str, req: ProjectCreate) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/projects/{project_id}")
+def delete_project_endpoint(project_id: str) -> Response:
+    try:
+        from hpe.db.repositories import delete_project
+        found = delete_project(project_id)
+        if not found:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return Response(status_code=204)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/projects/{project_id}")
 def get_project_endpoint(project_id: str) -> dict:
     try:
@@ -115,6 +132,20 @@ def save_design_endpoint(project_id: str, req: DesignSave) -> dict:
         if req.curve_points:
             save_performance_curve(design["id"], req.curve_points)
         return design
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/designs/{design_id}")
+def delete_design_endpoint(design_id: str) -> Response:
+    try:
+        from hpe.db.repositories import delete_design
+        found = delete_design(design_id)
+        if not found:
+            raise HTTPException(status_code=404, detail="Design not found")
+        return Response(status_code=204)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

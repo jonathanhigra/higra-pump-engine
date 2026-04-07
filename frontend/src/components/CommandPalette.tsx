@@ -117,20 +117,6 @@ export default function CommandPalette({ open, onClose, onNavigate, onRunSizing,
       action: () => { onNavigate('projects'); onClose() },
     })
     list.push({
-      id: 'nav-assistant',
-      label: 'Assistente IA',
-      category: 'Assistente',
-      icon: SECTION_ICONS.assistant,
-      action: () => { onNavigate('design', 'assistant'); onClose() },
-    })
-    list.push({
-      id: 'nav-templates',
-      label: 'Templates',
-      category: 'Templates',
-      icon: SECTION_ICONS.templates,
-      action: () => { onNavigate('design', 'templates'); onClose() },
-    })
-    list.push({
       id: 'action-tour',
       label: 'Tour Guiado',
       category: 'Ajuda',

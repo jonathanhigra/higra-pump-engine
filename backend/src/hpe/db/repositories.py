@@ -200,3 +200,45 @@ def get_performance_curve(design_id: str) -> list[dict]:
             )
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+# ─── Delete ───────────────────────────────────────────────────────────────────
+
+def delete_design(design_id: str) -> bool:
+    """Delete a single design and its performance curves (CASCADE)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM performance_curves WHERE design_id=%s", (design_id,)
+            )
+            cur.execute(
+                "DELETE FROM designs WHERE id=%s RETURNING id", (design_id,)
+            )
+            deleted = cur.fetchone() is not None
+        conn.commit()
+    return deleted
+
+
+def delete_project(project_id: str) -> bool:
+    """Delete a project and ALL its designs + performance curves (CASCADE)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Delete curves for all designs of this project
+            cur.execute(
+                """DELETE FROM performance_curves
+                   WHERE design_id IN (
+                       SELECT id FROM designs WHERE project_id=%s
+                   )""",
+                (project_id,),
+            )
+            # Delete all designs
+            cur.execute(
+                "DELETE FROM designs WHERE project_id=%s", (project_id,)
+            )
+            # Delete the project itself
+            cur.execute(
+                "DELETE FROM projects WHERE id=%s RETURNING id", (project_id,)
+            )
+            deleted = cur.fetchone() is not None
+        conn.commit()
+    return deleted

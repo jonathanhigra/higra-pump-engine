@@ -7,7 +7,7 @@ export type Tab =
   | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure'
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
-  | 'meridional-drag' | 'noise' | 'batch'
+  | 'meridional-drag' | 'noise' | 'batch' | 'pipeline'
 
 /* ── Main sidebar sections (6 primary destinations) ────────────────────────── */
 export type Section = 'projects' | 'templates' | 'design' | 'geometry' | 'analysis' | 'optimization' | 'assistant'
@@ -18,7 +18,7 @@ export function sectionForTab(tab: Tab): Section {
     case '3d': case 'meridional-drag': case 'meridional-editor': case 'lete': case 'lean-sweep': return 'geometry'
     case 'velocity': case 'losses': case 'pressure': case 'loading':
     case 'spanwise': case 'noise': case 'stress': case 'compare': return 'analysis'
-    case 'optimize': case 'pareto': case 'doe': case 'batch': return 'optimization'
+    case 'optimize': case 'pareto': case 'doe': case 'batch': case 'pipeline': return 'optimization'
     case 'assistant': return 'assistant'
     case 'templates': return 'templates'
     default: return 'design'
@@ -57,6 +57,7 @@ export const SUB_TABS: Record<Section, { key: Tab; label: string }[]> = {
     { key: 'pareto', label: 'Fronteira Pareto' },
     { key: 'doe', label: 'DoE / Surrogate' },
     { key: 'batch', label: 'Batch / Paramétrico' },
+    { key: 'pipeline', label: 'Pipeline Completo' },
   ],
 }
 

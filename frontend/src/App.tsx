@@ -12,6 +12,7 @@ import StressView from './components/StressView'
 import ImpellerViewer from './components/ImpellerViewer'
 import DesignComparison from './components/DesignComparison'
 import AssistantChat from './components/AssistantChat'
+import PipelinePanel from './components/PipelinePanel'
 import MeridionalView from './components/MeridionalView'
 import OptimizePanel from './components/OptimizePanel'
 import EfficiencyMap from './components/EfficiencyMap'
@@ -174,7 +175,7 @@ export type Tab =
   | 'compare' | 'assistant' | 'optimize' | 'loading' | 'pressure'
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
-  | 'meridional-drag' | 'noise' | 'batch'
+  | 'meridional-drag' | 'noise' | 'batch' | 'pipeline'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -799,7 +800,7 @@ export default function App() {
   }
 
   // Tabs that need full width (no 2-column layout with SizingForm)
-  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize']
+  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize', 'pipeline']
 
   // === DESIGN — 3D viewer (now with sub-tabs visible) ===
   if (tab === '3d') {
@@ -867,7 +868,40 @@ export default function App() {
               <FeedbackStars tab="optimize" />
             </>
           )}
-          {!sizing && tab !== 'templates' && (
+          {tab === 'pipeline' && (
+            <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)' }}>Pipeline Completo</h3>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  Sizing 1D → Geometria → Surrogate → Orquestrador Celery.
+                  Progresso em tempo real via WebSocket.
+                </p>
+              </div>
+              {opPoint.flowRate > 0 && opPoint.head > 0 && opPoint.rpm > 0 ? (
+                <PipelinePanel
+                  input={{ Q: opPoint.flowRate / 3600, H: opPoint.head, n: opPoint.rpm }}
+                  onComplete={(result) => {
+                    const eta = result.eta as number | undefined
+                    const d2 = result.D2_mm as number | undefined
+                    toast(
+                      `Pipeline concluído — η=${eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}  D2=${d2 !== undefined ? d2.toFixed(0) + ' mm' : '—'}`,
+                      'success',
+                    )
+                    logAction('pipeline_complete', `eta=${eta ?? '?'}`)
+                  }}
+                />
+              ) : (
+                <div style={{
+                  padding: 24, textAlign: 'center',
+                  color: 'var(--text-muted)', fontSize: 13,
+                  border: '1px dashed var(--border-primary)', borderRadius: 8,
+                }}>
+                  Preencha o ponto de operação (Q, H, n) antes de executar o pipeline.
+                </div>
+              )}
+            </div>
+          )}
+          {!sizing && tab !== 'templates' && tab !== 'pipeline' && (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
               Execute um dimensionamento primeiro para usar esta funcionalidade.
             </div>

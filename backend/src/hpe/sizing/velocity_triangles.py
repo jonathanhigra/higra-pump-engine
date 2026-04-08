@@ -60,9 +60,9 @@ def calc_peripheral_velocity(diameter: float, rpm: float) -> float:
 # Slip factor models (#1)
 # ---------------------------------------------------------------------------
 
-def calc_wiesner_slip_factor(beta2: float, blade_count: int) -> float:
+def calc_wiesner_slip_factor(beta2_deg: float, blade_count: int) -> float:
     """Wiesner (1967): sigma = 1 - sqrt(sin(beta2)) / Z^0.7."""
-    b2r = math.radians(beta2)
+    b2r = math.radians(beta2_deg)
     sigma = 1.0 - math.sqrt(math.sin(b2r)) / (blade_count ** 0.7)
     return max(SLIP_SIGMA_MIN, min(SLIP_SIGMA_MAX, sigma))
 
@@ -116,7 +116,7 @@ def calc_slip_factor(
         return calc_stodola_slip_factor(beta2, blade_count)
     if model == "busemann":
         return calc_busemann_slip_factor(beta2, blade_count, d1_d2)
-    return calc_wiesner_slip_factor(beta2, blade_count)  # default
+    return calc_wiesner_slip_factor(beta2_deg=beta2, blade_count=blade_count)  # default
 
 
 # ---------------------------------------------------------------------------

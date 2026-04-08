@@ -2,12 +2,23 @@ version: '3.9'
 
 x-backend-env: &backend-env
   PYTHONPATH: /app/backend/src
+
+  # ── pydantic-settings reads HPE_* prefix ───────────────────────────────────
+  HPE_DATABASE_URL: postgresql://postgres:higra123@db:5432/db_pump_engine
+  HPE_REDIS_URL: redis://redis:6379/0
+  HPE_MINIO_ENDPOINT: minio:9000
+  HPE_MINIO_ACCESS_KEY: minioadmin
+  HPE_MINIO_SECRET_KEY: minioadmin123
+
+  # ── Raw vars (read without prefix by Celery/orchestrator/training_log) ──────
   DATABASE_URL: postgresql://postgres:higra123@db:5432/db_pump_engine
   DATABASE_SIGS_URL: postgresql://postgres:higra123@db:5432/higra_sigs
   REDIS_URL: redis://redis:6379/0
   MINIO_ENDPOINT: minio:9000
   MINIO_ACCESS_KEY: minioadmin
   MINIO_SECRET_KEY: minioadmin123
+
+  # ── HPE-specific paths ──────────────────────────────────────────────────────
   HPE_SURROGATE_PATH: /app/models/surrogate_v1.pkl
   HPE_DATASET_DIR: /app/dataset
   SECRET_KEY: hpe-secret-change-in-prod

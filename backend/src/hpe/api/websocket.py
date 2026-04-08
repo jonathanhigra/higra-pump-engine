@@ -211,6 +211,91 @@ async def _run_sync(op_with_id: dict, run_id: str, run_cfd: bool) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# WebSocket: GET /ws/cfd/{run_id}/residuals — stream OpenFOAM convergence
+# ---------------------------------------------------------------------------
+
+@router.websocket("/ws/cfd/{run_id}/residuals")
+async def cfd_residuals_ws(websocket: WebSocket, run_id: str) -> None:
+    """Stream OpenFOAM convergence residuals in real time.
+
+    Tails ``log.MRFSimpleFoam`` (or ``log.simpleFoam``) in the case
+    directory associated with *run_id* and emits parsed residuals at
+    500 ms intervals until the solver stops or the client disconnects.
+
+    Message format (server → client)::
+
+        {
+          "run_id": "abc123",
+          "iteration": 42,
+          "residuals": {"Ux": 1.2e-4, "p": 8.5e-5, ...},
+          "converged_fields": ["p"],
+          "should_stop": false,
+          "reason": "running",
+          "message": ""
+        }
+    """
+    await websocket.accept()
+    log.debug("WS /ws/cfd/%s/residuals: client connected", run_id)
+
+    try:
+        # Locate case directory via the shared run registry
+        from hpe.api.routes.cfd_loop_routes import _runs
+        entry = _runs.get(run_id)
+
+        if entry is None:
+            await websocket.send_json({
+                "run_id": run_id, "status": "not_found",
+                "error": f"No CFD run found for run_id={run_id}",
+            })
+            return
+
+        work_dir: Path = entry.get("work_dir", Path("cfd_runs") / run_id)
+
+        from hpe.cfd.openfoam.convergence import ConvergenceMonitor, ConvergenceCriteria
+
+        criteria = ConvergenceCriteria(tol=1e-4, window=20, divergence_factor=100.0)
+        monitor = ConvergenceMonitor(case_dir=work_dir, criteria=criteria)
+
+        for _ in range(_MAX_ITERATIONS):
+            status = monitor.update()
+
+            payload: dict = {
+                "run_id":          run_id,
+                "iteration":       status.iteration,
+                "residuals":       {k: round(v, 8) for k, v in (status.residuals or {}).items()},
+                "converged_fields": list(status.converged_fields or []),
+                "should_stop":     status.should_stop,
+                "reason":          status.reason.value if status.reason else "running",
+                "message":         status.message or "",
+            }
+            await websocket.send_json(payload)
+
+            if status.should_stop:
+                log.debug("WS /ws/cfd/%s/residuals: solver stopped (%s)", run_id, status.reason)
+                break
+
+            # Also stop if the run was cancelled or completed via API
+            if entry.get("status") in ("completed", "cancelled", "failed"):
+                break
+
+            await asyncio.sleep(_POLL_INTERVAL)
+
+    except WebSocketDisconnect:
+        log.debug("WS /ws/cfd/%s/residuals: client disconnected", run_id)
+    except Exception as exc:
+        log.exception("WS /ws/cfd/%s/residuals: error — %s", run_id, exc)
+        try:
+            await websocket.send_json({"run_id": run_id, "status": "error", "error": str(exc)})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # REST: GET /pipeline/status/{run_id}  — REST alternative to WebSocket
 # ---------------------------------------------------------------------------
 

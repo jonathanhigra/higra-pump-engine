@@ -9,13 +9,18 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-import cadquery as cq
+try:
+    import cadquery as cq
+    _CQ_AVAILABLE = True
+except ImportError:
+    cq = None  # type: ignore[assignment]
+    _CQ_AVAILABLE = False
 
 from hpe.core.enums import GeometryFormat
 
 
 def export_runner(
-    runner: cq.Workplane,
+    runner: "cq.Workplane",
     filepath: str | Path,
     fmt: GeometryFormat = GeometryFormat.STEP,
     stl_tolerance: float = 0.01,
@@ -34,8 +39,14 @@ def export_runner(
         Path to the exported file.
 
     Raises:
+        ImportError: If CadQuery is not installed.
         ValueError: If format is not supported.
     """
+    if not _CQ_AVAILABLE:
+        raise ImportError(
+            "CadQuery is required for 3D export.  Install it with: "
+            "pip install cadquery>=2.4  (or use the backend-cad Docker image)"
+        )
     filepath = Path(filepath)
 
     # Ensure correct extension

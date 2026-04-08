@@ -237,6 +237,8 @@ class GeometryOutput(BaseModel):
     blade_camber_theta_deg: list[float]
     cad_available: bool
     step_path: Optional[str] = None
+    step_url: Optional[str] = None   # presigned MinIO URL (24 h)
+    stl_url: Optional[str] = None    # presigned MinIO URL (24 h)
     warnings: list[str] = Field(default_factory=list)
     generation_time_ms: float = 0.0
 
@@ -277,6 +279,33 @@ async def run_geometry(inp: SizingInput) -> GeometryOutput:
         m = d["meridional"]
         b = d["blade"]
 
+        # --- 3D export + MinIO upload (both no-ops when deps not installed) ---
+        step_url: Optional[str] = None
+        stl_url: Optional[str] = None
+        local_step: Optional[str] = d.get("step_path")
+
+        try:
+            import tempfile, uuid
+            from hpe.geometry.export import export_runner_3d
+            from hpe.geometry.storage import upload_geometry_files
+
+            run_id = str(uuid.uuid4())
+            with tempfile.TemporaryDirectory(prefix="hpe_geo_") as tmp:
+                from pathlib import Path as _Path
+                cad = export_runner_3d(sizing, output_dir=_Path(tmp))
+                if cad.available:
+                    local_step = str(cad.step_path) if cad.step_path else local_step
+                    upload = upload_geometry_files(
+                        run_id=run_id,
+                        step_path=cad.step_path,
+                        stl_path=cad.stl_path,
+                    )
+                    if upload.available:
+                        step_url = upload.step_url
+                        stl_url = upload.stl_url
+        except Exception:
+            log.debug("geometry.run: 3D export/upload skipped", exc_info=True)
+
         elapsed_ms = (time.perf_counter() - t0) * 1000
         return GeometryOutput(
             params=GeometryParamsOut(**p),
@@ -286,8 +315,10 @@ async def run_geometry(inp: SizingInput) -> GeometryOutput:
             meridional_shroud_z_mm=m["shroud_z_mm"],
             blade_camber_r_mm=b["camber_r_mm"],
             blade_camber_theta_deg=b["camber_theta_deg"],
-            cad_available=d["cad_available"],
-            step_path=d["step_path"],
+            cad_available=d["cad_available"] or (step_url is not None),
+            step_path=local_step,
+            step_url=step_url,
+            stl_url=stl_url,
             warnings=d["warnings"],
             generation_time_ms=round(elapsed_ms, 1),
         )

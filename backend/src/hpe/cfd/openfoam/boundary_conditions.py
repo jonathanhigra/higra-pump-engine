@@ -354,6 +354,68 @@ boundaryField
     return path
 
 
+def write_omega(
+    case_dir: Path,
+    turbulence_intensity: float = 0.05,
+    u_ref: float = 5.0,
+    length_scale: float = 0.01,
+) -> Path:
+    """Escrever 0/omega (taxa de dissipação específica) para k-ω SST.
+
+    omega = k^0.5 / (C_mu^0.25 * L)
+    """
+    c_mu = 0.09
+    k_val = max(1.5 * (u_ref * turbulence_intensity) ** 2, 1e-8)
+    l_eff = max(length_scale, 1e-4)
+    omega_val = max(k_val ** 0.5 / (c_mu ** 0.25 * l_eff), 1e-6)
+
+    content = _FOAM_HEADER.format(cls="volScalarField", obj="omega")
+    content += f"""
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform {omega_val:.8e};
+
+boundaryField
+{{
+    inlet
+    {{
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    {l_eff:.6f};
+        value           uniform {omega_val:.8e};
+    }}
+
+    outlet
+    {{
+        type            inletOutlet;
+        inletValue      uniform {omega_val:.8e};
+        value           uniform {omega_val:.8e};
+    }}
+
+    rotorWalls
+    {{
+        type            omegaWallFunction;
+        value           uniform {omega_val:.8e};
+    }}
+
+    statorWalls
+    {{
+        type            omegaWallFunction;
+        value           uniform {omega_val:.8e};
+    }}
+
+    rotatingZone_to_stator
+    {{
+        type            cyclicAMI;
+        value           uniform {omega_val:.8e};
+    }}
+}}
+"""
+    path = case_dir / "0" / "omega"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
 def write_nut(case_dir: Path) -> Path:
     """Escrever 0/nut (viscosidade turbulenta calculada pelo modelo).
 

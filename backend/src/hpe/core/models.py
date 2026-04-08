@@ -54,9 +54,25 @@ class VelocityTrianglesResult:
     euler_head: float  # H_euler [m]
 
     def as_dict(self) -> dict[str, Any]:
+        _in = self.inlet.as_dict()
+        _out = self.outlet.as_dict()
+        # Add subscripted aliases (u1/cm1/w1 for inlet, u2/cm2/cu2 for outlet)
+        # so both generic keys and typed keys work for API consumers and tests.
+        inlet_d = {
+            "u1": _in["u"], "cm1": _in["cm"], "cu1": _in["cu"],
+            "c1": _in["c"],  "w1": _in["w"],  "wu1": _in["wu"],
+            "beta1": _in["beta"], "alpha1": _in["alpha"],
+            **_in,
+        }
+        outlet_d = {
+            "u2": _out["u"], "cm2": _out["cm"], "cu2": _out["cu"],
+            "c2": _out["c"],  "w2": _out["w"],  "wu2": _out["wu"],
+            "beta2": _out["beta"], "alpha2": _out["alpha"],
+            **_out,
+        }
         return {
-            "inlet": self.inlet.as_dict(),
-            "outlet": self.outlet.as_dict(),
+            "inlet": inlet_d,
+            "outlet": outlet_d,
             "euler_head": self.euler_head,
         }
 

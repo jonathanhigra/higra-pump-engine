@@ -29,6 +29,37 @@ EXPOSE 8000
 CMD ["uvicorn", "hpe.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
+# ── Stage: backend-cad ────────────────────────────────────────────────────────
+# Extends the backend image with CadQuery for real STEP/STL 3D geometry export.
+#
+# Use this stage in docker-compose.yml by changing `target: backend` to
+# `target: backend-cad` for the services that need 3D export.
+#
+# Build:
+#   docker build --target backend-cad -t hpe-backend-cad .
+#
+# Note: adds ~800 MB (OpenCASCADE wheels).  Only use where 3D export is needed.
+FROM backend AS backend-cad
+
+# OpenCASCADE / Mesa GL libs required by CadQuery
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgl1-mesa-glx \
+      libglu1-mesa \
+      libxi6 \
+      libxrender1 \
+      libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# CadQuery 2.x — installs cadquery-occ (OCC wheels, ~600 MB)
+RUN pip install --no-cache-dir "cadquery>=2.4"
+
+# MinIO client for geometry file upload
+RUN pip install --no-cache-dir "minio>=7.0"
+
+# Smoke test — fail fast if the OCC import is broken
+RUN python -c "import cadquery; print('CadQuery', cadquery.__version__, 'OK')"
+
+
 # ── Stage: frontend-build ─────────────────────────────────────────────────────
 FROM node:20-alpine AS frontend-build
 

@@ -206,7 +206,7 @@ fluxRequired
 # ---------------------------------------------------------------------------
 
 
-def write_fv_solution(case_dir: Path) -> Path:
+def write_fv_solution(case_dir: Path, turbulence_model: str = "kEpsilon") -> Path:
     """Escrever system/fvSolution com solvers SIMPLE para bomba.
 
     Usa GAMG para pressão e PBiCGStab para velocidade/turbulência.
@@ -251,6 +251,14 @@ solvers
         tolerance       1e-7;
         relTol          0.1;
     }
+
+    omega
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.1;
+    }
 }
 
 SIMPLE
@@ -264,6 +272,7 @@ SIMPLE
         U               1e-4;
         k               1e-4;
         epsilon         1e-4;
+        omega           1e-4;
     }
 }
 
@@ -278,6 +287,7 @@ relaxationFactors
         U               0.7;
         k               0.5;
         epsilon         0.5;
+        omega           0.5;
     }
 }
 """

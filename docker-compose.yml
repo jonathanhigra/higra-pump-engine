@@ -1,40 +1,191 @@
-version: '3.8'
+version: '3.9'
+
+x-backend-env: &backend-env
+  PYTHONPATH: /app/backend/src
+  DATABASE_URL: postgresql://postgres:higra123@db:5432/db_pump_engine
+  DATABASE_SIGS_URL: postgresql://postgres:higra123@db:5432/higra_sigs
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin123
+  HPE_SURROGATE_PATH: /app/models/surrogate_v1.pkl
+  HPE_DATASET_DIR: /app/dataset
+  SECRET_KEY: hpe-secret-change-in-prod
 
 services:
+  # ── Banco HPE ──────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: higra123
       POSTGRES_DB: db_pump_engine
     ports:
-      - "5432:5432"
+      - "5433:5432"   # 5433 externo para não conflitar com higra_sigs local
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/src/hpe/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── MinIO ──────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ────────────────────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile
       target: backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=higra123
-      - DB_NAME=db_pump_engine
-      - SECRET_KEY=hpe-docker-secret
+      <<: *backend-env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
-      - ./backend/src:/app/backend/src
-    command: uvicorn hpe.api.app:app --host 0.0.0.0 --port 8000 --reload
+      - ./backend/src:/app/backend/src:ro
+      - ./models:/app/models
+      - ./dataset:/app/dataset
+    command: >
+      uvicorn hpe.api.app:app
+      --host 0.0.0.0 --port 8000
+      --workers 2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ── Celery — fila fast (sizing, geometry, surrogate) ──────────────────────
+  celery-fast:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/backend/src:ro
+      - ./models:/app/models
+      - ./dataset:/app/dataset
+    command: >
+      celery -A hpe.orchestrator.config.celery_app worker
+      --queues=fast
+      --concurrency=4
+      --loglevel=info
+      --hostname=fast@%h
+
+  # ── Celery — fila cfd (OpenFOAM, long-running) ────────────────────────────
+  celery-cfd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/backend/src:ro
+      - ./models:/app/models
+      - ./dataset:/app/dataset
+      - /tmp/hpe_cfd:/tmp/hpe_cfd   # diretório de casos CFD
+    command: >
+      celery -A hpe.orchestrator.config.celery_app worker
+      --queues=cfd
+      --concurrency=1
+      --loglevel=info
+      --hostname=cfd@%h
+
+  # ── Celery — fila optimize (NSGA, Optuna) ─────────────────────────────────
+  celery-opt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/backend/src:ro
+      - ./models:/app/models
+    command: >
+      celery -A hpe.orchestrator.config.celery_app worker
+      --queues=optimize
+      --concurrency=2
+      --loglevel=info
+      --hostname=opt@%h
+
+  # ── Flower — dashboard Celery ─────────────────────────────────────────────
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      <<: *backend-env
+    depends_on:
+      - redis
+    command: >
+      celery -A hpe.orchestrator.config.celery_app flower
+      --port=5555
+      --basic_auth=admin:hpe2026
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
   frontend:
     image: node:20-alpine
+    restart: unless-stopped
     working_dir: /app
     ports:
       - "3000:3000"
@@ -42,7 +193,9 @@ services:
       - ./frontend:/app
     command: sh -c "npm install && npx vite --host 0.0.0.0"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
+  minio_data:

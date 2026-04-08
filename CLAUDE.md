@@ -1,197 +1,105 @@
 # HPE — Context (Estado Atual)
 
 > Atualizar este arquivo ao final de cada sessao de desenvolvimento.
-> Este e o primeiro documento que o Claude Code deve ler apos o CLAUDE.md.
+> Este e o primeiro documento que o Claude Code deve ler antes de qualquer tarefa.
 
 ---
 
 ## Estado Geral
 
 - **Data**: Abril 2026
-- **Fase atual**: 1 — MVP (Meanline + ETL)
-- **Progresso da Fase 1**: ~65% — ETL, surrogate v1, API FastAPI, M1.8 validação concluídos
-- **Proximo marco**: Fix ETL (Nq bins), expor API em produção (uvicorn), testes de integração
+- **Fases implementadas**: 1, 2, 3, 4, 5 e 6 — pipeline completo commitado
+- **Progresso geral**: ~85% — backend completo; falta frontend, docker production, testes E2E
+- **Proximo marco**: Docker Compose production + CadQuery install + testes E2E
 
 ---
 
-## O Que Ja Existe
+## Arquitetura Implementada (6 Fases)
 
-### Monorepo (estrutura criada)
 ```
-hpe-project/
-├── CLAUDE.md                  # Contexto master (atualizado — v3.0 AI-Native)
-├── CONTEXT.md                 # Este arquivo
-├── backend/
-│   ├── pyproject.toml         # Dependencias Python definidas
-│   ├── Dockerfile
-│   └── src/hpe/               # Pacote principal (vazio — a implementar)
-├── frontend/
-│   ├── package.json           # React 18 + TypeScript + Three.js
-│   └── Dockerfile
-├── docker-compose.yml         # PostgreSQL, Redis, MinIO, Celery
-└── skills/                    # Skill files por fase (a criar)
+hpe/
+├── sizing/          # Fase 1 — Meanline 1D (Gülich), CLI, API
+├── geometry/        # Fase 1/4 — Runner paramétrico, voluta, CadQuery opcional
+├── data/            # Fase 1 — ETL bancada, FeatureStore, training_log, seed
+├── ai/
+│   ├── surrogate/   # Fase 1 (XGBoost v1) + Fase 3 (GP v2) + evaluator
+│   ├── pinn/        # Fase 6 — Physics-Informed NN (PyTorch + numpy fallback)
+│   └── assistant/   # Fase 6 — RAG engineering assistant + offline rules
+├── cfd/             # Fase 2 — OpenFOAM case builder, SU2, mesh, extractor
+├── optimization/    # Fase 3 — NSGA-II (DEAP), Bayesian (Optuna), surrogate-assisted
+├── orchestrator/    # Fase 5 — Celery tasks, Redis status, design versioning
+└── api/             # FastAPI v2.0 — sizing, geometry, surrogate, voluta, WebSocket
 ```
-
-### Documentos de arquitetura
-- `HPE_Arquitetura_v2.pdf` — documento base com analise competitiva vs ADT
-- `HPE_Evolucao_AI_Native.pdf` — revisao de visao v3.0 (pipeline design inverso, surrogate CFD)
-
-### Banco de dados (ja existe, externo)
-- **Host**: PostgreSQL HIGRA (producao)
-- **Schema**: `sigs`
-- **Tabela critica**: `sigs.teste_bancada` — 4.036 linhas × 91 colunas (ensaios reais de bancada)
-- **Conexao**: configurar via `.env` com `DATABASE_URL`
 
 ---
 
 ## O Que Ja Existe (implementado)
 
-- [x] ETL do banco de bancada (`hpe/data/bancada_etl.py`)
-  - Fonte: `hgr_lab_reg_teste` no `higra_sigs` (4.165 linhas, 91 colunas)
-  - Output: `dataset/bancada_features.parquet` (2.931 linhas, 35 colunas)
-  - Features: Ns, Nq, u2, psi, phi, Re, q_star, h_star + raws
-- [x] Schema `hpe.training_log` no PostgreSQL (`db_pump_engine`)
-  - 26 colunas: geometria, condicoes, targets, qualidade, metadados
-- [x] Surrogate model v1 (`hpe/ai/surrogate/v1_xgboost.py`)
-  - XGBoost multi-output (eta_total, eta_hid, p_kw)
-  - RMSE: 2.8% / 2.9% / 3.0% — TODOS ABAIXO DOS 8% de criterio
-  - R2: 0.986 / 0.986 / 0.998
-  - Latencia: ~4ms CPU
-  - Salvo em `models/surrogate_v1.pkl`, rastreado no MLflow
-- [x] 12 skill files em `.claude/skills/` (00 a 11)
-- [x] Frontend React + TypeScript (20 melhorias UX implementadas)
-- [x] API FastAPI v2.0 (`hpe/api/main.py`) — POST /sizing/run, POST /surrogate/predict, GET /surrogate/similar, GET /health
+### Fase 1 — MVP
+- [x] ETL bancada (`hpe/data/bancada_etl.py`) — 2.931 linhas, 35 features, Parquet
+- [x] training_log schema (PostgreSQL `hpe.training_log`) — 26 colunas
+- [x] Surrogate v1 XGBoost (`hpe/ai/surrogate/v1_xgboost.py`) — RMSE 2.8-3.0%, R2 0.986
 - [x] SurrogateEvaluator (`hpe/ai/surrogate/evaluator.py`) — interface versao-agnostica
-- [x] FeatureStore (`hpe/data/feature_store.py`) — acesso centralizado aos datasets Parquet
-- [x] training_log.py — insert_entry, query_similar, insert_from_sizing, get_stats
-- [x] M1.8 Validacao Integrada (`tests/regression/test_validation_bancada.py`)
-  - 435 pontos sizing 1D vs bancada HIGRA — MAPE 11.69% < 15% (APROVADO)
-  - Bias: +7.65pp (super-estimado — esperado: design otimo vs rotor trimado)
-  - Relatorio: `dataset/validation_m1_8_report.json`
+- [x] FeatureStore (`hpe/data/feature_store.py`)
+- [x] API FastAPI v2.0 — POST /sizing/run, /geometry/run, /surrogate/predict, /surrogate/similar, GET /health
+- [x] CLI `hpe sizing/curves/analyze/cfd/optimize/batch`
+- [x] 12 skill files em `.claude/skills/`
+- [x] M1.8 Validacao Integrada — 435 pontos, MAPE 11.69% < 15% (APROVADO)
+- [x] 49 testes de integracao da API (100% passing)
 
-## O Que NAO Existe Ainda (a implementar)
+### Fase 2 — CFD Pipeline
+- [x] `hpe/cfd/pipeline.py` — run_cfd_pipeline() — sizing→caso OpenFOAM→solver→training_log
+- [x] `hpe/cfd/openfoam/` — case.py, boundary_conditions.py, solver_config.py
+- [x] `hpe/cfd/mesh/snappy.py` — snappyHexMesh + blockMesh + quality check
+- [x] `hpe/cfd/results/extract.py` — parse postProcessing/ → H, Q, eta, P
+- [x] `hpe/cfd/su2/config.py` — config.cfg RANS + adjoint
 
-- [ ] Fix ETL: Nq distribution bins usa feat_nq adimensional em vez de feat_ns (Ns europeu)
-- [ ] Geometria parametrica (`hpe/geometry/`) — CadQuery
-- [ ] Pipeline CFD (`hpe/cfd/`)
-- [ ] Integracao `training_log` ← resultados CFD (retroalimentacao)
-- [ ] Testes de integracao da API (pytest + httpx TestClient)
+### Fase 3 — Surrogate v2 + Otimizacao
+- [x] `hpe/ai/surrogate/v2_gp.py` — GP com incerteza (sklearn), subsample 500pts
+- [x] `hpe/optimization/problem.py` — DesignPoint, ObjectiveValues, OptimizationProblem
+- [x] `hpe/optimization/nsga2.py` — NSGA-II (DEAP ou implementacao propria)
+- [x] `hpe/optimization/bayesian.py` — Bayesian (Optuna ou random search fallback)
+- [x] `hpe/optimization/surrogate_opt.py` — 2 estagios: surrogate fast + sizing validate
 
----
+### Fase 4 — Voluta + Feedback Loop
+- [x] `hpe/data/bancada_seed.py` — seed training_log com 460 registros bancada
+- [x] `hpe/geometry/volute/pipeline.py` — run_volute_pipeline(SizingResult)
+- [x] `hpe/api/volute_endpoint.py` — POST /volute/run
 
-## Proxima Tarefa Imediata
+### Fase 5 — Orquestrador
+- [x] `hpe/orchestrator/config.py` — Celery app (3 filas: fast/cfd/optimize)
+- [x] `hpe/orchestrator/tasks.py` — 6 tasks Celery + _FakeTask sync fallback
+- [x] `hpe/orchestrator/status.py` — Redis status tracker + in-memory fallback
+- [x] `hpe/orchestrator/versions.py` — DesignVersion + save_version()
+- [x] `hpe/api/websocket.py` — WS /ws/pipeline/{run_id} + POST /pipeline/run
 
-### TAREFA 4 — Fix ETL Nq Distribution Bins
-
-**Arquivo**: `backend/src/hpe/data/bancada_etl.py`
-
-**Problema**: A coluna `nq_distribution` no ETL usa `feat_nq` (adimensional, ~0.1–1.0)
-nos bins 0–300 (escala de Nq europeu). Resultado: todos os 2931 registros caem no bin
-"radial_hp". O correto e usar `feat_ns` (Ns dimensional, ~10–100) para classificar
-o tipo de impelsor.
-
-**Correcao**:
-```python
-# ERRADO — atual
-df["nq_distribution"] = pd.cut(df["feat_nq"], bins=[0,20,60,120,200,300], ...)
-
-# CORRETO — usar feat_ns
-df["nq_distribution"] = pd.cut(df["feat_ns"], bins=[0,15,30,50,80,120,300],
-    labels=["radial_lp","radial","radial_hp","mixed","axial","out_of_range"])
-```
-
----
-
-### TAREFA 1 — ETL do Banco de Bancada ✅ CONCLUIDA
-
-**Arquivo a criar**: `backend/src/hpe/data/bancada_etl.py`
-
-**Objetivo**: Transformar `sigs.teste_bancada` em dataset de ML normalizado.
-
-**Passos**:
-1. Conectar ao PostgreSQL via `DATABASE_URL` do `.env`
-2. Inspecionar as 91 colunas da tabela e identificar as relevantes para ML
-3. Calcular features derivadas:
-   - `Ns` = velocidade especifica (n * Q^0.5 / H^0.75)
-   - `Nq` = velocidade especifica europeia (n * Q^0.5 / H^0.75 / 51.65)
-   - `psi` = coeficiente de pressao (g * H / (u2^2))
-   - `phi` = coeficiente de vazao (Q / (u2 * D2^2 * pi/4))
-   - `lambda_` = coeficiente de potencia
-4. Normalizar features (StandardScaler ou MinMaxScaler)
-5. Salvar em `dataset/bancada_features.parquet`
-6. Gerar relatorio de qualidade: % de nulos, distribuicoes, outliers
-
-**Output esperado**:
-```
-dataset/
-├── bancada_features.parquet   # Features normalizadas para ML
-├── bancada_raw.parquet        # Copia raw para referencia
-└── etl_report.json            # Relatorio de qualidade dos dados
-```
-
-**Validacao**: Script deve logar quantas linhas foram processadas, 
-quantas descartadas (nulos/outliers) e o schema final de features.
+### Fase 6 — PINN + RAG
+- [x] `hpe/ai/pinn/model.py` — PumpPINN (PyTorch + numpy fallback), L_data + L_euler + L_cont
+- [x] `hpe/ai/pinn/losses.py` — euler_loss, continuity_loss, efficiency_bound_loss
+- [x] `hpe/ai/pinn/trainer.py` — train_pinn_from_bancada(), early stopping, MLflow
+- [x] `hpe/ai/assistant/rag.py` — EngineeringAssistant, RAG local + Claude API opcional
+- [x] `hpe/ai/assistant/offline_rules.py` — regras Gülich: cavitacao, eficiencia, estabilidade
 
 ---
 
-### TAREFA 2 — Schema training_log ✅ CONCLUIDA
+## O Que NAO Existe Ainda
 
-**Objetivo**: Criar tabela no PostgreSQL para registrar cada simulacao CFD 
-como ponto de treino adicional para o surrogate.
-
-**Schema proposto**:
-```sql
-CREATE TABLE hpe.training_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    projeto_id      UUID,
-    fonte           TEXT NOT NULL,       -- 'bancada' | 'cfd_openfoam' | 'cfd_su2'
-    -- Inputs geometricos
-    ns              FLOAT,
-    d1_mm           FLOAT,
-    d2_mm           FLOAT,
-    b2_mm           FLOAT,
-    beta1_deg       FLOAT,
-    beta2_deg       FLOAT,
-    n_rpm           FLOAT,
-    z_palhetas      INTEGER,
-    -- Condicoes operacionais
-    q_m3h           FLOAT,
-    h_m             FLOAT,
-    n_rot           FLOAT,
-    -- Outputs de performance (targets do surrogate)
-    eta_hid         FLOAT,
-    eta_total       FLOAT,
-    p_shaft_kw      FLOAT,
-    npsh_r_m        FLOAT,
-    -- Metadata
-    qualidade       FLOAT,              -- score de confianca do dado (0-1)
-    notas           TEXT,
-    created_at      TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX ON hpe.training_log (ns, d2_mm);
-CREATE INDEX ON hpe.training_log (fonte, created_at DESC);
-```
+- [ ] CadQuery instalado no Docker — export STEP/STL real (todos os endpoints retornam cad_available=False)
+- [ ] Testes E2E completos (Fase 2-6) — apenas Fase 1 tem testes robustos
+- [ ] Docker Compose producao com uvicorn + Celery + Redis + MinIO
+- [ ] Frontend conectado aos novos endpoints (geometry, volute, pipeline/WS)
+- [ ] Optuna instalado (`pip install optuna`) — bayesian usa random search agora
+- [ ] DEAP instalado (`pip install deap`) — nsga2 pode usar fallback proprio
+- [ ] training_log populado: 460 registros bancada + 0 CFD (aguardando runs reais)
 
 ---
 
-### TAREFA 3 — Surrogate v1 ✅ CONCLUIDA
+## Bloqueios Conhecidos
 
-**Arquivo a criar**: `backend/src/hpe/ai/surrogate/v1_xgboost.py`
-
-**Objetivo**: Primeiro surrogate model. Prediz `eta`, `H`, `P` dado `Ns` e geometria basica.
-
-**Interface esperada**:
-```python
-class SurrogateV1:
-    def train(self, features_path: str) -> TrainingResult: ...
-    def predict(self, input: SurrogateInput) -> SurrogateOutput: ...
-    def evaluate(self, test_set: pd.DataFrame) -> EvalMetrics: ...
-    def save(self, path: str) -> None: ...
-    def load(self, path: str) -> None: ...
-```
-
-**Criterio de aceite**: RMSE ≤ 8% vs dados de bancada no conjunto de teste (20% holdout).
+- **CadQuery**: nao instalado — `pip install cadquery` (ou usar imagem Docker pre-compilada)
+- **Celery/Redis**: servicos nao rodando localmente — orchestrator usa fallback sincrono
+- **Tabela bancada**: `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432)
+- **models/ no .gitignore**: `surrogate_v1.pkl` (~8MB) e `pinn_v1.pkl` devem ser ignorados pelo git
 
 ---
 
@@ -199,37 +107,42 @@ class SurrogateV1:
 
 | Decisao | Escolha | Motivo |
 |---------|---------|--------|
-| Surrogate inicial | XGBoost (nao PyTorch) | Dados limitados inicialmente; XGBoost performa melhor com <10k amostras |
-| Feature store | Parquet local (nao banco) | Simplicidade na Fase 1; migrar para S3/MinIO na Fase 3 |
-| Normalizacao | StandardScaler | Compativel com GP (Fase 3) e facilita interpretacao dos coeficientes |
-| Versionamento de modelos | MLflow local | Simples de iniciar; compativel com MLflow remoto futuro |
-| Validacao do surrogate | 80/20 split + k-fold | Dataset pequeno — k-fold da estimativa mais robusta |
+| Surrogate v1 | XGBoost | Dados limitados; RMSE 2.8% validado |
+| Surrogate v2 | GP sklearn | Incerteza nativa; subsample 500pts para O(n3) |
+| Otimizacao | NSGA-II + Optuna | Multi-objetivo; fallback se dep nao instalada |
+| CFD | OpenFOAM + SU2 adjoint | Industry standard; SU2 para gradiente |
+| PINN | PyTorch + numpy fallback | Portabilidade sem GPU obrigatoria |
+| RAG | Local KB + Claude API opcional | Offline-first; upgradeable sem mudar interface |
+| Feature store | Parquet local | Fase 1-3; migrar para S3/MinIO na Fase 4+ |
+| Normalizacao | StandardScaler | Compativel com GP e PINN |
 
 ---
 
-## Bloqueios Conhecidos
+## Como Executar
 
-- **Tabela de bancada**: A tabela nao e `sigs.teste_bancada` mas sim `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432). ETL conecta via `DATABASE_SIGS_URL` no `.env`.
-- **Nq distribution bins**: O ETL usa `feat_nq` (adimensional ~0.1-1.0) nos bins de Nq europeu (0-300). O correto e usar `feat_ns` nos bins. Ver TAREFA 4 acima.
-- **CadQuery no Docker**: Instalacao do CadQuery pode ser complexa no container — avaliar imagem base
-- **models/ no .gitignore**: Verificar se `models/surrogate_v1.pkl` deve ser versionado ou ignorado (arquivo ~8MB)
+```bash
+# API
+PYTHONPATH=backend/src uvicorn hpe.api.main:app --port 8000 --reload
+
+# CLI
+PYTHONPATH=backend/src python -m hpe.cli sizing --flow 0.05 --head 30 --rpm 1750
+
+# Testes
+PYTHONPATH=backend/src pytest tests/ -v
+
+# Seed training_log
+PYTHONPATH=backend/src python backend/src/hpe/data/bancada_seed.py
+
+# Treinar PINN
+PYTHONPATH=backend/src python -c "from hpe.ai.pinn.trainer import train_pinn_from_bancada; train_pinn_from_bancada(epochs=100)"
+```
 
 ---
 
 ## Notas de Arquitetura
 
-- **Nunca** substituir o surrogate em producao sem versionar no MLflow primeiro
-- **Sempre** registrar runs CFD no `training_log` — e regra de ouro do projeto
-- O surrogate e avaliador primario no loop de otimizacao; CFD real apenas para validacao do design final
-- O modulo `hpe.data.bancada_etl` deve ser idempotente — pode ser re-executado sem duplicar dados
-
----
-
-## Como Atualizar Este Arquivo
-
-Ao final de cada sessao de desenvolvimento, atualizar:
-1. `Progresso da Fase 1` (percentual estimado)
-2. Checkboxes em `O Que NAO Existe Ainda`
-3. `Proxima Tarefa Imediata` (remover a concluida, promover a seguinte)
-4. `Bloqueios Conhecidos` (adicionar novos, remover resolvidos)
-5. `Decisoes Tecnicas Tomadas` (documentar escolhas relevantes feitas na sessao)
+- **Nunca** substituir surrogate em producao sem versionar no MLflow primeiro
+- **Sempre** registrar runs CFD no `training_log` — regra de ouro do projeto
+- Surrogate e avaliador primario no loop de otimizacao; CFD apenas para validacao final
+- Todos os modulos com fallback gracioso quando dependencias pesadas (CadQuery, Celery, Redis, PyTorch) nao estao instaladas
+- Banco `higra_sigs` e somente leitura — nunca escrever nele

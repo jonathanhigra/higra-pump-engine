@@ -182,19 +182,22 @@ services:
       --port=5555
       --basic_auth=admin:hpe2026
 
-  # ── Frontend ───────────────────────────────────────────────────────────────
+  # ── Frontend (nginx + built assets) ───────────────────────────────────────
   frontend:
-    image: node:20-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
-    working_dir: /app
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-    command: sh -c "npm install && npx vite --host 0.0.0.0"
+      - "3000:80"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 volumes:
   pgdata:

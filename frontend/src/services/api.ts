@@ -333,7 +333,9 @@ export function subscribePipelineStatus(
   onUpdate: (status: PipelineStatus) => void,
   onDone: (status: PipelineStatus) => void,
 ): () => void {
-  const ws = new WebSocket(`ws://localhost:8000/ws/pipeline/${run_id}`)
+  const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsHost = window.location.host
+  const ws = new WebSocket(`${wsProto}://${wsHost}/ws/pipeline/${run_id}`)
 
   ws.onmessage = (event) => {
     try {

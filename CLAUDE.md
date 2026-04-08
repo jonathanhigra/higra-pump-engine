@@ -8,8 +8,8 @@
 ## Estado Geral
 
 - **Data**: Abril 2026
-- **Fases implementadas**: 1–8 completas (backend, testes, frontend, docker)
-- **Progresso geral**: ~98% — stack completa; aguardando deploy real + dados CFD
+- **Fases implementadas**: 1–16 completas (backend, testes, frontend, docker, mesh estruturado, CadQuery, CFD completo, loop adjoint fechado, UI cavitação + simulação CFD)
+- **Progresso geral**: ~100% — stack completa; aguardando deploy real + dados CFD reais
 - **Proximo marco**: `docker compose up --build` em servidor + seed training_log com CFD runs reais
 
 ---
@@ -19,13 +19,14 @@
 ```
 hpe/
 ├── sizing/          # Fase 1 — Meanline 1D (Gülich), CLI, API
-├── geometry/        # Fase 1/4 — Runner paramétrico, voluta, CadQuery opcional
+├── geometry/        # Fase 1/4/10 — Runner paramétrico, voluta, export.py (CadQuery), storage.py (MinIO)
 ├── data/            # Fase 1 — ETL bancada, FeatureStore, training_log, seed
 ├── ai/
 │   ├── surrogate/   # Fase 1 (XGBoost v1) + Fase 3 (GP v2) + evaluator
 │   ├── pinn/        # Fase 6 — Physics-Informed NN (PyTorch + numpy fallback)
 │   └── assistant/   # Fase 6 — RAG engineering assistant + offline rules
-├── cfd/             # Fase 2 — OpenFOAM case builder, SU2, mesh, extractor
+├── cfd/             # Fase 2/9 — OpenFOAM case builder, SU2, mesh, extractor
+│   └── mesh/        # Fase 9 — snappy + structured_blade (O-H) + yplus + periodic
 ├── optimization/    # Fase 3 — NSGA-II (DEAP), Bayesian (Optuna), surrogate-assisted
 ├── orchestrator/    # Fase 5 — Celery tasks, Redis status, design versioning
 └── api/             # FastAPI v2.0 — sizing, geometry, surrogate, voluta, WebSocket
@@ -84,22 +85,73 @@ hpe/
 
 ## O Que NAO Existe Ainda
 
-- [ ] CadQuery no Docker — export STEP/STL real (endpoints retornam cad_available=False)
-         Solução: usar imagem pre-compilada `cadquery/cadquery:latest` como base
+- [x] CadQuery no Docker — stage `backend-cad` no Dockerfile raiz; `export_runner_3d()` + `upload_geometry_files()` com fallback gracioso
 - [x] Testes E2E Fases 2-6 — `tests/test_e2e_phases_2_6.py` (53 testes, 2 skipped/Optuna)
 - [x] Docker Compose producao — nginx + Celery (fast/cfd/opt) + Redis + MinIO + Flower
 - [x] Frontend integrado — PipelinePanel (tab Pipeline Completo) + AssistantChat (tab Assistant)
 - [x] Optuna no Docker — `pip install -e ".[optimization]"` instala optuna (ja na imagem)
 - [ ] training_log com dados CFD reais — `bancada_seed.py` popula os 460 bancada; CFD aguarda runs
+- [ ] Deploy real — `docker compose up --build` no servidor + .env com segredos de producao
 
 ---
 
 ## Bloqueios Conhecidos
 
-- **CadQuery**: nao instalado localmente e nao na imagem Docker — retorna 2D profiles apenas
+- **CadQuery**: nao instalado localmente — retorna 2D profiles. Docker: stage `backend-cad` disponivel
 - **Celery/Redis**: nao rodando localmente — orchestrator usa _FakeTask (sincrono). Docker: ok
 - **Tabela bancada SIGS**: `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432, somente leitura)
 - **models/ no .gitignore**: `surrogate_v1.pkl` (~8MB), `surrogate_v2_gp.pkl`, `pinn_v1.pkl` ignorados
+
+---
+
+## Deploy — Checklist
+
+### Pre-requisitos
+```bash
+cp .env.example .env
+# Editar .env: substituir todos os TROQUE_* por valores reais
+# Gerar SECRET_KEY: python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Subir stack
+```bash
+docker compose up --build -d
+
+# Verificar todos saudaveis (aguarda ~30s para DB inicializar)
+docker compose ps
+
+# Smoke test
+curl http://localhost:3000/health
+curl http://localhost:3000/sizing/run \
+  -H "Content-Type: application/json" \
+  -d '{"Q":0.05,"H":30,"n":1750}'
+```
+
+### Seed training_log
+```bash
+# 460 registros da bancada — rodar uma vez apos deploy
+docker compose exec backend \
+  python /app/backend/src/hpe/data/bancada_seed.py
+```
+
+### Verificar servicos
+| Servico | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| API docs | http://localhost:3000/docs |
+| Flower (Celery) | http://localhost:5555 (admin:hpe2026) |
+| MinIO console | http://localhost:9001 (minioadmin / senha do .env) |
+
+### Treinar modelos (apos seed)
+```bash
+# Surrogate v1 (XGBoost)
+docker compose exec backend \
+  python -c "from hpe.ai.surrogate.v1_xgboost import train; train()"
+
+# Surrogate v2 (GP) — requer >100 registros no training_log
+docker compose exec backend \
+  python -c "from hpe.ai.surrogate.v2_gp import train; train()"
+```
 
 ## Fases Concluidas (historico)
 
@@ -113,6 +165,14 @@ hpe/
 | 6 | PINN (PyTorch + numpy fallback), RAG assistant (Gulich KB + Claude API) | DONE |
 | 7 | Frontend: PipelinePanel no App.tsx, tab Pipeline Completo no sidebar | DONE |
 | 8 | Docker: nginx proxy corrigido (WS + v2 routes), Dockerfiles, deps corrigidas | DONE |
+| 9 | Malha estruturada O-H (TurboGrid equiv): yplus.py, periodic.py, structured_blade.py, case.py mesh_mode | DONE |
+| 10 | CadQuery Docker (backend-cad stage), geometry/export.py, geometry/storage.py (MinIO), /geometry/run step_url/stl_url | DONE |
+| 11 | Multi-point CFD sweep (50-130% BEP), pump curve H-Q + η-Q com polinômio grau 2, REST /cfd/sweep + /cfd/pump_curve | DONE |
+| 12 | Convergência adaptativa (ConvergenceMonitor: detecção divergência/estagnação), k-ω SST (write_omega, fvSolution) | DONE |
+| 13 | Blade loading Cp PS/SS (blade_loading.py), cavitação σ + NPSHr + Nss (cavitation.py), REST /cfd/blade_loading + /cfd/cavitation | DONE |
+| 14 | SU2 adjoint: runner.py (direto + adjoint), sensitivity.py (gradientes normalizados dJ/dβ₂, dJ/dD₂), REST /cfd/su2/adjoint | DONE |
+| 15 | DoE LHS/Sobol/factorial (doe.py + DesignSpace), runner paralelo (doe_runner.py + retreino surrogate), REST /cfd/doe | DONE |
+| 16 | Loop adjoint fechado (adjoint_loop.py: gradiente→sizing→mesh→CFD), UI Cavitação (CavitationPanel + curva NPSHr-Q), UI Simulação CFD (CFDSimPanel: dry-run + sweep H-Q + pump curve SVG) | DONE |
 
 ---
 

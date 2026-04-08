@@ -13,6 +13,8 @@ import ImpellerViewer from './components/ImpellerViewer'
 import DesignComparison from './components/DesignComparison'
 import AssistantChat from './components/AssistantChat'
 import PipelinePanel from './components/PipelinePanel'
+import CavitationPanel from './components/CavitationPanel'
+import CFDSimPanel from './components/CFDSimPanel'
 import MeridionalView from './components/MeridionalView'
 import OptimizePanel from './components/OptimizePanel'
 import EfficiencyMap from './components/EfficiencyMap'
@@ -141,6 +143,17 @@ function BatchPanel({ baseFlowRate, baseHead, baseRpm }: any) {
   )
 }
 
+function EmptyStateHint({ label }: { label: string }) {
+  return (
+    <div style={{
+      padding: 24, textAlign: 'center', color: 'var(--text-muted)',
+      fontSize: 13, border: '1px dashed var(--border-primary)', borderRadius: 8,
+    }}>
+      {label}
+    </div>
+  )
+}
+
 export interface SizingResult {
   specific_speed_nq: number
   impeller_type: string
@@ -176,6 +189,7 @@ export type Tab =
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
   | 'meridional-drag' | 'noise' | 'batch' | 'pipeline'
+  | 'cavitation' | 'cfd_sim'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -799,8 +813,10 @@ export default function App() {
     )
   }
 
+  const canRun = opPoint.flowRate > 0 && opPoint.head > 0 && opPoint.rpm > 0
+
   // Tabs that need full width (no 2-column layout with SizingForm)
-  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize', 'pipeline']
+  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize', 'pipeline', 'cavitation', 'cfd_sim']
 
   // === DESIGN — 3D viewer (now with sub-tabs visible) ===
   if (tab === '3d') {
@@ -868,6 +884,60 @@ export default function App() {
               <FeedbackStars tab="optimize" />
             </>
           )}
+          {tab === 'cavitation' && (
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)' }}>Análise de Cavitação</h3>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  NPSHr, margem de segurança, curva NPSHr–Q e recomendações (Gülich §6.10).
+                </p>
+              </div>
+              {canRun ? (
+                <CavitationPanel
+                  flowRate={opPoint.flowRate}
+                  head={opPoint.head}
+                  rpm={opPoint.rpm}
+                  sizing={sizing ? {
+                    specific_speed_nq:    sizing.specific_speed_nq,
+                    estimated_npsh_r:     sizing.estimated_npsh_r,
+                    sigma:                sizing.sigma,
+                    impeller_d2:          sizing.impeller_d2,
+                    estimated_efficiency: sizing.estimated_efficiency,
+                  } : undefined}
+                />
+              ) : (
+                <EmptyStateHint label="Preencha Q, H e n para analisar cavitação." />
+              )}
+            </div>
+          )}
+          {tab === 'cfd_sim' && (
+            <div style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)' }}>Simulação CFD</h3>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  Configurar e executar caso OpenFOAM — ponto único ou sweep H-Q completo.
+                </p>
+              </div>
+              {canRun ? (
+                <CFDSimPanel
+                  flowRate={opPoint.flowRate}
+                  head={opPoint.head}
+                  rpm={opPoint.rpm}
+                  sizing={sizing ? {
+                    specific_speed_nq:    sizing.specific_speed_nq,
+                    impeller_d2:          sizing.impeller_d2,
+                    impeller_b2:          sizing.impeller_b2,
+                    beta1:                sizing.beta1,
+                    beta2:                sizing.beta2,
+                    blade_count:          sizing.blade_count,
+                    estimated_efficiency: sizing.estimated_efficiency,
+                  } : undefined}
+                />
+              ) : (
+                <EmptyStateHint label="Preencha Q, H e n para configurar simulação CFD." />
+              )}
+            </div>
+          )}
           {tab === 'pipeline' && (
             <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
@@ -901,7 +971,7 @@ export default function App() {
               )}
             </div>
           )}
-          {!sizing && tab !== 'templates' && tab !== 'pipeline' && (
+          {!sizing && tab !== 'templates' && tab !== 'pipeline' && tab !== 'cavitation' && tab !== 'cfd_sim' && (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
               Execute um dimensionamento primeiro para usar esta funcionalidade.
             </div>

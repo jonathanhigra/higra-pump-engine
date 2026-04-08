@@ -9,8 +9,8 @@
 
 - **Data**: Abril 2026
 - **Fases implementadas**: 1, 2, 3, 4, 5 e 6 — pipeline completo commitado
-- **Progresso geral**: ~85% — backend completo; falta frontend, docker production, testes E2E
-- **Proximo marco**: Docker Compose production + CadQuery install + testes E2E
+- **Progresso geral**: ~92% — backend + testes E2E completos; falta frontend integrado e deploy
+- **Proximo marco**: Integrar PipelinePanel/AssistantChat no App.tsx + docker-compose production
 
 ---
 
@@ -85,11 +85,10 @@ hpe/
 ## O Que NAO Existe Ainda
 
 - [ ] CadQuery instalado no Docker — export STEP/STL real (todos os endpoints retornam cad_available=False)
-- [ ] Testes E2E completos (Fase 2-6) — apenas Fase 1 tem testes robustos
-- [ ] Docker Compose producao com uvicorn + Celery + Redis + MinIO
-- [ ] Frontend conectado aos novos endpoints (geometry, volute, pipeline/WS)
-- [ ] Optuna instalado (`pip install optuna`) — bayesian usa random search agora
-- [ ] DEAP instalado (`pip install deap`) — nsga2 pode usar fallback proprio
+- [x] Testes E2E completos (Fases 2-6) — `tests/test_e2e_phases_2_6.py` (53 testes, 2 skipped/Optuna)
+- [ ] Docker Compose producao com uvicorn + Celery + Redis + MinIO (compose escrito, nao testado)
+- [ ] Frontend: integrar PipelinePanel + AssistantChat no App.tsx principal
+- [ ] Optuna instalado (`pip install optuna`) — bayesian usa random search por enquanto
 - [ ] training_log populado: 460 registros bancada + 0 CFD (aguardando runs reais)
 
 ---

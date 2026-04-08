@@ -16,3 +16,7 @@ Skills required:
 - Mesh generation (snappyHexMesh, cfMesh)
 - Turbomachinery boundary conditions and MRF
 """
+
+from hpe.cfd.pipeline import run_cfd_pipeline, CfdResult
+
+__all__ = ["run_cfd_pipeline", "CfdResult"]

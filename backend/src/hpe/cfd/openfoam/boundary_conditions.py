@@ -2,12 +2,23 @@
 
 Calculates physical BC values from operating point data and
 generates the 0/ directory files with correct values.
+
+Two APIs provided:
+  1. Low-level: calc_bc_values() + generate_mrf_properties() — string generation
+  2. File-writing: write_U(), write_p(), write_k(), write_epsilon(), write_nut()
+     — write directly to the 0/ sub-directory of a case.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from hpe.core.models import OperatingPoint
+    from hpe.geometry.models import RunnerGeometryParams
 
 
 @dataclass
@@ -77,6 +88,321 @@ def calc_bc_values(
         omega_turb_init=omega_turb,
         nu=nu,
     )
+
+
+# ---------------------------------------------------------------------------
+# File writers — escrevem arquivos OpenFOAM em 0/
+# ---------------------------------------------------------------------------
+
+_FOAM_HEADER = """\
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       {cls};
+    object      {obj};
+}}
+"""
+
+
+def write_U(
+    case_dir: Path,
+    op: "OperatingPoint",
+    params: "RunnerGeometryParams",
+) -> Path:
+    """Escrever 0/U com condições de contorno de velocidade.
+
+    - inlet: velocidade axial uniforme calculada a partir de Q e área
+    - outlet: inletOutlet (recirculação livre)
+    - walls (rotor): movingWallVelocity (paredes que giram com o MRF)
+    - walls (stator): noSlip
+
+    Returns
+    -------
+    Path
+        Caminho do arquivo escrito.
+    """
+    import math
+
+    d1 = params.d1
+    d1h = params.d1_hub
+    a_inlet = math.pi / 4.0 * (d1**2 - d1h**2)
+    u_inlet = op.flow_rate / max(a_inlet, 1e-9)
+
+    content = _FOAM_HEADER.format(cls="volVectorField", obj="U")
+    content += f"""
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 {u_inlet:.6f});
+
+boundaryField
+{{
+    inlet
+    {{
+        type            fixedValue;
+        value           uniform (0 0 {u_inlet:.6f});
+    }}
+
+    outlet
+    {{
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
+    }}
+
+    rotorWalls
+    {{
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }}
+
+    statorWalls
+    {{
+        type            noSlip;
+    }}
+
+    rotatingZone_to_stator
+    {{
+        type            cyclicAMI;
+        value           uniform (0 0 0);
+    }}
+}}
+"""
+    path = case_dir / "0" / "U"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+def write_p(case_dir: Path) -> Path:
+    """Escrever 0/p com condição de pressão manométrica.
+
+    - inlet: zeroGradient
+    - outlet: fixedValue uniform 0 (pressão de referência)
+    - walls: zeroGradient
+    """
+    content = _FOAM_HEADER.format(cls="volScalarField", obj="p")
+    content += """
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            zeroGradient;
+    }
+
+    outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+
+    rotorWalls
+    {
+        type            zeroGradient;
+    }
+
+    statorWalls
+    {
+        type            zeroGradient;
+    }
+
+    rotatingZone_to_stator
+    {
+        type            cyclicAMI;
+        value           uniform 0;
+    }
+}
+"""
+    path = case_dir / "0" / "p"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+def write_k(
+    case_dir: Path,
+    turbulence_intensity: float = 0.05,
+    u_ref: float = 5.0,
+) -> Path:
+    """Escrever 0/k (energia cinética turbulenta).
+
+    k = 1.5 * (U * I)^2  onde I = turbulence_intensity
+
+    Parameters
+    ----------
+    case_dir : Path
+    turbulence_intensity : float
+        Intensidade turbulenta (fração da velocidade de referência).
+    u_ref : float
+        Velocidade de referência [m/s] para cálculo de k na inlet.
+    """
+    k_val = 1.5 * (u_ref * turbulence_intensity) ** 2
+    k_val = max(k_val, 1e-8)
+
+    content = _FOAM_HEADER.format(cls="volScalarField", obj="k")
+    content += f"""
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform {k_val:.8e};
+
+boundaryField
+{{
+    inlet
+    {{
+        type            turbulentIntensityKineticEnergyInlet;
+        intensity       {turbulence_intensity:.4f};
+        value           uniform {k_val:.8e};
+    }}
+
+    outlet
+    {{
+        type            inletOutlet;
+        inletValue      uniform {k_val:.8e};
+        value           uniform {k_val:.8e};
+    }}
+
+    rotorWalls
+    {{
+        type            kqRWallFunction;
+        value           uniform {k_val:.8e};
+    }}
+
+    statorWalls
+    {{
+        type            kqRWallFunction;
+        value           uniform {k_val:.8e};
+    }}
+
+    rotatingZone_to_stator
+    {{
+        type            cyclicAMI;
+        value           uniform {k_val:.8e};
+    }}
+}}
+"""
+    path = case_dir / "0" / "k"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+def write_epsilon(
+    case_dir: Path,
+    turbulence_intensity: float = 0.05,
+    u_ref: float = 5.0,
+    length_scale: float = 0.01,
+) -> Path:
+    """Escrever 0/epsilon (taxa de dissipação turbulenta).
+
+    epsilon = C_mu^0.75 * k^1.5 / L
+    """
+    c_mu = 0.09
+    k_val = 1.5 * (u_ref * turbulence_intensity) ** 2
+    k_val = max(k_val, 1e-8)
+    l_eff = max(length_scale, 1e-4)
+    eps_val = c_mu**0.75 * k_val**1.5 / l_eff
+    eps_val = max(eps_val, 1e-10)
+
+    content = _FOAM_HEADER.format(cls="volScalarField", obj="epsilon")
+    content += f"""
+dimensions      [0 2 -3 0 0 0 0];
+
+internalField   uniform {eps_val:.8e};
+
+boundaryField
+{{
+    inlet
+    {{
+        type            turbulentMixingLengthDissipationRateInlet;
+        mixingLength    {l_eff:.6f};
+        value           uniform {eps_val:.8e};
+    }}
+
+    outlet
+    {{
+        type            inletOutlet;
+        inletValue      uniform {eps_val:.8e};
+        value           uniform {eps_val:.8e};
+    }}
+
+    rotorWalls
+    {{
+        type            epsilonWallFunction;
+        value           uniform {eps_val:.8e};
+    }}
+
+    statorWalls
+    {{
+        type            epsilonWallFunction;
+        value           uniform {eps_val:.8e};
+    }}
+
+    rotatingZone_to_stator
+    {{
+        type            cyclicAMI;
+        value           uniform {eps_val:.8e};
+    }}
+}}
+"""
+    path = case_dir / "0" / "epsilon"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+def write_nut(case_dir: Path) -> Path:
+    """Escrever 0/nut (viscosidade turbulenta calculada pelo modelo).
+
+    Na maioria dos casos, nut é calculado internamente pelo solver;
+    o arquivo em 0/ define as condições de parede.
+    """
+    content = _FOAM_HEADER.format(cls="volScalarField", obj="nut")
+    content += """
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
+    outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
+    rotorWalls
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+
+    statorWalls
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+
+    rotatingZone_to_stator
+    {
+        type            cyclicAMI;
+        value           uniform 0;
+    }
+}
+"""
+    path = case_dir / "0" / "nut"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
 
 
 def generate_mrf_properties(

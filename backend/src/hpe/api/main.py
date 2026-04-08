@@ -88,13 +88,13 @@ class SizingOutput(BaseModel):
 
 class SurrogatePredictInput(BaseModel):
     """Input for surrogate model prediction (v2.0 canonical interface)."""
-    Ns: float = Field(..., description="Specific speed n*sqrt(Q)/H^0.75")
-    D2: float = Field(..., description="Impeller diameter [mm]")
-    b2: float = Field(..., description="Outlet width [mm]")
-    beta2: float = Field(..., description="Outlet blade angle [deg]")
-    n: float = Field(..., description="Rotational speed [rpm]")
-    Q: float = Field(..., description="Flow rate [m3/s]")
-    H: float = Field(..., description="Total head [m]")
+    Ns: float = Field(..., gt=0, description="Specific speed n*sqrt(Q)/H^0.75")
+    D2: float = Field(..., gt=0, description="Impeller diameter [mm]")
+    b2: float = Field(..., gt=0, description="Outlet width [mm]")
+    beta2: float = Field(..., gt=0, lt=90, description="Outlet blade angle [deg]")
+    n: float = Field(..., gt=0, description="Rotational speed [rpm]")
+    Q: float = Field(..., gt=0, description="Flow rate [m3/s]")
+    H: float = Field(..., gt=0, description="Total head [m]")
     n_stages: int = Field(1, ge=1, description="Number of stages")
 
 

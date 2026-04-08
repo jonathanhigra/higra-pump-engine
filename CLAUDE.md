@@ -8,7 +8,7 @@
 ## Estado Geral
 
 - **Data**: Abril 2026
-- **Fases implementadas**: 1–16 completas (backend, testes, frontend, docker, mesh estruturado, CadQuery, CFD completo, loop adjoint fechado, UI cavitação + simulação CFD)
+- **Fases implementadas**: 1–20 completas (paridade Ansys CFD: multi-domínio AMI, cavitação ZGB, prism layers, spanwise, VTU export, Q-criterion, loss audit, turbo views, transient sliding mesh, FFT BPF, radial forces, γ-Reθ, mesh morphing, multi-stage, benchmarks SHF/ERCOFTAC, PDF reports)
 - **Progresso geral**: ~100% — stack completa; aguardando deploy real + dados CFD reais
 - **Proximo marco**: `docker compose up --build` em servidor + seed training_log com CFD runs reais
 
@@ -173,6 +173,10 @@ docker compose exec backend \
 | 14 | SU2 adjoint: runner.py (direto + adjoint), sensitivity.py (gradientes normalizados dJ/dβ₂, dJ/dD₂), REST /cfd/su2/adjoint | DONE |
 | 15 | DoE LHS/Sobol/factorial (doe.py + DesignSpace), runner paralelo (doe_runner.py + retreino surrogate), REST /cfd/doe | DONE |
 | 16 | Loop adjoint fechado (adjoint_loop.py: gradiente→sizing→mesh→CFD), UI Cavitação (CavitationPanel + curva NPSHr-Q), UI Simulação CFD (CFDSimPanel: dry-run + sweep H-Q + pump curve SVG) | DONE |
+| 17 | Paridade Ansys I: multi_domain.py rotor+voluta cyclicAMI, cavitation_case.py Zwart-Gerber-Belamri, prism_layers.py y+ targeting, spanwise_loading.py hub/mid/tip | DONE |
+| 18 | Visualização campo CFD: vtk_export.py VTU+JSON sampled, field_features.py Q-criterion/streamlines/isosurfaces, loss_audit.py Kock/Denton entropy, turbo_views.py meridional+blade2blade | DONE |
+| 19 | Transiente + ruído: transient.py pimpleFoam sliding mesh, pulsations.py FFT BPF, radial_forces.py Stepanoff Kr, transition_model.py Menter-Langtry γ-Reθ kOmegaSSTLM | DONE |
+| 20 | Otimização avançada + workflow: morph.py displacementLaplacian mesh morphing, multi_stage.py bombas N estágios, validation/benchmarks.py SHF/ERCOFTAC/TUD, reports/generator.py PDF/HTML/MD | DONE |
 
 ---
 

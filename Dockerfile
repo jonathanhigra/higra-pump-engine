@@ -11,9 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy only dependency files first (layer cache)
 COPY backend/pyproject.toml backend/README.md ./
 
-# Install with optimization extras (deap + optuna). ai/geometry extras are
-# optional — skip cadquery here to keep the image lean.
+# Install core + optimization extras.
+# Core now includes: scikit-learn, xgboost, joblib, pyarrow (surrogate + parquet).
+# optimization adds: deap, optuna.
+# torch and cadquery are excluded to keep the image lean (~600 MB vs 3+ GB).
 RUN pip install --no-cache-dir -e ".[optimization]"
+
+# MLflow for experiment tracking (optional but useful in production)
+RUN pip install --no-cache-dir "mlflow>=2.11"
 
 # Copy source (after deps so rebuilds are fast)
 COPY backend/src ./src

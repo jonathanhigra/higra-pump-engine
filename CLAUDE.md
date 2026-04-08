@@ -8,9 +8,9 @@
 ## Estado Geral
 
 - **Data**: Abril 2026
-- **Fases implementadas**: 1, 2, 3, 4, 5 e 6 — pipeline completo commitado
-- **Progresso geral**: ~92% — backend + testes E2E completos; falta frontend integrado e deploy
-- **Proximo marco**: Integrar PipelinePanel/AssistantChat no App.tsx + docker-compose production
+- **Fases implementadas**: 1–8 completas (backend, testes, frontend, docker)
+- **Progresso geral**: ~98% — stack completa; aguardando deploy real + dados CFD
+- **Proximo marco**: `docker compose up --build` em servidor + seed training_log com CFD runs reais
 
 ---
 
@@ -84,21 +84,35 @@ hpe/
 
 ## O Que NAO Existe Ainda
 
-- [ ] CadQuery instalado no Docker — export STEP/STL real (todos os endpoints retornam cad_available=False)
-- [x] Testes E2E completos (Fases 2-6) — `tests/test_e2e_phases_2_6.py` (53 testes, 2 skipped/Optuna)
-- [ ] Docker Compose producao com uvicorn + Celery + Redis + MinIO (compose escrito, nao testado)
-- [ ] Frontend: integrar PipelinePanel + AssistantChat no App.tsx principal
-- [ ] Optuna instalado (`pip install optuna`) — bayesian usa random search por enquanto
-- [ ] training_log populado: 460 registros bancada + 0 CFD (aguardando runs reais)
+- [ ] CadQuery no Docker — export STEP/STL real (endpoints retornam cad_available=False)
+         Solução: usar imagem pre-compilada `cadquery/cadquery:latest` como base
+- [x] Testes E2E Fases 2-6 — `tests/test_e2e_phases_2_6.py` (53 testes, 2 skipped/Optuna)
+- [x] Docker Compose producao — nginx + Celery (fast/cfd/opt) + Redis + MinIO + Flower
+- [x] Frontend integrado — PipelinePanel (tab Pipeline Completo) + AssistantChat (tab Assistant)
+- [x] Optuna no Docker — `pip install -e ".[optimization]"` instala optuna (ja na imagem)
+- [ ] training_log com dados CFD reais — `bancada_seed.py` popula os 460 bancada; CFD aguarda runs
 
 ---
 
 ## Bloqueios Conhecidos
 
-- **CadQuery**: nao instalado — `pip install cadquery` (ou usar imagem Docker pre-compilada)
-- **Celery/Redis**: servicos nao rodando localmente — orchestrator usa fallback sincrono
-- **Tabela bancada**: `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432)
-- **models/ no .gitignore**: `surrogate_v1.pkl` (~8MB) e `pinn_v1.pkl` devem ser ignorados pelo git
+- **CadQuery**: nao instalado localmente e nao na imagem Docker — retorna 2D profiles apenas
+- **Celery/Redis**: nao rodando localmente — orchestrator usa _FakeTask (sincrono). Docker: ok
+- **Tabela bancada SIGS**: `public.hgr_lab_reg_teste` no banco `higra_sigs` (localhost:5432, somente leitura)
+- **models/ no .gitignore**: `surrogate_v1.pkl` (~8MB), `surrogate_v2_gp.pkl`, `pinn_v1.pkl` ignorados
+
+## Fases Concluidas (historico)
+
+| Fase | O que fez | Status |
+|------|-----------|--------|
+| 1 | MVP: Sizing 1D, ETL bancada, Surrogate XGBoost v1, API FastAPI | DONE |
+| 2 | CFD Pipeline: OpenFOAM case builder, SU2, extractor | DONE |
+| 3 | Surrogate v2 GP, NSGA-II DEAP, Optuna Bayesian, surrogate-assisted | DONE |
+| 4 | Voluta pipeline, training_log seed (460 registros) | DONE |
+| 5 | Celery orchestrator (3 filas), Redis status, WebSocket, DesignVersion | DONE |
+| 6 | PINN (PyTorch + numpy fallback), RAG assistant (Gulich KB + Claude API) | DONE |
+| 7 | Frontend: PipelinePanel no App.tsx, tab Pipeline Completo no sidebar | DONE |
+| 8 | Docker: nginx proxy corrigido (WS + v2 routes), Dockerfiles, deps corrigidas | DONE |
 
 ---
 

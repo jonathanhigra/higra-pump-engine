@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import t from '../i18n'
 import type { SizingResult } from '../App'
+import { askAssistant } from '../services/api'
 
 interface Props { sizing: SizingResult | null }
 interface Message { role: 'user' | 'assistant'; text: string }
@@ -18,8 +19,24 @@ export default function AssistantChat({ sizing }: Props) {
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: userMsg }])
     setLoading(true)
-    const response = generateResponse(userMsg, sizing)
-    setTimeout(() => { setMessages(prev => [...prev, { role: 'assistant', text: response }]); setLoading(false) }, 300)
+    try {
+      const resp = await askAssistant({
+        question: userMsg,
+        context: sizing ? {
+          Ns: sizing.specific_speed_nq,
+          D2_mm: sizing.impeller_d2 * 1000,
+          eta: sizing.estimated_efficiency * 100,
+          NPSHr: sizing.estimated_npsh_r,
+          warnings: sizing.warnings,
+        } : undefined,
+      })
+      setMessages(prev => [...prev, { role: 'assistant', text: resp.answer }])
+    } catch {
+      // fallback local
+      const response = generateResponse(userMsg, sizing)
+      setMessages(prev => [...prev, { role: 'assistant', text: response }])
+    }
+    setLoading(false)
   }
 
   return (

@@ -49,6 +49,7 @@ from hpe.api.routes.lean_sweep_routes import router as lean_sweep_router
 from hpe.api.routes.version_routes import router as version_router
 from hpe.api.volute_endpoint import router as volute_v2_router
 from hpe.api.websocket import router as pipeline_ws_router
+from hpe.api.routes.assistant_routes import router as assistant_router
 
 app = FastAPI(
     title="Higra Pump Engine",
@@ -101,6 +102,7 @@ app.include_router(lean_sweep_router)
 app.include_router(version_router)
 app.include_router(volute_v2_router)
 app.include_router(pipeline_ws_router)
+app.include_router(assistant_router)
 
 
 @app.get("/health")

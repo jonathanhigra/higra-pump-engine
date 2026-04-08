@@ -1,4 +1,5 @@
 const API_BASE = '/api/v1'
+const API_V2_BASE = ''
 
 export async function runSizing(flowRate: number, head: number, rpm: number) {
   const res = await fetch(`${API_BASE}/sizing`, {
@@ -179,4 +180,215 @@ export function exportSizingCSV(sizing: any, opPoint: any): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'hpe-sizing.csv'; a.click()
   URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
+// HPE API v2.0 endpoints
+// ---------------------------------------------------------------------------
+
+export interface SizingV2Input {
+  Q: number    // m³/s
+  H: number    // m
+  n: number    // rpm
+  fluid?: string
+  rho?: number
+  nu?: number
+}
+
+export interface SizingV2Output {
+  Ns: number; Nq: number; omega_s: number
+  D1: number; D2: number; b2: number
+  beta1: number; beta2: number; u2: number
+  eta_hid: number; eta_total: number
+  P_shaft: number; NPSHr: number
+  warnings: string[]
+  computation_time_ms: number
+}
+
+export async function runSizingV2(inp: SizingV2Input): Promise<SizingV2Output> {
+  const res = await fetch(`${API_V2_BASE}/sizing/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inp),
+  })
+  if (!res.ok) throw new Error(`SizingV2 failed: ${res.status}`)
+  return res.json()
+}
+
+export interface GeometryOutput {
+  params: {
+    D2_mm: number; D1_mm: number; D1_hub_mm: number
+    b2_mm: number; b1_mm: number
+    beta1_deg: number; beta2_deg: number
+    blade_count: number; blade_thickness_mm: number; wrap_angle_deg: number
+  }
+  meridional_hub_r_mm: number[]
+  meridional_hub_z_mm: number[]
+  meridional_shroud_r_mm: number[]
+  meridional_shroud_z_mm: number[]
+  blade_camber_r_mm: number[]
+  blade_camber_theta_deg: number[]
+  cad_available: boolean
+  step_path: string | null
+  warnings: string[]
+  generation_time_ms: number
+}
+
+export async function runGeometry(inp: SizingV2Input): Promise<GeometryOutput> {
+  const res = await fetch(`${API_V2_BASE}/geometry/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inp),
+  })
+  if (!res.ok) throw new Error(`Geometry failed: ${res.status}`)
+  return res.json()
+}
+
+export interface VoluteOutput {
+  throat_area_mm2: number
+  tongue_radius_mm: number
+  exit_diameter_mm: number
+  casing_width_mm: number
+  D2_mm: number
+  warnings: string[]
+}
+
+export async function runVolute(inp: SizingV2Input & { tongue_clearance?: number }): Promise<VoluteOutput> {
+  const res = await fetch(`${API_V2_BASE}/volute/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inp),
+  })
+  if (!res.ok) throw new Error(`Volute failed: ${res.status}`)
+  return res.json()
+}
+
+export interface SurrogatePredictInput {
+  Ns: number; D2: number; b2: number; beta2: number
+  n: number; Q: number; H: number; n_stages?: number
+}
+
+export interface SurrogatePredictOutput {
+  eta_hid: number; eta_total: number; H: number; P_shaft: number
+  confidence: number; surrogate_version: string; latency_ms: number
+}
+
+export async function predictSurrogate(inp: SurrogatePredictInput): Promise<SurrogatePredictOutput> {
+  const res = await fetch(`${API_V2_BASE}/surrogate/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inp),
+  })
+  if (!res.ok) throw new Error(`Surrogate predict failed: ${res.status}`)
+  return res.json()
+}
+
+export interface SimilarDesign {
+  ns: number; d2_mm: number; eta_total: number; fonte: string; qualidade: number
+  modelo_bomba?: string
+}
+
+export async function getSimilarDesigns(ns: number, d2_mm: number, limit?: number): Promise<SimilarDesign[]> {
+  const params = new URLSearchParams({ ns: String(ns), d2_mm: String(d2_mm) })
+  if (limit !== undefined) params.set('limit', String(limit))
+  const res = await fetch(`${API_V2_BASE}/surrogate/similar?${params}`)
+  if (!res.ok) throw new Error(`Similar designs failed: ${res.status}`)
+  return res.json()
+}
+
+// Pipeline assíncrono
+export interface PipelineRunResult {
+  run_id: string
+  mode: 'async' | 'sync'
+  task_id?: string
+  D2_mm?: number
+  eta?: number
+  elapsed_ms?: number
+}
+
+export async function startPipeline(inp: SizingV2Input): Promise<PipelineRunResult> {
+  const res = await fetch(`${API_V2_BASE}/pipeline/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inp),
+  })
+  if (!res.ok) throw new Error(`Pipeline start failed: ${res.status}`)
+  return res.json()
+}
+
+// WebSocket status
+export type PipelineStatus = {
+  run_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'not_found'
+  stage?: string
+  progress?: number
+  elapsed_s?: number
+  message?: string
+  result?: Record<string, unknown>
+  error?: string
+}
+
+export function subscribePipelineStatus(
+  run_id: string,
+  onUpdate: (status: PipelineStatus) => void,
+  onDone: (status: PipelineStatus) => void,
+): () => void {
+  const ws = new WebSocket(`ws://localhost:8000/ws/pipeline/${run_id}`)
+
+  ws.onmessage = (event) => {
+    try {
+      const status: PipelineStatus = JSON.parse(event.data)
+      onUpdate(status)
+      if (status.status === 'completed' || status.status === 'failed') {
+        onDone(status)
+        ws.close()
+      }
+    } catch {
+      // ignore malformed messages
+    }
+  }
+
+  ws.onerror = () => {
+    const errorStatus: PipelineStatus = {
+      run_id,
+      status: 'failed',
+      error: 'WebSocket connection error',
+    }
+    onDone(errorStatus)
+  }
+
+  // cleanup function
+  return () => {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close()
+    }
+  }
+}
+
+// Assistant RAG
+export interface AssistantRequest {
+  question: string
+  context?: {
+    Ns?: number; D2_mm?: number; eta?: number; NPSHr?: number
+    warnings?: string[]
+  }
+}
+
+export interface AssistantResponse {
+  answer: string
+  relevant_topics: string[]
+  recommendations: string[]
+  references: string[]
+  confidence: number
+  mode: string
+}
+
+export async function askAssistant(req: AssistantRequest): Promise<AssistantResponse> {
+  const res = await fetch(`${API_V2_BASE}/assistant/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) throw new Error(`Assistant ask failed: ${res.status}`)
+  return res.json()
 }

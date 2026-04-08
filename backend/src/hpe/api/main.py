@@ -4,6 +4,7 @@ Exposes the core HPE endpoints as specified in the HPE Development
 Document v2.0:
 
   POST /sizing/run          1D meanline sizing
+  POST /geometry/run        Parametric runner geometry (2D profiles + optional STEP)
   POST /surrogate/predict   Surrogate model prediction
   GET  /surrogate/similar   Find similar designs in training_log
   GET  /health              Health check
@@ -212,6 +213,89 @@ async def run_sizing(inp: SizingInput) -> SizingOutput:
     except Exception as e:
         log.exception("sizing.run error")
         raise HTTPException(status_code=500, detail=f"Sizing error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Geometry endpoint
+# ---------------------------------------------------------------------------
+
+class GeometryParamsOut(BaseModel):
+    D2_mm: float; D1_mm: float; D1_hub_mm: float
+    b2_mm: float; b1_mm: float
+    beta1_deg: float; beta2_deg: float
+    blade_count: int; blade_thickness_mm: float; wrap_angle_deg: float
+
+
+class GeometryOutput(BaseModel):
+    """Parametric runner geometry result."""
+    params: GeometryParamsOut
+    meridional_hub_r_mm: list[float]
+    meridional_hub_z_mm: list[float]
+    meridional_shroud_r_mm: list[float]
+    meridional_shroud_z_mm: list[float]
+    blade_camber_r_mm: list[float]
+    blade_camber_theta_deg: list[float]
+    cad_available: bool
+    step_path: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+    generation_time_ms: float = 0.0
+
+
+@app.post("/geometry/run", response_model=GeometryOutput, tags=["Geometry"])
+async def run_geometry(inp: SizingInput) -> GeometryOutput:
+    """Generate parametric runner geometry from operating point.
+
+    Runs sizing 1D first, then generates:
+    - All geometric parameters (D1, D2, b2, blade angles, blade count)
+    - Meridional channel profile (hub + shroud point arrays)
+    - Blade camber line (r, theta coordinates)
+    - STEP file if CadQuery is installed (optional)
+
+    Typical latency: < 5 ms (2D only), ~2 s (with STEP export).
+    """
+    t0 = time.perf_counter()
+    try:
+        from hpe.core.models import OperatingPoint
+        from hpe.core.enums import MachineType, FluidType
+        from hpe.sizing.meanline import run_sizing as _run_sizing
+        from hpe.geometry.parametric import run_geometry as _run_geo
+
+        op = OperatingPoint(
+            flow_rate=inp.Q,
+            head=inp.H,
+            rpm=inp.n,
+            machine_type=MachineType.CENTRIFUGAL_PUMP,
+            fluid=FluidType.WATER if inp.fluid == "water" else FluidType.CUSTOM,
+            fluid_density=inp.rho,
+            fluid_viscosity=inp.nu * inp.rho,
+        )
+        sizing = _run_sizing(op)
+        geo = _run_geo(sizing)
+
+        d = geo.to_dict()
+        p = d["params"]
+        m = d["meridional"]
+        b = d["blade"]
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return GeometryOutput(
+            params=GeometryParamsOut(**p),
+            meridional_hub_r_mm=m["hub_r_mm"],
+            meridional_hub_z_mm=m["hub_z_mm"],
+            meridional_shroud_r_mm=m["shroud_r_mm"],
+            meridional_shroud_z_mm=m["shroud_z_mm"],
+            blade_camber_r_mm=b["camber_r_mm"],
+            blade_camber_theta_deg=b["camber_theta_deg"],
+            cad_available=d["cad_available"],
+            step_path=d["step_path"],
+            warnings=d["warnings"],
+            generation_time_ms=round(elapsed_ms, 1),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        log.exception("geometry.run error")
+        raise HTTPException(status_code=500, detail=f"Geometry error: {e}")
 
 
 # ---------------------------------------------------------------------------

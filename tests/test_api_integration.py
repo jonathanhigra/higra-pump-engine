@@ -292,6 +292,102 @@ class TestSurrogateSimilar:
 
 
 # ===========================================================================
+# ===========================================================================
+# /geometry/run
+# ===========================================================================
+
+class TestGeometryRun:
+    def test_valid_request_200(self):
+        r = client.post("/geometry/run", json=SIZING_VALID)
+        assert r.status_code == 200, r.text
+
+    def test_response_schema(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        assert "params" in body
+        assert "meridional_hub_r_mm" in body
+        assert "meridional_shroud_r_mm" in body
+        assert "blade_camber_r_mm" in body
+        assert "cad_available" in body
+        assert "warnings" in body
+        assert "generation_time_ms" in body
+
+    def test_params_fields(self):
+        params = client.post("/geometry/run", json=SIZING_VALID).json()["params"]
+        for field in ["D2_mm", "D1_mm", "b2_mm", "beta1_deg", "beta2_deg",
+                      "blade_count", "blade_thickness_mm", "wrap_angle_deg"]:
+            assert field in params, f"Missing params field: {field}"
+
+    def test_geometry_physically_plausible(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        p = body["params"]
+
+        # D2 > D1 > D1_hub
+        assert p["D2_mm"] > p["D1_mm"] > p["D1_hub_mm"] > 0, \
+            f"Diameter ordering violated: {p}"
+
+        # b2 reasonable
+        assert 0 < p["b2_mm"] < p["D2_mm"], f"b2={p['b2_mm']} out of range"
+
+        # Blade angles physical range
+        assert 5 < p["beta1_deg"] < 80
+        assert 5 < p["beta2_deg"] < 60
+
+        # Blade count 3–10
+        assert 3 <= p["blade_count"] <= 10
+
+        # Wrap angle for centrifugal: typically 60°–140°
+        assert 20 < p["wrap_angle_deg"] < 200, \
+            f"Wrap angle = {p['wrap_angle_deg']:.1f}° implausible"
+
+    def test_meridional_profile_has_points(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        assert len(body["meridional_hub_r_mm"]) >= 5
+        assert len(body["meridional_shroud_r_mm"]) == len(body["meridional_hub_r_mm"])
+        # Radial coordinates must be positive
+        assert all(r > 0 for r in body["meridional_hub_r_mm"])
+
+    def test_blade_profile_has_points(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        assert len(body["blade_camber_r_mm"]) >= 5
+        assert len(body["blade_camber_theta_deg"]) == len(body["blade_camber_r_mm"])
+
+    def test_blade_r_monotonic(self):
+        """Blade camber r should monotonically increase (inlet → outlet)."""
+        r_pts = client.post("/geometry/run", json=SIZING_VALID).json()["blade_camber_r_mm"]
+        for i in range(len(r_pts) - 1):
+            assert r_pts[i] < r_pts[i + 1], \
+                f"Blade r not monotonic at index {i}: {r_pts[i]:.2f} >= {r_pts[i+1]:.2f}"
+
+    def test_cad_available_field_is_bool(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        assert isinstance(body["cad_available"], bool)
+
+    def test_warnings_is_list(self):
+        body = client.post("/geometry/run", json=SIZING_VALID).json()
+        assert isinstance(body["warnings"], list)
+
+    def test_invalid_Q_returns_422(self):
+        r = client.post("/geometry/run", json={**SIZING_VALID, "Q": -0.01})
+        assert r.status_code == 422
+
+    def test_high_ns_mixed_flow(self):
+        """High Ns (mixed-flow range) should still produce valid geometry."""
+        inp = {"Q": 0.5, "H": 12.0, "n": 1450.0, "rho": 998.0, "nu": 1.004e-6}
+        r = client.post("/geometry/run", json=inp)
+        assert r.status_code == 200, r.text
+
+    @pytest.mark.parametrize("Q,H,n", [
+        (0.01, 20.0, 1750.0),
+        (0.2,  40.0, 1450.0),
+        (1.0,  10.0,  980.0),
+    ])
+    def test_parametric_variety(self, Q, H, n):
+        inp = {"Q": Q, "H": H, "n": n, "rho": 998.0, "nu": 1.004e-6}
+        r = client.post("/geometry/run", json=inp)
+        assert r.status_code == 200, f"Q={Q} H={H} n={n}: {r.text}"
+
+
+# ===========================================================================
 # /docs — OpenAPI spec available
 # ===========================================================================
 
@@ -302,6 +398,7 @@ class TestDocs:
         body = r.json()
         assert "paths" in body
         assert "/sizing/run" in body["paths"]
+        assert "/geometry/run" in body["paths"]
         assert "/surrogate/predict" in body["paths"]
         assert "/surrogate/similar" in body["paths"]
         assert "/health" in body["paths"]

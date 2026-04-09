@@ -537,6 +537,72 @@ def probe_optimizer(req: ProbeOptimizerRequest) -> dict[str, Any]:
     }
 
 
+# ===========================================================================
+# Improvement #21-25 — extra field extractors
+# ===========================================================================
+
+class HTCRequest(BaseModel):
+    case_dir: Optional[str] = None
+    u_ref: float = Field(..., gt=0)
+    l_ref: float = Field(..., gt=0)
+
+
+@router.post("/htc", summary="Heat transfer coefficient (Dittus-Boelter)")
+def htc(req: HTCRequest) -> dict[str, Any]:
+    from hpe.cfd.postprocessing.field_extractors import extract_htc
+    case = req.case_dir or _tmp_dir("htc")
+    return extract_htc(case, req.u_ref, req.l_ref).to_dict()
+
+
+class WallShearRequest(BaseModel):
+    case_dir: Optional[str] = None
+    u_ref: float = Field(..., gt=0)
+    l_ref: float = Field(..., gt=0)
+
+
+@router.post("/wall_shear", summary="Wall shear stress + skin friction Cf")
+def wall_shear(req: WallShearRequest) -> dict[str, Any]:
+    from hpe.cfd.postprocessing.field_extractors import extract_wall_shear
+    case = req.case_dir or _tmp_dir("wss")
+    return extract_wall_shear(case, req.u_ref, req.l_ref).to_dict()
+
+
+class YPlusStatsRequest(BaseModel):
+    case_dir: Optional[str] = None
+    n_bins: int = 20
+
+
+@router.post("/yplus_stats", summary="Y+ field statistics + histogram")
+def yplus_stats(req: YPlusStatsRequest) -> dict[str, Any]:
+    from hpe.cfd.postprocessing.field_extractors import extract_yplus_stats
+    case = req.case_dir or _tmp_dir("yps")
+    return extract_yplus_stats(case, n_bins=req.n_bins).to_dict()
+
+
+class MassFlowCheckRequest(BaseModel):
+    case_dir: Optional[str] = None
+    Q: float = Field(..., gt=0)
+    rho: float = 998.2
+
+
+@router.post("/mass_flow_check", summary="Mass flow conservation in vs out")
+def mass_flow_check(req: MassFlowCheckRequest) -> dict[str, Any]:
+    from hpe.cfd.postprocessing.field_extractors import check_mass_flow_conservation
+    return check_mass_flow_conservation(req.Q, req.rho, req.case_dir).to_dict()
+
+
+class CpFieldRequest(BaseModel):
+    case_dir: Optional[str] = None
+    u_ref: float = Field(..., gt=0)
+
+
+@router.post("/cp_field", summary="Pressure coefficient Cp field statistics")
+def cp_field(req: CpFieldRequest) -> dict[str, Any]:
+    from hpe.cfd.postprocessing.field_extractors import extract_cp_field
+    case = req.case_dir or _tmp_dir("cp")
+    return extract_cp_field(case, req.u_ref).to_dict()
+
+
 @router.get("/benchmarks", summary="Listar benchmarks de validação")
 def list_benchmarks_endpoint() -> dict[str, Any]:
     from hpe.validation.benchmarks import list_benchmarks

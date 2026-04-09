@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
+from typing import Optional
 
 from hpe.core.models import OperatingPoint
 from hpe.geometry.models import RunnerGeometryParams
@@ -30,6 +31,9 @@ def build_openfoam_case(
     n_procs: int = 4,
     mesh_mode: str = "snappy",
     turbulence_model: str = "kEpsilon",
+    enable_prism_layers: bool = False,
+    enable_transition: bool = False,
+    target_yplus: Optional[float] = None,
 ) -> dict[str, Path]:
     """Criar estrutura de diretórios e arquivos do caso OpenFOAM.
 
@@ -160,6 +164,51 @@ def build_openfoam_case(
     # decomposeParDict se paralelo
     if n_procs > 1:
         created["system/decomposeParDict"] = _write_decompose_par(case_dir, n_procs)
+
+    # ------------------------------------------------------------------
+    # Fase 17.3 — Prism layers com y+ targeting automático (opcional)
+    # ------------------------------------------------------------------
+    if enable_prism_layers and mesh_mode == "snappy":
+        try:
+            from hpe.cfd.mesh.prism_layers import (
+                compute_prism_layer_config, yplus_target_for_model,
+            )
+            u_ref = (math.pi * params.d2 * op.rpm) / 60.0
+            l_ref = max(params.d2 - params.d1, 0.05)
+            yp = target_yplus or yplus_target_for_model(turbulence_model)
+            prism_cfg = compute_prism_layer_config(
+                u_ref=u_ref, l_ref=l_ref, nu=1e-6, target_yplus=yp,
+            )
+            # Append addLayersControls at end of existing snappyHexMeshDict
+            snappy_file = case_dir / "system" / "snappyHexMeshDict"
+            if snappy_file.exists():
+                snappy_file.write_text(
+                    snappy_file.read_text(encoding="utf-8")
+                    + "\n\n// === Fase 17.3 Prism layers ===\n"
+                    + prism_cfg.to_snappy_dict_entry(),
+                    encoding="utf-8",
+                )
+                log.info(
+                    "Prism layers: n=%d, t1=%.2e m, target y+=%.1f",
+                    prism_cfg.n_layers, prism_cfg.first_layer_thickness, yp,
+                )
+                created["prism_layers.config"] = snappy_file
+        except Exception as exc:
+            log.warning("Prism layers integration failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Fase 19.4 — Modelo transição γ-Reθ (opcional)
+    # ------------------------------------------------------------------
+    if enable_transition:
+        try:
+            from hpe.cfd.openfoam.transition_model import enable_transition_for_case
+            u_ref = (math.pi * params.d2 * op.rpm) / 60.0
+            enable_transition_for_case(case_dir, u_ref=u_ref, turbulence_intensity=0.05)
+            log.info("Transition model γ-Reθ enabled for case")
+            created["0/gammaInt"] = case_dir / "0" / "gammaInt"
+            created["0/ReThetat"] = case_dir / "0" / "ReThetat"
+        except Exception as exc:
+            log.warning("Transition model integration failed: %s", exc)
 
     # ------------------------------------------------------------------
     # run.sh

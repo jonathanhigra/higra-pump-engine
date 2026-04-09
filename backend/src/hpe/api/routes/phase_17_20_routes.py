@@ -538,6 +538,37 @@ def probe_optimizer(req: ProbeOptimizerRequest) -> dict[str, Any]:
 
 
 # ===========================================================================
+# Ansys-equivalent visualization (surface pressure + 3D streamlines)
+# ===========================================================================
+
+class AnsysVizRequest(OpPoint):
+    field: str = Field("pressure", description="pressure | velocity")
+    n_streamlines: int = Field(200, ge=10, le=2000)
+    n_streamline_steps: int = Field(80, ge=20, le=400)
+
+
+@router.post("/ansys_scene", summary="Ansys CFX-Post equivalent — surface pressure + 3D streamlines")
+def ansys_scene(req: AnsysVizRequest) -> dict[str, Any]:
+    """Gerar cena 3D completa equivalente CFX-Post:
+    - Volute outer surface com pressure colormap
+    - Impeller blades surface com pressure
+    - Hub disk
+    - 3D streamlines coloridas por |U|
+
+    Consumível diretamente pelo Three.js viewer no frontend.
+    """
+    from hpe.cfd.postprocessing.ansys_equivalent import build_ansys_equivalent_scene
+    sizing = _sizing_from_op(req)
+    scene = build_ansys_equivalent_scene(
+        sizing,
+        field_to_show=req.field,
+        n_streamlines=req.n_streamlines,
+        n_streamline_steps=req.n_streamline_steps,
+    )
+    return scene.to_dict()
+
+
+# ===========================================================================
 # Improvement #21-25 — extra field extractors
 # ===========================================================================
 

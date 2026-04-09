@@ -6,6 +6,7 @@
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import CFDFieldViewer from './CFDFieldViewer'
+import AnsysSceneViewer from './AnsysSceneViewer'
 
 interface Props {
   /** Vazão BEP em m³/h (do opPoint) */
@@ -472,6 +473,16 @@ export default function CFDSimPanel({ flowRate, head, rpm, sizing }: Props) {
             </p>
           )}
         </div>
+      )}
+
+      {/* ── Ansys CFX-Post equivalent viewer ───────────────────────────── */}
+      {panelState === 'completed' && (singleResult || sweepResult) && (
+        <AnsysSceneViewer
+          flowRate={flowRate / 3600}
+          head={head}
+          rpm={rpm}
+          field="pressure"
+        />
       )}
 
       {/* ── CFD field viewer (quando há resultado) ────────────────────────── */}

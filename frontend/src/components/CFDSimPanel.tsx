@@ -5,6 +5,7 @@
  * exibir curva de desempenho em SVG e monitorar convergência.
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react'
+import CFDFieldViewer from './CFDFieldViewer'
 
 interface Props {
   /** Vazão BEP em m³/h (do opPoint) */
@@ -471,6 +472,11 @@ export default function CFDSimPanel({ flowRate, head, rpm, sizing }: Props) {
             </p>
           )}
         </div>
+      )}
+
+      {/* ── CFD field viewer (quando há resultado) ────────────────────────── */}
+      {panelState === 'completed' && (singleResult || sweepResult) && (
+        <CFDFieldViewer caseDir={activeRunId || undefined} />
       )}
 
       {/* ── Sweep results ─────────────────────────────────────────────────── */}

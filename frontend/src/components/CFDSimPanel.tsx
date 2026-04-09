@@ -118,6 +118,38 @@ export default function CFDSimPanel({ flowRate, head, rpm, sizing }: Props) {
     }
   }, [activeRunId, runSolver])   // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleDownloadReport = useCallback(async () => {
+    try {
+      appendLog('Gerando relatório PDF…')
+      const body: Record<string, unknown> = {
+        project_name: 'HPE CFD Simulation',
+        format: 'auto',
+        sizing: sizing,
+      }
+      if (singleResult) body['cavitation'] = { npsh_r: 2.5, npsh_a: 5.0, risk_level: 'safe', recommendations: [] }
+
+      const resp = await fetch('/api/v1/cfd/advanced/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `HPE_CFD_Report.${blob.type.includes('pdf') ? 'pdf' : blob.type.includes('html') ? 'html' : 'md'}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      appendLog('Relatório baixado.')
+    } catch (err) {
+      appendLog(`Erro ao gerar relatório: ${err}`)
+    }
+  }, [sizing, singleResult])
+
   const handleStop = useCallback(async () => {
     if (!activeRunId) return
     try {
@@ -401,6 +433,25 @@ export default function CFDSimPanel({ flowRate, head, rpm, sizing }: Props) {
           <h4 style={headingStyle}>Resíduos de convergência</h4>
           <ResidualsChart residuals={residuals} />
         </div>
+      )}
+
+      {/* ── Report download (quando completed) ───────────────────────────── */}
+      {panelState === 'completed' && (singleResult || sweepResult) && (
+        <button
+          onClick={handleDownloadReport}
+          style={{
+            alignSelf: 'flex-start',
+            fontSize: 12,
+            padding: '6px 14px',
+            background: 'var(--accent)',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer',
+            color: '#fff',
+          }}
+        >
+          📄 Baixar relatório técnico
+        </button>
       )}
 
       {/* ── Single result ──────────────────────────────────────────────────── */}

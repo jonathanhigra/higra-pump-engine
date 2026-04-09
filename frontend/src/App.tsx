@@ -15,6 +15,7 @@ import AssistantChat from './components/AssistantChat'
 import PipelinePanel from './components/PipelinePanel'
 import CavitationPanel from './components/CavitationPanel'
 import CFDSimPanel from './components/CFDSimPanel'
+import BenchmarksPanel from './components/BenchmarksPanel'
 import MeridionalView from './components/MeridionalView'
 import OptimizePanel from './components/OptimizePanel'
 import EfficiencyMap from './components/EfficiencyMap'
@@ -189,7 +190,7 @@ export type Tab =
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
   | 'meridional-drag' | 'noise' | 'batch' | 'pipeline'
-  | 'cavitation' | 'cfd_sim'
+  | 'cavitation' | 'cfd_sim' | 'benchmarks'
 
 export default function App() {
   const [page, setPage] = useState<Page>('login')
@@ -816,7 +817,7 @@ export default function App() {
   const canRun = opPoint.flowRate > 0 && opPoint.head > 0 && opPoint.rpm > 0
 
   // Tabs that need full width (no 2-column layout with SizingForm)
-  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize', 'pipeline', 'cavitation', 'cfd_sim']
+  const WIDE_TABS: Tab[] = ['3d', 'meridional-drag', 'meridional-editor', 'lete', 'lean-sweep', 'doe', 'pareto', 'batch', 'templates', 'compare', 'optimize', 'pipeline', 'cavitation', 'cfd_sim', 'benchmarks']
 
   // === DESIGN — 3D viewer (now with sub-tabs visible) ===
   if (tab === '3d') {
@@ -883,6 +884,17 @@ export default function App() {
               <OptimizePanel defaultFlowRate={opPoint.flowRate} defaultHead={opPoint.head} defaultRpm={opPoint.rpm} />
               <FeedbackStars tab="optimize" />
             </>
+          )}
+          {tab === 'benchmarks' && (
+            <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--text-primary)' }}>Benchmarks de Validação</h3>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  SHF Combes 1999, ERCOFTAC TC6, TUD radial — MAPE contra bancada experimental.
+                </p>
+              </div>
+              <BenchmarksPanel />
+            </div>
           )}
           {tab === 'cavitation' && (
             <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>

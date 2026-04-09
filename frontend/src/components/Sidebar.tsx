@@ -8,7 +8,7 @@ export type Tab =
   | 'multispeed' | 'meridional-editor' | 'spanwise'
   | 'templates' | 'doe' | 'pareto' | 'lean-sweep' | 'lete'
   | 'meridional-drag' | 'noise' | 'batch' | 'pipeline'
-  | 'cavitation' | 'cfd_sim'
+  | 'cavitation' | 'cfd_sim' | 'benchmarks'
 
 /* ── Main sidebar sections (6 primary destinations) ────────────────────────── */
 export type Section = 'projects' | 'templates' | 'design' | 'geometry' | 'analysis' | 'optimization' | 'assistant'
@@ -18,7 +18,8 @@ export function sectionForTab(tab: Tab): Section {
     case 'overview': case 'results': case 'curves': case 'multispeed': return 'design'
     case '3d': case 'meridional-drag': case 'meridional-editor': case 'lete': case 'lean-sweep': return 'geometry'
     case 'velocity': case 'losses': case 'pressure': case 'loading':
-    case 'spanwise': case 'noise': case 'stress': case 'compare': case 'cavitation': return 'analysis'
+    case 'spanwise': case 'noise': case 'stress': case 'compare': case 'cavitation':
+    case 'benchmarks': return 'analysis'
     case 'optimize': case 'pareto': case 'doe': case 'batch': case 'pipeline': case 'cfd_sim': return 'optimization'
     case 'assistant': return 'assistant'
     case 'templates': return 'templates'
@@ -53,6 +54,7 @@ export const SUB_TABS: Record<Section, { key: Tab; label: string }[]> = {
     { key: 'stress', label: 'Tensões' },
     { key: 'compare', label: 'Comparação' },
     { key: 'cavitation', label: 'Cavitação' },
+    { key: 'benchmarks', label: 'Benchmarks' },
   ],
   optimization: [
     { key: 'optimize', label: 'NSGA-II / Bayesian' },
